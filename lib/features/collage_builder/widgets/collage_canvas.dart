@@ -13,11 +13,18 @@ class CollageCanvas extends ConsumerStatefulWidget {
 }
 
 class _CollageCanvasState extends ConsumerState<CollageCanvas> {
+  final GlobalKey _canvasKey = GlobalKey();
   int? _dragStartIndex;
   int? _dragHoverIndex;
+  Offset? _dragOffset;
   double _currentScale = 1.0;
   double _initialScale = 1.0;
   int? _pinchSlotIndex;
+  int? _panSlotIndex;
+  Offset _panStartOffset = Offset.zero;
+  Offset _panDelta = Offset.zero;
+  bool _isPanning = false;
+  static const double _panThreshold = 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -42,26 +49,34 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
         }
 
         return Center(
-          child: Container(
-            width: width,
-            height: height,
-            decoration: BoxDecoration(
-              color: state.backgroundColor,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+          child: Listener(
+            key: _canvasKey,
+            onPointerMove: _dragStartIndex != null ? _handlePointerMove : null,
+            child: Container(
+              width: width,
+              height: height,
+              decoration: BoxDecoration(
+                color: state.backgroundColor,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
               child: Stack(
-                children: List.generate(state.layout.slotCount, (index) {
-                  return _buildSlot(context, state, index, width, height);
-                }),
+                children: [
+                  ...List.generate(state.layout.slotCount, (index) {
+                    return _buildSlot(context, state, index, width, height);
+                  }),
+                  if (_dragStartIndex != null && _dragOffset != null)
+                    _buildDragIndicator(context, state, width, height),
+                ],
+              ),
               ),
             ),
           ),
@@ -86,6 +101,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     final height = rect.height * canvasHeight - gap * 2;
 
     final slot = state.images[index];
+    final isDragSource = _dragStartIndex == index;
     final isDragTarget = _dragHoverIndex == index && _dragStartIndex != index;
 
     return Positioned(
@@ -99,35 +115,49 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
         onScaleUpdate: (details) => _handleScaleUpdate(index, details),
         onScaleEnd: (details) => _handleScaleEnd(index),
         onLongPressStart: (details) => _handleLongPressStart(index, details),
-        onLongPressMoveUpdate: (details) => _handleLongPressMove(index, details, canvasWidth, canvasHeight),
         onLongPressEnd: (details) => _handleLongPressEnd(index),
+        behavior: HitTestBehavior.translucent,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
-            color: slot.hasImage 
-                ? (isDragTarget ? Colors.blue.withValues(alpha: 0.2) : Colors.transparent)
-                : const Color(0xFFD6E4FF),
+            color: isDragSource
+                ? Colors.transparent
+                : isDragTarget
+                    ? Colors.blue.withValues(alpha: 0.2)
+                    : slot.hasImage
+                        ? Colors.transparent
+                        : const Color(0xFFD6E4FF),
             border: Border.all(
-              color: isDragTarget 
+              color: isDragTarget
                   ? Colors.blue
-                  : slot.hasImage 
-                      ? Colors.transparent 
-                      : const Color(0xFF5B4DFF).withValues(alpha: 0.3),
-              width: isDragTarget ? 3 : 1,
+                  : isDragSource
+                      ? Colors.blue.withValues(alpha: 0.5)
+                      : slot.hasImage
+                          ? Colors.transparent
+                          : const Color(0xFF5B4DFF).withValues(alpha: 0.3),
+              width: isDragTarget ? 3 : isDragSource ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(state.cornerRadius),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(state.cornerRadius),
-            child: slot.hasImage
+            child: slot.hasImage && !isDragSource
                 ? _buildImageContent(slot, width, height, index)
-                : const Center(
-                    child: Icon(
-                      Icons.add_circle,
-                      size: 40,
-                      color: Color(0xFF5B4DFF),
-                    ),
-                  ),
+                : slot.hasImage && isDragSource
+                    ? Center(
+                        child: Icon(
+                          Icons.drag_indicator,
+                          size: 40,
+                          color: Colors.blue.withValues(alpha: 0.6),
+                        ),
+                      )
+                    : const Center(
+                        child: Icon(
+                          Icons.add_circle,
+                          size: 40,
+                          color: Color(0xFF5B4DFF),
+                        ),
+                      ),
           ),
         ),
       ),
@@ -136,17 +166,23 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
 
   Widget _buildImageContent(CollageImageSlot slot, double width, double height, int index) {
     final isPinching = _pinchSlotIndex == index;
+    final isPanning = _panSlotIndex == index;
     final scale = isPinching ? _currentScale : slot.scale;
-    final offsetX = isPinching ? _currentScale : slot.offsetX;
-    final offsetY = isPinching ? _currentScale : slot.offsetY;
+    final offsetX = isPanning ? _panStartOffset.dx + _panDelta.dx : slot.offsetX;
+    final offsetY = isPanning ? _panStartOffset.dy + _panDelta.dy : slot.offsetY;
+
+    final maxOffsetX = scale > 1.0 ? (scale - 1.0) / scale : 0.0;
+    final maxOffsetY = scale > 1.0 ? (scale - 1.0) / scale : 0.0;
+    final clampedOffsetX = offsetX.clamp(-maxOffsetX, maxOffsetX);
+    final clampedOffsetY = offsetY.clamp(-maxOffsetY, maxOffsetY);
 
     return Stack(
       children: [
         Positioned.fill(
           child: Transform(
             transform: Matrix4.identity()
-              ..translateByVector3(vec.Vector3(offsetX * width * 0.1, offsetY * height * 0.1, 0))
-              ..scaleByDouble(scale, scale, scale, 1.0),
+              ..translateByVector3(vec.Vector3(clampedOffsetX * width, clampedOffsetY * height, 0))
+              ..scaleByDouble(scale, scale, 1.0, 1.0),
             alignment: Alignment.center,
             child: Image.memory(
               slot.imageBytes!,
@@ -195,6 +231,59 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     );
   }
 
+  Widget _buildDragIndicator(
+    BuildContext context,
+    CollageState state,
+    double canvasWidth,
+    double canvasHeight,
+  ) {
+    if (_dragOffset == null || _dragStartIndex == null) return const SizedBox.shrink();
+
+    final canvasBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (canvasBox == null) return const SizedBox.shrink();
+
+    final canvasLocalPosition = canvasBox.globalToLocal(_dragOffset!);
+    final dragSlot = state.images[_dragStartIndex!];
+
+    return Positioned(
+      left: canvasLocalPosition.dx - 30,
+      top: canvasLocalPosition.dy - 30,
+      child: IgnorePointer(
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            color: Colors.blue.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Colors.blue,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withValues(alpha: 0.4),
+                blurRadius: 8,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: dragSlot.hasImage
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.memory(
+                    dragSlot.imageBytes!,
+                    fit: BoxFit.cover,
+                    opacity: const AlwaysStoppedAnimation(0.7),
+                  ),
+                )
+              : const Center(
+                  child: Icon(Icons.drag_indicator, color: Colors.blue),
+                ),
+        ),
+      ),
+    );
+  }
+
   void _handleSlotTap(BuildContext context, int index) {
     final state = ref.read(collageProvider);
     if (state.images[index].hasImage) {
@@ -212,22 +301,50 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
   }
 
   void _handleScaleStart(int index, ScaleStartDetails details) {
+    final state = ref.read(collageProvider);
+    if (!state.images[index].hasImage) return;
+
     if (details.pointerCount == 2) {
-      final state = ref.read(collageProvider);
-      if (state.images[index].hasImage) {
-        _pinchSlotIndex = index;
-        _initialScale = state.images[index].scale;
-        _currentScale = _initialScale;
-      }
+      _pinchSlotIndex = index;
+      _initialScale = state.images[index].scale;
+      _currentScale = _initialScale;
+    } else if (state.images[index].scale > 1.0) {
+      _panSlotIndex = index;
+      _panStartOffset = Offset(state.images[index].offsetX, state.images[index].offsetY);
+      _panDelta = Offset.zero;
+      _isPanning = false;
     }
   }
 
   void _handleScaleUpdate(int index, ScaleUpdateDetails details) {
+    final state = ref.read(collageProvider);
+    final slot = state.images[index];
+    if (!slot.hasImage) return;
+
     if (_pinchSlotIndex == index && details.pointerCount == 2) {
-      final state = ref.read(collageProvider);
-      if (state.images[index].hasImage) {
-        _currentScale = (_initialScale * details.scale).clamp(1.0, 5.0);
-        ref.read(collageProvider.notifier).setScale(index, _currentScale);
+      _currentScale = (_initialScale * details.scale).clamp(1.0, 5.0);
+      ref.read(collageProvider.notifier).setScale(index, _currentScale);
+    } else if (_panSlotIndex == index && details.pointerCount == 1 && slot.scale > 1.0) {
+      final totalDelta = details.focalPointDelta.distance;
+      if (!_isPanning && totalDelta > _panThreshold) {
+        _isPanning = true;
+      }
+
+      if (_isPanning) {
+        final scale = slot.scale;
+        final slotWidth = context.size?.width ?? 1;
+        final slotHeight = context.size?.height ?? 1;
+
+        final dx = details.focalPointDelta.dx / (slotWidth * scale);
+        final dy = details.focalPointDelta.dy / (slotHeight * scale);
+
+        final maxOffset = (scale - 1.0) / scale;
+        final newOffsetX = (_panStartOffset.dx + _panDelta.dx + dx).clamp(-maxOffset, maxOffset);
+        final newOffsetY = (_panStartOffset.dy + _panDelta.dy + dy).clamp(-maxOffset, maxOffset);
+
+        setState(() {
+          _panDelta = Offset(newOffsetX - _panStartOffset.dx, newOffsetY - _panStartOffset.dy);
+        });
       }
     }
   }
@@ -237,6 +354,23 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       _pinchSlotIndex = null;
       _currentScale = 1.0;
       _initialScale = 1.0;
+    } else if (_panSlotIndex == index) {
+      if (_isPanning) {
+        final state = ref.read(collageProvider);
+        final slot = state.images[index];
+        final maxOffset = slot.scale > 1.0 ? (slot.scale - 1.0) / slot.scale : 0.0;
+        final newOffsetX = (_panStartOffset.dx + _panDelta.dx).clamp(-maxOffset, maxOffset);
+        final newOffsetY = (_panStartOffset.dy + _panDelta.dy).clamp(-maxOffset, maxOffset);
+
+        ref.read(collageProvider.notifier).setOffset(index, newOffsetX, newOffsetY);
+      }
+
+      setState(() {
+        _panSlotIndex = null;
+        _panStartOffset = Offset.zero;
+        _panDelta = Offset.zero;
+        _isPanning = false;
+      });
     }
   }
 
@@ -245,18 +379,22 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     if (state.images[index].hasImage) {
       setState(() {
         _dragStartIndex = index;
+        _dragOffset = details.globalPosition;
       });
     }
   }
 
-  void _handleLongPressMove(int index, LongPressMoveUpdateDetails details, double canvasWidth, double canvasHeight) {
+  void _handlePointerMove(PointerMoveEvent event) {
     if (_dragStartIndex == null) return;
 
     final state = ref.read(collageProvider);
-    final RenderBox? box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
+    final canvasBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (canvasBox == null) return;
 
-    final localPosition = details.localPosition;
+    final localPosition = canvasBox.globalToLocal(event.position);
+    final canvasWidth = canvasBox.size.width;
+    final canvasHeight = canvasBox.size.height;
+    
     int? targetIndex;
 
     for (int i = 0; i < state.layout.slotCount; i++) {
@@ -280,6 +418,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
 
     setState(() {
       _dragHoverIndex = targetIndex;
+      _dragOffset = event.position;
     });
   }
 
@@ -291,6 +430,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     setState(() {
       _dragStartIndex = null;
       _dragHoverIndex = null;
+      _dragOffset = null;
     });
   }
 }
@@ -328,6 +468,9 @@ class _SlotOptionsSheet extends ConsumerWidget {
                         slotIndex,
                         (slot.scale + 0.2).clamp(1.0, 5.0),
                       );
+                  if (slot.scale <= 1.0) {
+                    ref.read(collageProvider.notifier).setOffset(slotIndex, 0.0, 0.0);
+                  }
                   Navigator.pop(context);
                 },
               ),
@@ -335,10 +478,11 @@ class _SlotOptionsSheet extends ConsumerWidget {
                 icon: Icons.zoom_out,
                 label: 'Zoom Out',
                 onTap: () {
-                  ref.read(collageProvider.notifier).setScale(
-                        slotIndex,
-                        (slot.scale - 0.2).clamp(1.0, 5.0),
-                      );
+                  final newScale = (slot.scale - 0.2).clamp(1.0, 5.0);
+                  ref.read(collageProvider.notifier).setScale(slotIndex, newScale);
+                  if (newScale <= 1.0) {
+                    ref.read(collageProvider.notifier).setOffset(slotIndex, 0.0, 0.0);
+                  }
                   Navigator.pop(context);
                 },
               ),

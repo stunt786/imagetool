@@ -105,25 +105,26 @@ class CollageNotifier extends Notifier<CollageState> {
     if (fromIndex >= state.images.length || toIndex >= state.images.length) return;
 
     final newImages = List<CollageImageSlot>.from(state.images);
-    final temp = newImages[fromIndex];
-    newImages[fromIndex] = newImages[toIndex].clear();
+    final fromSlot = newImages[fromIndex];
+    final toSlot = newImages[toIndex];
+
     newImages[fromIndex] = CollageImageSlot(
       index: fromIndex,
-      imageBytes: temp.imageBytes,
-      imageName: temp.imageName,
-      scale: temp.scale,
-      offsetX: temp.offsetX,
-      offsetY: temp.offsetY,
-      fitMode: temp.fitMode,
+      imageBytes: toSlot.imageBytes,
+      imageName: toSlot.imageName,
+      scale: toSlot.scale,
+      offsetX: toSlot.offsetX,
+      offsetY: toSlot.offsetY,
+      fitMode: toSlot.fitMode,
     );
     newImages[toIndex] = CollageImageSlot(
       index: toIndex,
-      imageBytes: temp.imageBytes,
-      imageName: temp.imageName,
-      scale: temp.scale,
-      offsetX: temp.offsetX,
-      offsetY: temp.offsetY,
-      fitMode: temp.fitMode,
+      imageBytes: fromSlot.imageBytes,
+      imageName: fromSlot.imageName,
+      scale: fromSlot.scale,
+      offsetX: fromSlot.offsetX,
+      offsetY: fromSlot.offsetY,
+      fitMode: fromSlot.fitMode,
     );
 
     state = state.copyWith(images: newImages);
