@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PixelTools needs access to your photo library to select images for creating collages.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>PixelTools needs permission to save created collages to your photo library.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

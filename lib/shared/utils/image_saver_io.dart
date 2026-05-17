@@ -1,40 +1,46 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'image_saver_types.dart';
 
 Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
   final safeName = fileName.trim().isEmpty ? 'image.jpg' : fileName.trim();
-  final targetDir = await _defaultSaveDirectory();
+  final targetDir = await _pixelToolsDirectory();
 
-  final pixelToolsDir = Directory('${targetDir.path}/PixelTools');
-  if (!await pixelToolsDir.exists()) {
-    await pixelToolsDir.create(recursive: true);
-  }
-
-  final timestamp = DateTime.now().toIso8601String().replaceAll(':', '').replaceAll('.', '');
-  final outName = _withSuffix(safeName, '_edited_$timestamp');
-  final outFile = File('${pixelToolsDir.path}/$outName');
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
+  final outName = _withSuffix(safeName, '_$timestamp');
+  final outFile = File('${targetDir.path}/$outName');
   await outFile.writeAsBytes(bytes, flush: true);
   return ImageSaveResult(fileName: outName, path: outFile.path);
 }
 
-Future<Directory> _defaultSaveDirectory() async {
+Future<Directory> _pixelToolsDirectory() async {
+  Directory? baseDir;
+
   if (Platform.isAndroid) {
-    final dir = await getExternalStorageDirectory();
-    if (dir != null) return dir;
+    final externalDirs = await getExternalStorageDirectories(
+      type: StorageDirectory.pictures,
+    );
+    if (externalDirs != null && externalDirs.isNotEmpty) {
+      baseDir = externalDirs.first;
+    }
   }
 
   if (Platform.isIOS) {
-    return getApplicationDocumentsDirectory();
+    baseDir = await getApplicationDocumentsDirectory();
   }
 
-  final downloads = await getDownloadsDirectory();
-  if (downloads != null) return downloads;
+  baseDir ??= await getApplicationDocumentsDirectory();
 
-  return getApplicationDocumentsDirectory();
+  final pixelToolsDir = Directory(path.join(baseDir.path, 'PixelTools'));
+  if (!await pixelToolsDir.exists()) {
+    await pixelToolsDir.create(recursive: true);
+  }
+
+  return pixelToolsDir;
 }
 
 String _withSuffix(String fileName, String suffix) {

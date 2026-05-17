@@ -158,12 +158,48 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     return preview?.fileSize;
   }
 
-  Future<ResizeResult?> generateCrop({
-    required int x,
-    required int y,
-    required int width,
-    required int height,
-  }) async {
+   Future<ResizeResult?> generateCrop({
+     required int x,
+     required int y,
+     required int width,
+     required int height,
+   }) async {
+     final sourceBytes = state.currentBytes;
+     if (sourceBytes == null) return null;
+
+     try {
+       final image = img.decodeImage(sourceBytes);
+       if (image == null) {
+         state = state.copyWith(errorMessage: 'Failed to process image.');
+         return null;
+       }
+
+       final safeX = x.clamp(0, math.max(0, image.width - 1)).toInt();
+       final safeY = y.clamp(0, math.max(0, image.height - 1)).toInt();
+       final safeWidth = width.clamp(1, image.width - safeX).toInt();
+       final safeHeight = height.clamp(1, image.height - safeY).toInt();
+       final cropped = img.copyCrop(
+         image,
+         x: safeX,
+         y: safeY,
+         width: safeWidth,
+         height: safeHeight,
+       );
+       final bytes = Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
+
+       return ResizeResult(
+         bytes: bytes,
+         width: cropped.width,
+         height: cropped.height,
+         fileSize: bytes.length,
+       );
+     } catch (error) {
+       state = state.copyWith(errorMessage: error.toString());
+       return null;
+     }
+   }
+
+  Future<ResizeResult?> generateRotate90() async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
@@ -174,23 +210,14 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         return null;
       }
 
-      final safeX = x.clamp(0, math.max(0, image.width - 1)).toInt();
-      final safeY = y.clamp(0, math.max(0, image.height - 1)).toInt();
-      final safeWidth = width.clamp(1, image.width - safeX).toInt();
-      final safeHeight = height.clamp(1, image.height - safeY).toInt();
-      final cropped = img.copyCrop(
-        image,
-        x: safeX,
-        y: safeY,
-        width: safeWidth,
-        height: safeHeight,
-      );
-      final bytes = Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
+      final rotated = img.copyRotate(image, angle: 90);
+
+      final bytes = Uint8List.fromList(img.encodeJpg(rotated, quality: 95));
 
       return ResizeResult(
         bytes: bytes,
-        width: cropped.width,
-        height: cropped.height,
+        width: rotated.width,
+        height: rotated.height,
         fileSize: bytes.length,
       );
     } catch (error) {
