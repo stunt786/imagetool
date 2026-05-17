@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
+import '../../../shared/widgets/shared_app_bar.dart';
 
 const _pdfTools = <_PdfToolData>[
   _PdfToolData(
@@ -54,18 +55,9 @@ class PdfsHubScreen extends ConsumerWidget {
     final pdfHistory = history.where(_isPdfActivity).take(6).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: padding,
-        title: Text(
-          'PDFs',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-        ),
+      appBar: SharedAppBar(
+        drawerKey: GlobalKey<ScaffoldState>(),
+        title: 'PDFs',
       ),
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -100,8 +92,7 @@ class PdfsHubScreen extends ConsumerWidget {
                   padding: EdgeInsets.symmetric(horizontal: padding),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate.fixed([
-                      const _PdfsHeroCard(),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
@@ -176,71 +167,6 @@ class PdfsHubScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PdfsHeroCard extends StatelessWidget {
-  const _PdfsHeroCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF171A3A), Color(0xFF3D37A4), Color(0xFF0F9D9A)],
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x2217203A),
-            blurRadius: 34,
-            offset: Offset(0, 18),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: const Text(
-              'Document workflow',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Manage, compress, and organize your PDF files faster.',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
-              height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'The PDF hub now keeps your recent document activity visible so you can continue work without hunting through folders.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.white.withValues(alpha: 0.82),
-              height: 1.45,
-            ),
-          ),
-        ],
       ),
     );
   }

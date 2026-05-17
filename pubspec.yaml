@@ -47,7 +47,7 @@ dependencies:
   shared_preferences: ^2.3.3
   syncfusion_flutter_pdf: ^28.2.12
   vector_math: ^2.1.4
-  archive: ^3.6.1
+  archive: ^4.0.9
 
 dev_dependencies:
   flutter_test:

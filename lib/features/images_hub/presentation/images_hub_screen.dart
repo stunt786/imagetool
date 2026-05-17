@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/shared_app_bar.dart';
+
 const _imageTools = <_ImageToolData>[
   _ImageToolData(
     title: 'Resize Image',
@@ -55,18 +57,9 @@ class ImagesHubScreen extends StatelessWidget {
         : 0.8;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: padding,
-        title: Text(
-          'Images',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-        ),
+      appBar: SharedAppBar(
+        drawerKey: GlobalKey<ScaffoldState>(),
+        title: 'Images',
       ),
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -101,8 +94,7 @@ class ImagesHubScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: padding),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate.fixed([
-                      const _ImagesHeroCard(),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
@@ -148,88 +140,6 @@ class ImagesHubScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ImagesHeroCard extends StatelessWidget {
-  const _ImagesHeroCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF161C43), Color(0xFF224A88), Color(0xFF14A3C7)],
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22131D3B),
-            blurRadius: 34,
-            offset: Offset(0, 18),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: Colors.white.withValues(alpha: 0.12),
-            ),
-            child: const Text(
-              'Studio workspace',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Choose the fastest route from import to export.',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
-              height: 1.15,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Every image tool stays offline and is organized as a visual two-column workspace for quicker scanning.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.white.withValues(alpha: 0.8),
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _HeroBadge(icon: Icons.layers_rounded, label: '2-column layout'),
-              _HeroBadge(
-                icon: Icons.offline_bolt_rounded,
-                label: 'Offline editing',
-              ),
-              _HeroBadge(
-                icon: Icons.auto_awesome_rounded,
-                label: 'Premium flows',
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -409,39 +319,6 @@ class _ImageTipsCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HeroBadge extends StatelessWidget {
-  const _HeroBadge({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.11),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 16),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],

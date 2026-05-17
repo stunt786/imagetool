@@ -52,18 +52,17 @@ class AppShell extends StatelessWidget {
             ],
           ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(destinations.length, (index) {
               final item = destinations[index];
               final selected = navigationShell.currentIndex == index;
 
-              return Expanded(
-                child: _ShellNavItem(
-                  destination: item,
-                  selected: selected,
-                  onTap: () => navigationShell.goBranch(
-                    index,
-                    initialLocation: index == navigationShell.currentIndex,
-                  ),
+              return _ShellNavItem(
+                destination: item,
+                selected: selected,
+                onTap: () => navigationShell.goBranch(
+                  index,
+                  initialLocation: index == navigationShell.currentIndex,
                 ),
               );
             }),
@@ -95,14 +94,12 @@ class _ShellNavItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: selected
-              ? const LinearGradient(
-                  colors: [Color(0xFFEDEBFF), Color(0xFFE7F7F6)],
-                )
-              : null,
+          shape: BoxShape.circle,
+          color: selected
+              ? Colors.white
+              : scheme.surfaceContainerLow.withValues(alpha: 0.8),
           boxShadow: selected
               ? const [
                   BoxShadow(
@@ -113,36 +110,10 @@ class _ShellNavItem extends StatelessWidget {
                 ]
               : null,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: selected
-                    ? Colors.white
-                    : scheme.surfaceContainerLow.withValues(alpha: 0.8),
-              ),
-              child: Icon(
-                selected ? destination.selectedIcon : destination.icon,
-                size: 20,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              destination.label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                color: selected
-                    ? const Color(0xFF172033)
-                    : scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+        child: Icon(
+          selected ? destination.selectedIcon : destination.icon,
+          size: 24,
+          color: selected ? scheme.primary : scheme.onSurfaceVariant,
         ),
       ),
     );

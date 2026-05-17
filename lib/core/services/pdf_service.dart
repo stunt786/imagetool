@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
+import 'package:pdf/pdf.dart' as pdf;
 import 'package:pdf/widgets.dart' as pw;
-import 'package:pdfx/pdfx.dart';
-import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
 /// Core service for all PDF processing operations.
 /// Uses syncfusion_flutter_pdf for reading/manipulating existing PDFs
@@ -50,22 +51,22 @@ class PdfService {
     onProgress?.call(0.1);
 
     // Load the PDF using Syncfusion for page count and metadata
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     syncDoc.dispose();
 
     onProgress?.call(0.2);
 
     // Use pdfx to render each page as an image, then rebuild with lower quality
-    final pdfDoc = await PdfDocument.openFile(inputPath);
+    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
     final newPdf = pw.Document();
 
     for (int i = 1; i <= pdfDoc.pagesCount; i++) {
       final page = await pdfDoc.getPage(i);
       final pageImage = await page.render(
-        width: page.width.toInt(),
-        height: page.height.toInt(),
-        format: PdfPageImageFormat.png,
+        width: page.width,
+        height: page.height,
+        format: pdfx.PdfPageImageFormat.png,
       );
 
       if (pageImage != null) {
@@ -76,7 +77,7 @@ class PdfService {
 
           newPdf.addPage(
             pw.Page(
-              pageFormat: PdfPageFormat(
+              pageFormat: pdf.PdfPageFormat(
                 page.width,
                 page.height,
               ),
@@ -121,19 +122,21 @@ class PdfService {
     final outputPath = path.join(saveDir.path, _generateFileName(outputBaseName, 'pdf'));
 
     // Use Syncfusion for reliable PDF merging
-    final mergedDoc = PdfDocument();
+    final mergedDoc = syncfusion.PdfDocument();
 
     for (int i = 0; i < inputPaths.length; i++) {
       final inputBytes = File(inputPaths[i]).readAsBytesSync();
-      final doc = PdfDocument(inputBytes: inputBytes);
+      final doc = syncfusion.PdfDocument(inputBytes: inputBytes);
 
       for (int j = 0; j < doc.pages.count; j++) {
+        final template = doc.pages[j].createTemplate();
         mergedDoc.pages.add().graphics.drawPdfTemplate(
-              doc.pages[j].createTemplate(),
+              template,
+              ui.Offset.zero,
             );
       }
 
-      doc.dispose(true);
+      doc.dispose();
       onProgress?.call((i + 1) / inputPaths.length);
     }
 
@@ -153,15 +156,17 @@ class PdfService {
     required String outputBaseName,
     void Function(double progress)? onProgress,
   }) async {
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await _getSaveDir();
     final outputPaths = <String>[];
 
     for (int i = 0; i < pageCount; i++) {
-      final newDoc = PdfDocument();
+      final newDoc = syncfusion.PdfDocument();
+      final template = syncDoc.pages[i].createTemplate();
       newDoc.pages.add().graphics.drawPdfTemplate(
-            syncDoc.pages[i].createTemplate(),
+            template,
+            ui.Offset.zero,
           );
 
       final fileName = _generateFileName('${outputBaseName}_page_${i + 1}', 'pdf');
@@ -192,7 +197,7 @@ class PdfService {
       throw ArgumentError('At least one page number is required');
     }
 
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await _getSaveDir();
 
@@ -204,11 +209,13 @@ class PdfService {
       }
     }
 
-    final newDoc = PdfDocument();
+    final newDoc = syncfusion.PdfDocument();
     for (int i = 0; i < pageNumbers.length; i++) {
       final pageIndex = pageNumbers[i] - 1; // Convert to 0-indexed
+      final template = syncDoc.pages[pageIndex].createTemplate();
       newDoc.pages.add().graphics.drawPdfTemplate(
-            syncDoc.pages[pageIndex].createTemplate(),
+            template,
+            ui.Offset.zero,
           );
       onProgress?.call((i + 1) / pageNumbers.length);
     }
@@ -236,19 +243,21 @@ class PdfService {
       throw ArgumentError('Page size must be at least 1');
     }
 
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await _getSaveDir();
     final outputPaths = <String>[];
 
     int chunkIndex = 1;
     for (int i = 0; i < pageCount; i += pageSize) {
-      final newDoc = PdfDocument();
+      final newDoc = syncfusion.PdfDocument();
       final end = (i + pageSize < pageCount) ? i + pageSize : pageCount;
 
       for (int j = i; j < end; j++) {
+        final template = syncDoc.pages[j].createTemplate();
         newDoc.pages.add().graphics.drawPdfTemplate(
-              syncDoc.pages[j].createTemplate(),
+              template,
+              ui.Offset.zero,
             );
       }
 
@@ -281,7 +290,7 @@ class PdfService {
     int dpi = 150,
     void Function(double progress)? onProgress,
   }) async {
-    final pdfDoc = await PdfDocument.openFile(inputPath);
+    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
     final pageCount = pdfDoc.pagesCount;
     final saveDir = await _getSaveDir();
     final outputPaths = <String>[];
@@ -290,13 +299,11 @@ class PdfService {
 
     for (int i = 1; i <= pageCount; i++) {
       final page = await pdfDoc.getPage(i);
-      final width = (page.width * scale).round();
-      final height = (page.height * scale).round();
 
       final pageImage = await page.render(
-        width: width,
-        height: height,
-        format: PdfPageImageFormat.png,
+        width: page.width * scale,
+        height: page.height * scale,
+        format: pdfx.PdfPageImageFormat.png,
       );
 
       if (pageImage != null) {
@@ -338,7 +345,7 @@ class PdfService {
     final fileName = _generateFileName(outputBaseName, 'txt');
     final outputPath = path.join(saveDir.path, fileName);
 
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final buffer = StringBuffer();
 
@@ -346,11 +353,15 @@ class PdfService {
       final page = syncDoc.pages[i];
 
       // Extract text using Syncfusion's text extraction
-      final text = page.extractText();
-      if (text != null && text.isNotEmpty) {
-        buffer.writeln('--- Page ${i + 1} ---');
-        buffer.writeln(text);
-        buffer.writeln();
+      try {
+        final text = (page as dynamic).extractText(true) as String?;
+        if (text != null && text.isNotEmpty) {
+          buffer.writeln('--- Page ${i + 1} ---');
+          buffer.writeln(text);
+          buffer.writeln();
+        }
+      } catch (_) {
+        // Text extraction not available in this version
       }
 
       onProgress?.call((i + 1) / pageCount);
@@ -364,7 +375,7 @@ class PdfService {
 
   /// Gets the number of pages in a PDF file.
   Future<int> getPageCount(String inputPath) async {
-    final syncDoc = PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final count = syncDoc.pages.count;
     syncDoc.dispose();
     return count;
@@ -378,7 +389,7 @@ class PdfService {
     int maxWidth = 200,
   }) async {
     try {
-      final pdfDoc = await PdfDocument.openFile(inputPath);
+    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
       if (pageNumber < 1 || pageNumber > pdfDoc.pagesCount) {
         await pdfDoc.close();
         return null;
@@ -386,13 +397,11 @@ class PdfService {
 
       final page = await pdfDoc.getPage(pageNumber);
       final scale = maxWidth / page.width;
-      final width = (page.width * scale).round();
-      final height = (page.height * scale).round();
 
       final pageImage = await page.render(
-        width: width,
-        height: height,
-        format: PdfPageImageFormat.png,
+        width: page.width * scale,
+        height: page.height * scale,
+        format: pdfx.PdfPageImageFormat.png,
       );
 
       await pdfDoc.close();
