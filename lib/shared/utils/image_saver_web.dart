@@ -5,6 +5,10 @@ import 'dart:typed_data';
 
 import 'image_saver_types.dart';
 
+abstract final class AppSavePaths {
+  static const String defaultDirectoryName = 'PixelTools';
+}
+
 Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
   final blob = html.Blob([bytes]);
   final url = html.Url.createObjectUrlFromBlob(blob);
@@ -18,4 +22,27 @@ Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fil
   html.Url.revokeObjectUrl(url);
 
   return ImageSaveResult(fileName: fileName, path: null);
+}
+
+Future<List<ImageSaveResult>> saveMultipleImagesImpl(
+  List<({Uint8List bytes, String fileName})> items,
+) async {
+  final results = <ImageSaveResult>[];
+
+  for (final item in items) {
+    final blob = html.Blob([item.bytes]);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..download = item.fileName
+      ..style.display = 'none';
+
+    html.document.body?.children.add(anchor);
+    anchor.click();
+    anchor.remove();
+    html.Url.revokeObjectUrl(url);
+
+    results.add(ImageSaveResult(fileName: item.fileName, path: null));
+  }
+
+  return results;
 }

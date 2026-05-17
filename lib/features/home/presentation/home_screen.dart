@@ -290,7 +290,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _SectionHeader(
                         title: 'Quick Tools',
                         actionLabel: 'View All',
-                        onActionTap: () => context.go('/images'),
+                        onActionTap: () => context.push('/images'),
                       ),
                       const SizedBox(height: 14),
                       _QuickToolsGrid(isWide: isWide),
@@ -303,7 +303,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         title: 'Recent History',
                         actionLabel: history.isNotEmpty ? 'See All' : null,
                         onActionTap: history.isNotEmpty
-                            ? () => context.go('/images')
+                            ? () => context.push('/images')
                             : null,
                       ),
                       const SizedBox(height: 14),
@@ -1030,7 +1030,7 @@ class _QuickToolCardState extends State<_QuickToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        context.go(data.route);
+        context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
@@ -1196,7 +1196,7 @@ class _PdfShortcutChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
-      onTap: () => context.go(data.route),
+      onTap: () => context.push(data.route),
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(

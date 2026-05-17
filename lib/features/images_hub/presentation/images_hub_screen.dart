@@ -256,7 +256,7 @@ class _ImageToolCardState extends State<_ImageToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        context.go(data.route);
+        context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(

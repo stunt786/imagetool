@@ -220,7 +220,7 @@ class CollageToolbar extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Collage saved successfully'),
+            content: Text('Saved'),
             duration: Duration(seconds: 2),
           ),
         );

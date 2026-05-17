@@ -34,20 +34,6 @@ enum _CropAspectPreset {
 }
 
 class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
-  static const List<String> _allowedImageExtensions = <String>[
-    'jpg',
-    'jpeg',
-    'png',
-    'webp',
-    'gif',
-    'bmp',
-    'heic',
-    'heif',
-    'tif',
-    'tiff',
-    'avif',
-  ];
-
   static const List<_PresetSize> _presetSizes = <_PresetSize>[
     _PresetSize('Instagram', 1080, 1080),
     _PresetSize('Story', 1080, 1920),
@@ -122,8 +108,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
-        type: FileType.custom,
-        allowedExtensions: _allowedImageExtensions,
+        type: FileType.image,
         withData: true,
       );
 
@@ -474,12 +459,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
 
     try {
-      final saved = await saveImageBytes(result.bytes, fileName: fileName);
+      await saveImageBytes(result.bytes, fileName: fileName);
       if (!mounted) return;
-      final location = saved.path == null
-          ? 'Downloaded ${saved.fileName}'
-          : 'Saved to ${saved.path}';
-      _showSnack(location);
+      _showSnack('Saved');
     } catch (error) {
        _showSnack('Resized image is ready, but saving failed: $error');
      }

@@ -267,7 +267,7 @@ class _PdfToolCardState extends State<_PdfToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        context.go(data.route);
+        context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(

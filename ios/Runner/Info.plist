@@ -28,6 +28,14 @@
 	<string>PixelTools needs access to your photo library to select images for creating collages.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>PixelTools needs permission to save created collages to your photo library.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PixelTools needs camera access to capture photos for image processing.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PixelTools needs microphone access for video recording.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

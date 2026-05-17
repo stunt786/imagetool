@@ -6,9 +6,48 @@ import 'package:path_provider/path_provider.dart';
 
 import 'image_saver_types.dart';
 
+abstract final class AppSavePaths {
+  static const String defaultDirectoryName = 'PixelTools';
+
+  static Future<Directory> getOutputDirectory() async {
+    if (Platform.isAndroid) {
+      final picturesDir = Directory('/storage/emulated/0/Pictures/$defaultDirectoryName');
+      if (!await picturesDir.exists()) {
+        await picturesDir.create(recursive: true);
+      }
+      return picturesDir;
+    }
+
+    if (Platform.isIOS) {
+      final baseDir = await getApplicationDocumentsDirectory();
+      final outputDir = Directory(path.join(baseDir.path, defaultDirectoryName));
+      if (!await outputDir.exists()) {
+        await outputDir.create(recursive: true);
+      }
+      return outputDir;
+    }
+
+    final downloads = await getDownloadsDirectory();
+    if (downloads != null) {
+      final outputDir = Directory(path.join(downloads.path, defaultDirectoryName));
+      if (!await outputDir.exists()) {
+        await outputDir.create(recursive: true);
+      }
+      return outputDir;
+    }
+
+    final baseDir = await getApplicationDocumentsDirectory();
+    final outputDir = Directory(path.join(baseDir.path, defaultDirectoryName));
+    if (!await outputDir.exists()) {
+      await outputDir.create(recursive: true);
+    }
+    return outputDir;
+  }
+}
+
 Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
   final safeName = fileName.trim().isEmpty ? 'image.jpg' : fileName.trim();
-  final targetDir = await _pixelToolsDirectory();
+  final targetDir = await AppSavePaths.getOutputDirectory();
 
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final outName = _withSuffix(safeName, '_$timestamp');
@@ -17,39 +56,22 @@ Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fil
   return ImageSaveResult(fileName: outName, path: outFile.path);
 }
 
-Future<Directory> _pixelToolsDirectory() async {
-  if (Platform.isAndroid) {
-    final picturesDir = Directory('/storage/emulated/0/Pictures/PixelTools');
-    if (!await picturesDir.exists()) {
-      await picturesDir.create(recursive: true);
-    }
-    return picturesDir;
+Future<List<ImageSaveResult>> saveMultipleImagesImpl(
+  List<({Uint8List bytes, String fileName})> items,
+) async {
+  final targetDir = await AppSavePaths.getOutputDirectory();
+  final results = <ImageSaveResult>[];
+
+  for (final item in items) {
+    final safeName = item.fileName.trim().isEmpty ? 'image.jpg' : item.fileName.trim();
+    final timestamp = DateTime.now().millisecondsSinceEpoch + results.length;
+    final outName = _withSuffix(safeName, '_$timestamp');
+    final outFile = File('${targetDir.path}/$outName');
+    await outFile.writeAsBytes(item.bytes, flush: true);
+    results.add(ImageSaveResult(fileName: outName, path: outFile.path));
   }
 
-  if (Platform.isIOS) {
-    final baseDir = await getApplicationDocumentsDirectory();
-    final pixelToolsDir = Directory(path.join(baseDir.path, 'PixelTools'));
-    if (!await pixelToolsDir.exists()) {
-      await pixelToolsDir.create(recursive: true);
-    }
-    return pixelToolsDir;
-  }
-
-  final downloads = await getDownloadsDirectory();
-  if (downloads != null) {
-    final pixelToolsDir = Directory(path.join(downloads.path, 'PixelTools'));
-    if (!await pixelToolsDir.exists()) {
-      await pixelToolsDir.create(recursive: true);
-    }
-    return pixelToolsDir;
-  }
-
-  final baseDir = await getApplicationDocumentsDirectory();
-  final pixelToolsDir = Directory(path.join(baseDir.path, 'PixelTools'));
-  if (!await pixelToolsDir.exists()) {
-    await pixelToolsDir.create(recursive: true);
-  }
-  return pixelToolsDir;
+  return results;
 }
 
 String _withSuffix(String fileName, String suffix) {
