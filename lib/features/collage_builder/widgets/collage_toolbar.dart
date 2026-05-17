@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../shared/utils/image_saver.dart';
 import '../notifiers/collage_notifier.dart';
@@ -77,7 +78,9 @@ class CollageToolbar extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: state.imageCount == 0 ? null : _shareCollage,
+                  onPressed: state.imageCount == 0
+                      ? null
+                      : () => _shareCollage(context, ref),
                   icon: const Icon(Icons.share),
                   label: const Text('Share'),
                 ),
@@ -212,17 +215,13 @@ class CollageToolbar extends ConsumerWidget {
       if (bytes == null) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final result = await saveImageBytes(bytes, fileName: fileName);
+      await saveImageBytes(bytes, fileName: fileName);
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Saved to ${result.path}'),
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'OK',
-              onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
-            ),
+          const SnackBar(
+            content: Text('Collage saved successfully'),
+            duration: Duration(seconds: 2),
           ),
         );
       }
@@ -235,7 +234,28 @@ class CollageToolbar extends ConsumerWidget {
     }
   }
 
-  Future<void> _shareCollage() async {
+  Future<void> _shareCollage(BuildContext context, WidgetRef ref) async {
+    try {
+      final bytes = await ref.read(collageProvider.notifier).exportCollage();
+      if (bytes == null) return;
+
+      final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final result = await saveImageBytes(bytes, fileName: fileName);
+
+      if (result.path == null) return;
+
+      await Share.shareXFiles(
+        [XFile(result.path!)],
+        subject: 'Check out this collage from PixelTools',
+        text: 'Collage created with PixelTools',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sharing: $e')),
+        );
+      }
+    }
   }
 }
 

@@ -51,25 +51,76 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (bytesList.isEmpty) return;
 
-    final newLayout = CollageLayout.getLayoutForImageCount(bytesList.length);
-    final newImages = <CollageImageSlot>[];
-
-    for (int i = 0; i < newLayout.slotCount; i++) {
-      if (i < bytesList.length) {
-        newImages.add(CollageImageSlot(
-          index: i,
-          imageBytes: bytesList[i],
-          imageName: names[i],
-        ));
-      } else {
-        newImages.add(CollageImageSlot(index: i));
+    final emptySlots = <int>[];
+    for (int i = 0; i < state.images.length; i++) {
+      if (!state.images[i].hasImage) {
+        emptySlots.add(i);
       }
     }
 
-    state = state.copyWith(
-      images: newImages,
-      layout: newLayout,
-    );
+    final slotsNeeded = bytesList.length;
+    final slotsAvailable = emptySlots.length;
+
+    if (slotsNeeded <= slotsAvailable) {
+      final newImages = List<CollageImageSlot>.from(state.images);
+      for (int i = 0; i < bytesList.length; i++) {
+        newImages[emptySlots[i]] = CollageImageSlot(
+          index: emptySlots[i],
+          imageBytes: bytesList[i],
+          imageName: names[i],
+        );
+      }
+      state = state.copyWith(images: newImages);
+    } else {
+      final newLayout = CollageLayout.getLayoutForImageCount(
+        state.imageCount + bytesList.length,
+      );
+      final newImages = <CollageImageSlot>[];
+
+      for (int i = 0; i < state.images.length; i++) {
+        newImages.add(CollageImageSlot(
+          index: i,
+          imageBytes: state.images[i].imageBytes,
+          imageName: state.images[i].imageName,
+          scale: state.images[i].scale,
+          offsetX: state.images[i].offsetX,
+          offsetY: state.images[i].offsetY,
+          fitMode: state.images[i].fitMode,
+        ));
+      }
+
+      for (int i = state.images.length; i < newLayout.slotCount; i++) {
+        newImages.add(CollageImageSlot(index: i));
+      }
+
+      int imageIndex = 0;
+      for (int i = 0; i < newImages.length && imageIndex < bytesList.length; i++) {
+        if (!newImages[i].hasImage) {
+          newImages[i] = CollageImageSlot(
+            index: i,
+            imageBytes: bytesList[imageIndex],
+            imageName: names[imageIndex],
+          );
+          imageIndex++;
+        }
+      }
+
+      if (imageIndex < bytesList.length) {
+        for (int i = newImages.length - 1; i >= 0 && imageIndex < bytesList.length; i--) {
+          newImages[i] = CollageImageSlot(
+            index: i,
+            imageBytes: bytesList[imageIndex],
+            imageName: names[imageIndex],
+          );
+          imageIndex++;
+        }
+      }
+
+      state = state.copyWith(
+        images: newImages,
+        layout: newLayout,
+      );
+    }
   }
 
   Future<void> addImageToSlot(int slotIndex) async {

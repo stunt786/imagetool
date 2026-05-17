@@ -18,28 +18,37 @@ Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fil
 }
 
 Future<Directory> _pixelToolsDirectory() async {
-  Directory? baseDir;
-
   if (Platform.isAndroid) {
-    final externalDirs = await getExternalStorageDirectories(
-      type: StorageDirectory.pictures,
-    );
-    if (externalDirs != null && externalDirs.isNotEmpty) {
-      baseDir = externalDirs.first;
+    final picturesDir = Directory('/storage/emulated/0/Pictures/PixelTools');
+    if (!await picturesDir.exists()) {
+      await picturesDir.create(recursive: true);
     }
+    return picturesDir;
   }
 
   if (Platform.isIOS) {
-    baseDir = await getApplicationDocumentsDirectory();
+    final baseDir = await getApplicationDocumentsDirectory();
+    final pixelToolsDir = Directory(path.join(baseDir.path, 'PixelTools'));
+    if (!await pixelToolsDir.exists()) {
+      await pixelToolsDir.create(recursive: true);
+    }
+    return pixelToolsDir;
   }
 
-  baseDir ??= await getApplicationDocumentsDirectory();
+  final downloads = await getDownloadsDirectory();
+  if (downloads != null) {
+    final pixelToolsDir = Directory(path.join(downloads.path, 'PixelTools'));
+    if (!await pixelToolsDir.exists()) {
+      await pixelToolsDir.create(recursive: true);
+    }
+    return pixelToolsDir;
+  }
 
+  final baseDir = await getApplicationDocumentsDirectory();
   final pixelToolsDir = Directory(path.join(baseDir.path, 'PixelTools'));
   if (!await pixelToolsDir.exists()) {
     await pixelToolsDir.create(recursive: true);
   }
-
   return pixelToolsDir;
 }
 
