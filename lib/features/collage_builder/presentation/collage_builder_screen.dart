@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
+import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
 import '../widgets/collage_toolbar.dart';
@@ -30,9 +32,11 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             ),
         ],
       ),
-      body: state.imageCount == 0
-          ? _buildSelectPhotosScreen(context)
-          : _buildCollageEditor(context),
+      body: AdBannerWrapper(
+        child: state.imageCount == 0
+            ? _buildSelectPhotosScreen(context)
+            : _buildCollageEditor(context),
+      ),
     );
   }
 
@@ -74,7 +78,10 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () => ref.read(collageProvider.notifier).pickImages(),
+              onPressed: () {
+                ref.read(collageProvider.notifier).pickImages();
+                InterstitialTracker.instance.trackAction();
+              },
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('Select Photos'),
               style: FilledButton.styleFrom(

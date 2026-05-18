@@ -2,7 +2,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/utils/image_saver.dart';
+import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/format_converter_notifier.dart';
 
 class FormatConverterScreen extends ConsumerStatefulWidget {
@@ -72,6 +74,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         await ref
             .read(formatConverterProvider.notifier)
             .addImages(imageFiles);
+        InterstitialTracker.instance.trackAction();
       }
     } finally {
       if (mounted) {
@@ -105,6 +108,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             backgroundColor: Colors.green,
           ),
         );
+        InterstitialTracker.instance.trackAction();
       }
     } catch (e) {
       if (mounted) {
@@ -135,12 +139,12 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         ],
       ),
       body: state.images.isEmpty
-          ? _buildEmptyState(context)
+          ? AdBannerWrapper(child: _buildEmptyState(context))
           : Column(
               children: [
                 _buildFormatSelector(context, state),
                 _buildQualitySlider(context, state),
-                _buildImageList(context, state),
+                Expanded(child: _buildImageList(context, state)),
                 _buildBottomBar(context, state),
               ],
             ),

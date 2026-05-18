@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/banner_ad_widget.dart';
+
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
 
@@ -36,37 +38,44 @@ class AppShell extends StatelessWidget {
       body: navigationShell,
       bottomNavigationBar: SafeArea(
         minimum: EdgeInsets.zero,
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLowest.withValues(alpha: 0.96),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.95),
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x140F172A),
-                blurRadius: 28,
-                offset: Offset(0, 14),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(destinations.length, (index) {
-              final item = destinations[index];
-              final selected = navigationShell.currentIndex == index;
-
-              return _ShellNavItem(
-                destination: item,
-                selected: selected,
-                onTap: () => navigationShell.goBranch(
-                  index,
-                  initialLocation: index == navigationShell.currentIndex,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Google AdMob banner ad displayed above the navigation bar
+            const BannerAdWidget(),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLowest.withValues(alpha: 0.96),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.95),
                 ),
-              );
-            }),
-          ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x140F172A),
+                    blurRadius: 28,
+                    offset: Offset(0, 14),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(destinations.length, (index) {
+                  final item = destinations[index];
+                  final selected = navigationShell.currentIndex == index;
+
+                  return _ShellNavItem(
+                    destination: item,
+                    selected: selected,
+                    onTap: () => navigationShell.goBranch(
+                      index,
+                      initialLocation: index == navigationShell.currentIndex,
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ],
         ),
       ),
     );

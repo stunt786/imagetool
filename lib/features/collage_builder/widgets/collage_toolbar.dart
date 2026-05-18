@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../notifiers/collage_notifier.dart';
 
@@ -50,7 +51,10 @@ class CollageToolbar extends ConsumerWidget {
               _ToolbarButton(
                 icon: Icons.add_photo_alternate,
                 label: 'Add',
-                onTap: () => ref.read(collageProvider.notifier).pickImages(),
+                onTap: () {
+                  ref.read(collageProvider.notifier).pickImages();
+                  InterstitialTracker.instance.trackAction();
+                },
               ),
             ],
           ),
@@ -224,6 +228,7 @@ class CollageToolbar extends ConsumerWidget {
             duration: Duration(seconds: 2),
           ),
         );
+        InterstitialTracker.instance.trackAction();
       }
     } catch (e) {
       if (context.mounted) {
@@ -249,6 +254,7 @@ class CollageToolbar extends ConsumerWidget {
         subject: 'Check out this collage from PixelTools',
         text: 'Collage created with PixelTools',
       );
+      InterstitialTracker.instance.trackAction();
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

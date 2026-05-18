@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
+import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/image_to_pdf_state.dart';
 import '../notifiers/image_to_pdf_notifier.dart';
 import '../widgets/image_thumbnail_card.dart';
@@ -45,26 +47,28 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_showSettings)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: PdfSettingsPanel(
-                settings: state.pageSettings,
-                onSettingsChanged: (settings) {
-                  notifier.updatePageSettings(settings);
-                },
+      body: AdBannerWrapper(
+        child: Column(
+          children: [
+            if (_showSettings)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: PdfSettingsPanel(
+                  settings: state.pageSettings,
+                  onSettingsChanged: (settings) {
+                    notifier.updatePageSettings(settings);
+                  },
+                ),
               ),
+            Expanded(
+              child: state.images.isEmpty
+                  ? _buildEmptyState(context, notifier)
+                  : _buildImageGrid(context, state, notifier),
             ),
-          Expanded(
-            child: state.images.isEmpty
-                ? _buildEmptyState(context, notifier)
-                : _buildImageGrid(context, state, notifier),
-          ),
-          if (state.images.isNotEmpty)
-            _buildBottomBar(context, state, notifier),
-        ],
+            if (state.images.isNotEmpty)
+              _buildBottomBar(context, state, notifier),
+          ],
+        ),
       ),
     );
   }
@@ -107,7 +111,10 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: notifier.pickImages,
+              onPressed: () {
+                notifier.pickImages();
+                InterstitialTracker.instance.trackAction();
+              },
               icon: const Icon(Icons.add_photo_alternate_outlined),
               label: const Text('Select Images'),
               style: FilledButton.styleFrom(
@@ -203,11 +210,12 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
   Future<void> _generatePdf(BuildContext context, ImageToPdfNotifier notifier) async {
     final pdfPath = await notifier.generatePdf();
-    
+
     if (!context.mounted) return;
-    
+
     if (pdfPath != null) {
       _showPDFSavedDialog(context, pdfPath);
+      InterstitialTracker.instance.trackAction();
     } else {
       final state = ref.read(imageToPdfProvider);
       if (!context.mounted) return;

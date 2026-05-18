@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
+
 /// Placeholder screen for the Camera feature.
 ///
 /// Full camera integration (image_picker / camera package) will be added
@@ -72,6 +74,7 @@ class CameraScreen extends StatelessWidget {
                           Text('Camera capture will be available in the next update.'),
                     ),
                   );
+                  InterstitialTracker.instance.trackAction();
                 },
                 icon: const Icon(Icons.camera_alt_outlined),
                 label: const Text('Open Camera'),

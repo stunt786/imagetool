@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/ad_service.dart';
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/widgets/shared_app_bar.dart';
@@ -269,6 +271,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 14),
                       _QuickToolsGrid(isWide: isWide),
                       const SizedBox(height: 18),
+                      const _AdDemoSection(),
+                      const SizedBox(height: 18),
                       _PdfShortcutRail(shortcuts: _pdfShortcuts),
                       const SizedBox(height: 18),
                       const _PremiumBanner(),
@@ -400,6 +404,211 @@ class _PremiumBanner extends StatelessWidget {
   }
 }
 
+class _AdDemoSection extends StatefulWidget {
+  const _AdDemoSection();
+
+  @override
+  State<_AdDemoSection> createState() => _AdDemoSectionState();
+}
+
+class _AdDemoSectionState extends State<_AdDemoSection> {
+  bool _isShowingInterstitial = false;
+  bool _isShowingRewarded = false;
+
+  void _showInterstitialAd() {
+    setState(() => _isShowingInterstitial = true);
+    final shown = AdService.instance.showInterstitialAd();
+    if (!shown) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Interstitial ad is loading, please try again.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    // Reset loading state after a short delay
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _isShowingInterstitial = false);
+    });
+  }
+
+  void _showRewardedAd() {
+    setState(() => _isShowingRewarded = true);
+    final shown = AdService.instance.showRewardedAd(
+      onUserEarnedReward: () {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reward earned! Thank you for watching.'),
+              backgroundColor: Color(0xFF15803D),
+            ),
+          );
+        }
+      },
+    );
+    if (!shown) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rewarded ad is loading, please try again.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+    // Reset loading state after a short delay
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _isShowingRewarded = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        color: Colors.white.withValues(alpha: 0.88),
+        border: Border.all(color: const Color(0xFFE9E7F2)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x110F172A),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.ad_units_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Test Ads',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Try interstitial and rewarded ad formats',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _AdDemoButton(
+                  icon: Icons.play_circle_outline_rounded,
+                  label: 'Interstitial',
+                  isLoading: _isShowingInterstitial,
+                  color: const Color(0xFF2563EB),
+                  onTap: _showInterstitialAd,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AdDemoButton(
+                  icon: Icons.card_giftcard_rounded,
+                  label: 'Rewarded',
+                  isLoading: _isShowingRewarded,
+                  color: const Color(0xFF15803D),
+                  onTap: _showRewardedAd,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdDemoButton extends StatelessWidget {
+  const _AdDemoButton({
+    required this.icon,
+    required this.label,
+    required this.isLoading,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isLoading;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: isLoading ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: color.withValues(alpha: 0.08),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              )
+            else
+              Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QuickToolsGrid extends StatelessWidget {
   const _QuickToolsGrid({required this.isWide});
 
@@ -447,6 +656,7 @@ class _QuickToolCardState extends State<_QuickToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        InterstitialTracker.instance.trackNavigation();
         context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
@@ -613,7 +823,10 @@ class _PdfShortcutChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
-      onTap: () => context.push(data.route),
+      onTap: () {
+        InterstitialTracker.instance.trackNavigation();
+        context.push(data.route);
+      },
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(

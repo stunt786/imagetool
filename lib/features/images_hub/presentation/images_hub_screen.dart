@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/widgets/shared_app_bar.dart';
 
 const _imageTools = <_ImageToolData>[
@@ -166,6 +167,7 @@ class _ImageToolCardState extends State<_ImageToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        InterstitialTracker.instance.trackNavigation();
         context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),

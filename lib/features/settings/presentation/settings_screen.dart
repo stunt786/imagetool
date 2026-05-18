@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/services/permission_service.dart';
+import '../../../shared/widgets/ad_banner_wrapper.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -17,9 +18,10 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: AdBannerWrapper(
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           _buildSection(
             context,
             title: 'Storage',
@@ -123,6 +125,7 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ],
+      ),
       ),
     );
   }

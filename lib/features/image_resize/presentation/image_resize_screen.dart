@@ -7,8 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
+import '../../../shared/widgets/ad_banner_wrapper.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -129,6 +131,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
       _syncInputsFromImage(state.width, state.height);
       await _refreshEstimate();
+      InterstitialTracker.instance.trackAction();
     } finally {
       if (mounted) {
         setState(() => _isPicking = false);
@@ -462,8 +465,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       await saveImageBytes(result.bytes, fileName: fileName);
       if (!mounted) return;
       _showSnack('Saved');
+      InterstitialTracker.instance.trackAction();
     } catch (error) {
        _showSnack('Resized image is ready, but saving failed: $error');
+       InterstitialTracker.instance.trackAction();
      }
    }
 
@@ -497,9 +502,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
          .read(imageEditProvider.notifier)
          .replaceWithResult(result: result, fileName: fileName);
 
-     _syncInputsFromImage(result.width, result.height);
-     _showSnack('Rotated 90° clockwise');
-   }
+      _syncInputsFromImage(result.width, result.height);
+      _showSnack('Rotated 90° clockwise');
+      InterstitialTracker.instance.trackAction();
+    }
 
    void _resetCropValues() {
      final state = ref.read(imageEditProvider);
@@ -632,6 +638,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _activePanel = _EditorPanel.crop;
     setState(() {});
     _showSnack('Crop applied.');
+    InterstitialTracker.instance.trackAction();
   }
 
   _ResizeTarget? _resolveTargetSize(ImageEditState state) {
@@ -814,23 +821,25 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: state.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (state.errorMessage != null) ...[
-                      _ErrorBanner(message: state.errorMessage!),
-                      const SizedBox(height: 12),
+        child: AdBannerWrapper(
+          child: state.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (state.errorMessage != null) ...[
+                        _ErrorBanner(message: state.errorMessage!),
+                        const SizedBox(height: 12),
+                      ],
+                      _buildImageCard(state),
+                      const SizedBox(height: 14),
+                      if (state.hasImage) _buildEditorCard(state, target),
                     ],
-                    _buildImageCard(state),
-                    const SizedBox(height: 14),
-                    if (state.hasImage) _buildEditorCard(state, target),
-                  ],
+                  ),
                 ),
-              ),
+        ),
       ),
       floatingActionButton: !state.hasImage
           ? FloatingActionButton.extended(

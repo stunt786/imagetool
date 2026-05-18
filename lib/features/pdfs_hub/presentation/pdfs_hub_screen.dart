@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/widgets/shared_app_bar.dart';
@@ -193,6 +194,7 @@ class _PdfToolCardState extends State<_PdfToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        InterstitialTracker.instance.trackNavigation();
         context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
