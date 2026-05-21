@@ -1,16 +1,16 @@
-import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
+import '../models/social_presets.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -21,7 +21,7 @@ class ImageResizeScreen extends ConsumerStatefulWidget {
 
 enum _ResizeMode { dimensions, percentage, preset, bestFit }
 
-enum _EditorPanel { resize, crop }
+enum _EditorPanel { resize, crop, rotate }
 
 enum _CropAspectPreset {
   free('Free', null),
@@ -73,7 +73,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   _EditorPanel _activePanel = _EditorPanel.resize;
   _ResizeMode _mode = _ResizeMode.dimensions;
   _CropAspectPreset _cropPreset = _CropAspectPreset.free;
-  ResizeOutputFormat _outputFormat = ResizeOutputFormat.jpg;
+  OutputImageFormat _outputFormat = OutputImageFormat.jpg;
   _QualityOption _quality = _qualityOptions[1];
   bool _lockAspectRatio = true;
   double _aspectRatio = 1;
@@ -88,6 +88,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     const Size(1920, 1080),
   ];
   int _estimateRequestId = 0;
+  double _rotationPreviewDegrees = 0;
+
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void dispose() {
@@ -108,22 +111,19 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     setState(() => _isPicking = true);
 
     try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.image,
-        withData: true,
+      final XFile? image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
       );
 
-      final file = result?.files.singleOrNull;
-      if (file == null) return;
+      if (image == null) return;
 
-      final bytes = await _readPlatformFileBytes(file);
-      if (bytes == null || bytes.isEmpty) {
+      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty) {
         _showSnack('Unable to read that image.');
         return;
       }
 
-      await ref.read(imageEditProvider.notifier).loadImage(bytes, file.name);
+      await ref.read(imageEditProvider.notifier).loadImage(bytes, image.name);
       if (!mounted) return;
 
       final state = ref.read(imageEditProvider);
@@ -139,13 +139,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
   }
 
-  Future<Uint8List?> _readPlatformFileBytes(PlatformFile file) async {
-    if (file.bytes != null) return file.bytes!;
-    final path = file.path;
-    if (path == null || path.isEmpty) return null;
-    return File(path).readAsBytes();
-  }
-
   void _syncInputsFromImage(int width, int height) {
     _isSyncingFields = true;
     _aspectRatio = height == 0 ? 1 : width / height;
@@ -153,6 +146,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _activePanel = _EditorPanel.resize;
     _cropPreset = _CropAspectPreset.free;
     _percentage = 100;
+    _rotationPreviewDegrees = 0;
     _widthController.text = width.toString();
     _heightController.text = height.toString();
     _bestFitWidthController.text = width.toString();
@@ -165,32 +159,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _estimatedBytes = ref.read(imageEditProvider).fileSize;
     _isSyncingFields = false;
     setState(() {});
-  }
-
-  void _removeImage() {
-    ref.read(imageEditProvider.notifier).clear();
-    _isSyncingFields = true;
-    _widthController.clear();
-    _heightController.clear();
-    _bestFitWidthController.clear();
-    _bestFitHeightController.clear();
-    _percentageController.text = '100';
-    _isSyncingFields = false;
-    setState(() {
-      _mode = _ResizeMode.dimensions;
-      _activePanel = _EditorPanel.resize;
-      _cropPreset = _CropAspectPreset.free;
-      _percentage = 100;
-      _estimatedBytes = null;
-    });
-  }
-
-  void _resetImage() {
-    ref.read(imageEditProvider.notifier).resetToOriginal();
-    final state = ref.read(imageEditProvider);
-    if (!state.hasImage) return;
-    _syncInputsFromImage(state.width, state.height);
-    _showSnack('Original image restored.');
   }
 
   void _setActivePanel(_EditorPanel panel) {
@@ -467,58 +435,85 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _showSnack('Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
-       _showSnack('Resized image is ready, but saving failed: $error');
-       InterstitialTracker.instance.trackAction();
-     }
-   }
-
-   Future<void> _rotateImage() async {
-     final state = ref.read(imageEditProvider);
-     if (!state.hasImage) {
-       _showSnack('Pick an image first.');
-       return;
-     }
-
-     ref.read(imageEditProvider.notifier).setLoading(true);
-
-     final result = await ref
-         .read(imageEditProvider.notifier)
-         .generateRotate90();
-
-     if (!mounted) return;
-
-     if (result == null) {
-       ref.read(imageEditProvider.notifier).setLoading(false);
-       _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Rotation failed.');
-       return;
-     }
-
-     final fileName = _buildOutputFileName(
-       baseName: state.fileName ?? 'image',
-       format: _outputFormat,
-     );
-
-     ref
-         .read(imageEditProvider.notifier)
-         .replaceWithResult(result: result, fileName: fileName);
-
-      _syncInputsFromImage(result.width, result.height);
-      _showSnack('Rotated 90° clockwise');
+      _showSnack('Resized image is ready, but saving failed: $error');
       InterstitialTracker.instance.trackAction();
     }
+  }
 
-   void _resetCropValues() {
-     final state = ref.read(imageEditProvider);
-     if (!state.hasImage) return;
-     setState(() {
-       _cropXController.text = '0';
-       _cropYController.text = '0';
-       _cropWidthController.text = state.width.toString();
-       _cropHeightController.text = state.height.toString();
-     });
-   }
+  Future<void> _rotateImage() async {
+    final state = ref.read(imageEditProvider);
+    if (!state.hasImage) {
+      _showSnack('Pick an image first.');
+      return;
+    }
 
-   void _setCropPreset(_CropAspectPreset preset) {
+    ref.read(imageEditProvider.notifier).setLoading(true);
+
+    final result = await ref
+        .read(imageEditProvider.notifier)
+        .generateRotate(
+          angleDegrees: _normalizedRotationDegrees,
+          format: _outputFormat,
+          quality: _quality.value,
+        );
+
+    if (!mounted) return;
+
+    if (result == null) {
+      ref.read(imageEditProvider.notifier).setLoading(false);
+      _showSnack(
+        ref.read(imageEditProvider).errorMessage ?? 'Rotation failed.',
+      );
+      return;
+    }
+
+    final fileName = _buildOutputFileName(
+      baseName: state.fileName ?? 'image',
+      format: _outputFormat,
+    );
+
+    ref
+        .read(imageEditProvider.notifier)
+        .replaceWithResult(result: result, fileName: fileName);
+
+    _syncInputsFromImage(result.width, result.height);
+    setState(() => _rotationPreviewDegrees = 0);
+    _showSnack('Rotation applied.');
+    InterstitialTracker.instance.trackAction();
+  }
+
+  void _rotatePreviewBy(double deltaDegrees) {
+    setState(() {
+      _rotationPreviewDegrees = _normalizeDegrees(
+        _rotationPreviewDegrees + deltaDegrees,
+      );
+    });
+  }
+
+  void _resetRotationPreview() {
+    setState(() => _rotationPreviewDegrees = 0);
+  }
+
+  double get _normalizedRotationDegrees =>
+      _normalizeDegrees(_rotationPreviewDegrees);
+
+  double _normalizeDegrees(double degrees) {
+    final normalized = degrees % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
+  }
+
+  void _resetCropValues() {
+    final state = ref.read(imageEditProvider);
+    if (!state.hasImage) return;
+    setState(() {
+      _cropXController.text = '0';
+      _cropYController.text = '0';
+      _cropWidthController.text = state.width.toString();
+      _cropHeightController.text = state.height.toString();
+    });
+  }
+
+  void _setCropPreset(_CropAspectPreset preset) {
     setState(() => _cropPreset = preset);
     _handleCropWidthChanged(_cropWidthController.text);
   }
@@ -527,8 +522,15 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final parsed = int.tryParse(value);
     if (parsed == null) return;
     final state = ref.read(imageEditProvider);
-    if (parsed + (_cropWidthController.text.isNotEmpty ? int.parse(_cropWidthController.text) : state.width) > state.width) {
-      _cropXController.text = (state.width - int.parse(_cropWidthController.text)).clamp(0, state.width).toString();
+    if (parsed +
+            (_cropWidthController.text.isNotEmpty
+                ? int.parse(_cropWidthController.text)
+                : state.width) >
+        state.width) {
+      _cropXController.text =
+          (state.width - int.parse(_cropWidthController.text))
+              .clamp(0, state.width)
+              .toString();
     }
     setState(() {});
   }
@@ -537,39 +539,66 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final parsed = int.tryParse(value);
     if (parsed == null) return;
     final state = ref.read(imageEditProvider);
-    if (parsed + (_cropHeightController.text.isNotEmpty ? int.parse(_cropHeightController.text) : state.height) > state.height) {
-      _cropYController.text = (state.height - int.parse(_cropHeightController.text)).clamp(0, state.height).toString();
+    if (parsed +
+            (_cropHeightController.text.isNotEmpty
+                ? int.parse(_cropHeightController.text)
+                : state.height) >
+        state.height) {
+      _cropYController.text =
+          (state.height - int.parse(_cropHeightController.text))
+              .clamp(0, state.height)
+              .toString();
     }
     setState(() {});
   }
 
   void _handleCropWidthChanged(String value) {
+    if (_isSyncingFields) return;
     final parsed = int.tryParse(value);
     if (parsed == null) return;
     final state = ref.read(imageEditProvider);
     final x = int.tryParse(_cropXController.text) ?? 0;
-    if (x + parsed > state.width) {
-      _cropWidthController.text = (state.width - x).clamp(1, state.width).toString();
+    final safeWidth = math.min(parsed, state.width - x).clamp(1, state.width);
+    if (safeWidth != parsed) {
+      _cropWidthController.text = safeWidth.toString();
     }
     if (_cropPreset.ratio != null) {
       _isSyncingFields = true;
-      _cropHeightController.text = math.max(1, (parsed / _cropPreset.ratio!).round()).toString();
+      final safeHeight = math.max(
+        1,
+        math.min(
+          state.height - (int.tryParse(_cropYController.text) ?? 0),
+          (safeWidth / _cropPreset.ratio!).round(),
+        ),
+      );
+      _cropHeightController.text = safeHeight.toString();
       _isSyncingFields = false;
     }
     setState(() {});
   }
 
   void _handleCropHeightChanged(String value) {
+    if (_isSyncingFields) return;
     final parsed = int.tryParse(value);
     if (parsed == null) return;
     final state = ref.read(imageEditProvider);
     final y = int.tryParse(_cropYController.text) ?? 0;
-    if (y + parsed > state.height) {
-      _cropHeightController.text = (state.height - y).clamp(1, state.height).toString();
+    final safeHeight = math
+        .min(parsed, state.height - y)
+        .clamp(1, state.height);
+    if (safeHeight != parsed) {
+      _cropHeightController.text = safeHeight.toString();
     }
     if (_cropPreset.ratio != null) {
       _isSyncingFields = true;
-      _cropWidthController.text = math.max(1, (parsed * _cropPreset.ratio!).round()).toString();
+      final safeWidth = math.max(
+        1,
+        math.min(
+          state.width - (int.tryParse(_cropXController.text) ?? 0),
+          (safeHeight * _cropPreset.ratio!).round(),
+        ),
+      );
+      _cropWidthController.text = safeWidth.toString();
       _isSyncingFields = false;
     }
     setState(() {});
@@ -580,6 +609,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     required int y,
     required int width,
     required int height,
+    bool rebuild = false,
   }) {
     final state = ref.read(imageEditProvider);
     final clampedX = x.clamp(0, state.width - 1);
@@ -588,12 +618,19 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final maxAllowedHeight = state.height - clampedY;
     final clampedWidth = width.clamp(1, maxAllowedWidth);
     final clampedHeight = height.clamp(1, maxAllowedHeight);
-    setState(() {
+    void syncFields() {
       _cropXController.text = clampedX.toString();
       _cropYController.text = clampedY.toString();
       _cropWidthController.text = clampedWidth.toString();
       _cropHeightController.text = clampedHeight.toString();
-    });
+    }
+
+    if (rebuild) {
+      setState(syncFields);
+      return;
+    }
+
+    syncFields();
   }
 
   Future<void> _applyCrop() async {
@@ -702,7 +739,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   String _buildOutputFileName({
     required String baseName,
-    required ResizeOutputFormat format,
+    required OutputImageFormat format,
   }) {
     final dot = baseName.lastIndexOf('.');
     final stem = dot > 0 ? baseName.substring(0, dot) : baseName;
@@ -773,6 +810,45 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _saveCurrentImage() async {
+    final state = ref.read(imageEditProvider);
+    final bytes = state.currentBytes;
+    if (bytes == null || !state.hasImage) {
+      _showSnack('Pick an image first.');
+      return;
+    }
+
+    final fileName = _buildOutputFileName(
+      baseName: state.fileName ?? 'image',
+      format: _outputFormat,
+    );
+
+    try {
+      await saveImageBytes(bytes, fileName: fileName);
+      if (!mounted) return;
+      _showSnack('Saved');
+      InterstitialTracker.instance.trackAction();
+    } catch (error) {
+      _showSnack('Saving failed: $error');
+    }
+  }
+
+  Future<void> _applyActiveTool() {
+    return switch (_activePanel) {
+      _EditorPanel.resize => _resizeImage(),
+      _EditorPanel.crop => _applyCrop(),
+      _EditorPanel.rotate => _rotateImage(),
+    };
+  }
+
+  String get _applyButtonLabel {
+    return switch (_activePanel) {
+      _EditorPanel.resize => 'Apply Resize',
+      _EditorPanel.crop => 'Apply Crop',
+      _EditorPanel.rotate => 'Apply Rotation',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(imageEditProvider);
@@ -825,7 +901,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           child: state.isLoading
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+                  padding: EdgeInsets.fromLTRB(
+                    14,
+                    8,
+                    14,
+                    state.hasImage ? 120 : 20,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -841,15 +922,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 ),
         ),
       ),
-      floatingActionButton: !state.hasImage
-          ? FloatingActionButton.extended(
-              onPressed: _pickImage,
-              backgroundColor: const Color(0xFF8B1BFF),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_photo_alternate_rounded),
-              label: const Text('Pick Image'),
-            )
-          : null,
+      bottomNavigationBar: _buildBottomActionBar(state),
     );
   }
 
@@ -873,116 +946,24 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ? Column(
               children: [
                 _InteractiveImagePreview(
-                  key: ValueKey('${state.width}x${state.height}${_cropXController.text}${_cropYController.text}${_cropWidthController.text}${_cropHeightController.text}'),
                   imageBytes: state.currentBytes!,
                   cropX: int.tryParse(_cropXController.text) ?? 0,
                   cropY: int.tryParse(_cropYController.text) ?? 0,
-                  cropWidth: int.tryParse(_cropWidthController.text) ?? state.width,
-                  cropHeight: int.tryParse(_cropHeightController.text) ?? state.height,
+                  cropWidth:
+                      int.tryParse(_cropWidthController.text) ?? state.width,
+                  cropHeight:
+                      int.tryParse(_cropHeightController.text) ?? state.height,
                   imageWidth: state.width,
                   imageHeight: state.height,
                   activePanel: _activePanel,
+                  cropAspectRatio: _cropPreset.ratio,
+                  rotationDegrees: _rotationPreviewDegrees,
                   onCropUpdate: _updateCropFromDrag,
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            state.fileName ?? 'Image',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                              color: Color(0xFF1D2033),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(Icons.image_rounded, size: 14, color: Color(0xFF70758C)),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${state.width} × ${state.height}',
-                                style: const TextStyle(
-                                  color: Color(0xFF70758C),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Icon(Icons.folder_rounded, size: 14, color: Color(0xFF70758C)),
-                              const SizedBox(width: 4),
-                              Text(
-                                _formatFileSize(state.fileSize),
-                                style: const TextStyle(
-                                  color: Color(0xFF70758C),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1EEFF),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              _outputFormat.label,
-                              style: const TextStyle(
-                                color: Color(0xFF6A39F9),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        _ToggleActionButton(
-                          tooltip: 'Resize',
-                          selected: _activePanel == _EditorPanel.resize,
-                          onTap: () => _setActivePanel(_EditorPanel.resize),
-                          icon: Icons.photo_size_select_large_rounded,
-                        ),
-                        const SizedBox(width: 6),
-                        _ToggleActionButton(
-                          tooltip: 'Crop',
-                          selected: _activePanel == _EditorPanel.crop,
-                          onTap: () => _setActivePanel(_EditorPanel.crop),
-                          icon: Icons.crop_rounded,
-                        ),
-                        const SizedBox(width: 6),
-                        _CircleActionButton(
-                          tooltip: 'Rotate 90°',
-                          icon: Icons.rotate_90_degrees_ccw_rounded,
-                          onTap: _rotateImage,
-                        ),
-                        const SizedBox(width: 6),
-                        _CircleActionButton(
-                          tooltip: 'Reset Image',
-                          icon: Icons.restart_alt_rounded,
-                          onTap: _resetImage,
-                        ),
-                        const SizedBox(width: 6),
-                        _CircleActionButton(
-                          tooltip: 'Delete',
-                          icon: Icons.delete_outline_rounded,
-                          onTap: _removeImage,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                _buildPrimaryToolStrip(),
+                const SizedBox(height: 12),
+                _buildImageMeta(state),
               ],
             )
           : Column(
@@ -997,7 +978,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                       end: Alignment.bottomRight,
                       colors: [Color(0xFFF3EEFF), Color(0xFFE8F4FF)],
                     ),
-                    border: Border.all(color: const Color(0xFFD8D4F0), width: 1.5),
+                    border: Border.all(
+                      color: const Color(0xFFD8D4F0),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.04),
@@ -1062,9 +1046,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: _panelDecoration(),
-      child: _activePanel == _EditorPanel.resize
-          ? _buildResizeEditor(state, target)
-          : _buildCropEditor(state),
+      child: switch (_activePanel) {
+        _EditorPanel.resize => _buildResizeEditor(state, target),
+        _EditorPanel.crop => _buildCropEditor(state),
+        _EditorPanel.rotate => _buildRotateEditor(),
+      },
     );
   }
 
@@ -1130,12 +1116,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Row(
           children: [
             Expanded(
-              child: _DropdownField<ResizeOutputFormat>(
+              child: _DropdownField<OutputImageFormat>(
                 label: 'Output Format',
                 value: _outputFormat,
-                items: ResizeOutputFormat.values
+                items: OutputImageFormat.values
                     .map(
-                      (format) => DropdownMenuItem<ResizeOutputFormat>(
+                      (format) => DropdownMenuItem<OutputImageFormat>(
                         value: format,
                         child: Text(format.label),
                       ),
@@ -1219,42 +1205,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7F00FF), Color(0xFFB108F8)],
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x338B1BFF),
-                  blurRadius: 18,
-                  offset: Offset(0, 10),
-                ),
-              ],
-            ),
-            child: FilledButton.icon(
-              onPressed: _resizeImage,
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              icon: const Icon(Icons.auto_awesome_rounded),
-              label: const Text(
-                'Resize Image',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ),
         const SizedBox(height: 22),
         Row(
           children: [
@@ -1306,7 +1256,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   Widget _buildCropEditor(ImageEditState state) {
     final currentWidth = int.tryParse(_cropWidthController.text) ?? state.width;
-    final currentHeight = int.tryParse(_cropHeightController.text) ?? state.height;
+    final currentHeight =
+        int.tryParse(_cropHeightController.text) ?? state.height;
     final aspectRatio = currentWidth > 0 ? (currentHeight / currentWidth) : 1.0;
     final aspectText = aspectRatio.toStringAsFixed(2);
 
@@ -1420,7 +1371,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF7A3FF8)),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: Color(0xFF7A3FF8),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Image: ${state.width} × ${state.height} px',
@@ -1434,7 +1389,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.aspect_ratio_rounded, size: 16, color: Color(0xFF7A3FF8)),
+                  const Icon(
+                    Icons.aspect_ratio_rounded,
+                    size: 16,
+                    color: Color(0xFF7A3FF8),
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Aspect ratio: $aspectText',
@@ -1448,27 +1407,291 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        SizedBox(
+      ],
+    );
+  }
+
+  Widget _buildRotateEditor() {
+    final signedAngle = _rotationPreviewDegrees > 180
+        ? _rotationPreviewDegrees - 360
+        : _rotationPreviewDegrees;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Rotate Preview',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            color: Color(0xFF1D2033),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Preview updates live while you rotate. Apply only when the angle looks right.',
+          style: TextStyle(color: Color(0xFF6F748C), height: 1.35),
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _RotateStepChip(label: '-90°', onTap: () => _rotatePreviewBy(-90)),
+            _RotateStepChip(label: '-15°', onTap: () => _rotatePreviewBy(-15)),
+            _RotateStepChip(label: '+15°', onTap: () => _rotatePreviewBy(15)),
+            _RotateStepChip(label: '+90°', onTap: () => _rotatePreviewBy(90)),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(
+              child: Slider(
+                min: -180,
+                max: 180,
+                divisions: 360,
+                value: signedAngle,
+                activeColor: const Color(0xFF8B1BFF),
+                onChanged: (value) {
+                  setState(() {
+                    _rotationPreviewDegrees = _normalizeDegrees(value);
+                  });
+                },
+              ),
+            ),
+            SizedBox(
+              width: 64,
+              child: Text(
+                '${signedAngle.round()}°',
+                textAlign: TextAlign.end,
+                style: const TextStyle(
+                  color: Color(0xFF5B63C7),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
           width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _applyCrop,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF8B1BFF),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF6F8FF),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE3E9FF)),
+          ),
+          child: Text(
+            _rotationPreviewDegrees == 0
+                ? 'Preview is aligned to the original image.'
+                : 'Rotation ready: ${_normalizedRotationDegrees.toStringAsFixed(1)}°',
+            style: const TextStyle(
+              color: Color(0xFF4A4F69),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _rotationPreviewDegrees == 0
+                ? null
+                : _resetRotationPreview,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Reset Preview'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              side: const BorderSide(color: Color(0xFFD9DDF5)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),
             ),
-            icon: const Icon(Icons.crop_rounded),
-            label: const Text(
-              'Apply Crop',
-              style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageMeta(ImageEditState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          state.fileName ?? 'Image',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            color: Color(0xFF1D2033),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 12,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _MetaPill(
+              icon: Icons.image_rounded,
+              label: '${state.width} × ${state.height}',
+            ),
+            _MetaPill(
+              icon: Icons.folder_rounded,
+              label: _formatFileSize(state.fileSize),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1EEFF),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            _outputFormat.label,
+            style: const TextStyle(
+              color: Color(0xFF6A39F9),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBottomActionBar(ImageEditState state) {
+    if (!state.hasImage) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+          child: FilledButton.icon(
+            onPressed: _pickImage,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF8B1BFF),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+            icon: const Icon(Icons.add_photo_alternate_rounded),
+            label: Text(_isPicking ? 'Opening…' : 'Add Image'),
+          ),
+        ),
+      );
+    }
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFE9E5FF))),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x140C1234),
+              blurRadius: 18,
+              offset: Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: const Text('Add'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  side: const BorderSide(color: Color(0xFFD9DDF5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: _applyActiveTool,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B1BFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                icon: Icon(switch (_activePanel) {
+                  _EditorPanel.resize => Icons.auto_awesome_rounded,
+                  _EditorPanel.crop => Icons.crop_rounded,
+                  _EditorPanel.rotate => Icons.rotate_right_rounded,
+                }),
+                label: Text(
+                  _applyButtonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _saveCurrentImage,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF1F9D6A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                icon: const Icon(Icons.save_alt_rounded),
+                label: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrimaryToolStrip() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PreviewToolButton(
+            label: 'Resize',
+            icon: Icons.photo_size_select_large_rounded,
+            selected: _activePanel == _EditorPanel.resize,
+            onTap: () => _setActivePanel(_EditorPanel.resize),
+          ),
+          const SizedBox(width: 10),
+          _PreviewToolButton(
+            label: 'Crop',
+            icon: Icons.crop_rounded,
+            selected: _activePanel == _EditorPanel.crop,
+            onTap: () => _setActivePanel(_EditorPanel.crop),
+          ),
+          const SizedBox(width: 10),
+          _PreviewToolButton(
+            label: 'Rotate',
+            icon: Icons.rotate_right_rounded,
+            selected: _activePanel == _EditorPanel.rotate,
+            onTap: () => _setActivePanel(_EditorPanel.rotate),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1777,15 +2000,14 @@ class _QualityOption {
 }
 
 class _CircleActionButton extends StatelessWidget {
-  const _CircleActionButton({required this.icon, required this.onTap, this.tooltip});
+  const _CircleActionButton({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
-  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    final widget = Material(
+    return Material(
       color: Colors.white.withValues(alpha: 0.92),
       shape: const CircleBorder(),
       elevation: 0,
@@ -1796,47 +2018,6 @@ class _CircleActionButton extends StatelessWidget {
           width: 42,
           height: 42,
           child: Icon(icon, color: const Color(0xFF3D4159)),
-        ),
-      ),
-    );
-    if (tooltip != null) {
-      return Tooltip(message: tooltip!, child: widget);
-    }
-    return widget;
-  }
-}
-
-class _ToggleActionButton extends StatelessWidget {
-  const _ToggleActionButton({
-    required this.tooltip,
-    required this.selected,
-    required this.onTap,
-    required this.icon,
-  });
-
-  final String tooltip;
-  final bool selected;
-  final VoidCallback onTap;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: selected ? const Color(0xFF8B1BFF) : const Color(0xFFF4F0FF),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(
-              icon,
-              color: selected ? Colors.white : const Color(0xFF7A54F8),
-            ),
-          ),
         ),
       ),
     );
@@ -2053,6 +2234,109 @@ class _RecentSizeChip extends StatelessWidget {
   }
 }
 
+class _PreviewToolButton extends StatelessWidget {
+  const _PreviewToolButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFF8B1BFF) : const Color(0xFFF4F0FF),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected ? Colors.white : const Color(0xFF7A54F8),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : const Color(0xFF3A3F5B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetaPill extends StatelessWidget {
+  const _MetaPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFF70758C)),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF70758C),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RotateStepChip extends StatelessWidget {
+  const _RotateStepChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE8EAF3)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF31364F),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner({required this.message});
 
@@ -2081,7 +2365,6 @@ class _ErrorBanner extends StatelessWidget {
 
 class _InteractiveImagePreview extends StatefulWidget {
   const _InteractiveImagePreview({
-    super.key,
     required this.imageBytes,
     required this.cropX,
     required this.cropY,
@@ -2090,6 +2373,8 @@ class _InteractiveImagePreview extends StatefulWidget {
     required this.imageWidth,
     required this.imageHeight,
     required this.activePanel,
+    required this.cropAspectRatio,
+    required this.rotationDegrees,
     required this.onCropUpdate,
   });
 
@@ -2101,15 +2386,20 @@ class _InteractiveImagePreview extends StatefulWidget {
   final int imageWidth;
   final int imageHeight;
   final _EditorPanel activePanel;
+  final double? cropAspectRatio;
+  final double rotationDegrees;
   final void Function({
     required int x,
     required int y,
     required int width,
     required int height,
-  }) onCropUpdate;
+    bool rebuild,
+  })
+  onCropUpdate;
 
   @override
-  State<_InteractiveImagePreview> createState() => _InteractiveImagePreviewState();
+  State<_InteractiveImagePreview> createState() =>
+      _InteractiveImagePreviewState();
 }
 
 class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
@@ -2124,10 +2414,13 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
   int? _startCropY;
   int? _startCropWidth;
   int? _startCropHeight;
+  double _dragOffsetX = 0;
+  double _dragOffsetY = 0;
 
   @override
   void didUpdateWidget(_InteractiveImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_draggingHandle != null) return;
     if (oldWidget.cropX != widget.cropX ||
         oldWidget.cropY != widget.cropY ||
         oldWidget.cropWidth != widget.cropWidth ||
@@ -2157,15 +2450,22 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
     _startCropY = _cropY;
     _startCropWidth = _cropWidth;
     _startCropHeight = _cropHeight;
+    _dragOffsetX = 0;
+    _dragOffsetY = 0;
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    if (_draggingHandle == null || widget.activePanel != _EditorPanel.crop || _containerSize == null) return;
-    final delta = details.delta;
+    if (_draggingHandle == null ||
+        widget.activePanel != _EditorPanel.crop ||
+        _containerSize == null) {
+      return;
+    }
+    _dragOffsetX += details.delta.dx;
+    _dragOffsetY += details.delta.dy;
     final scaleX = widget.imageWidth / _containerSize!.width;
     final scaleY = widget.imageHeight / _containerSize!.height;
-    final dx = (delta.dx * scaleX).round();
-    final dy = (delta.dy * scaleY).round();
+    final dx = (_dragOffsetX * scaleX).round();
+    final dy = (_dragOffsetY * scaleY).round();
 
     int newX = _startCropX!;
     int newY = _startCropY!;
@@ -2173,103 +2473,375 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
     int newHeight = _startCropHeight!;
 
     switch (_draggingHandle) {
+      case 'move':
+        newX = (_startCropX! + dx).clamp(
+          0,
+          widget.imageWidth - _startCropWidth!,
+        );
+        newY = (_startCropY! + dy).clamp(
+          0,
+          widget.imageHeight - _startCropHeight!,
+        );
+        break;
       case 'tl':
-        newX = (_startCropX! + dx).clamp(0, _startCropX! + _startCropWidth! - 10);
-        newY = (_startCropY! + dy).clamp(0, _startCropY! + _startCropHeight! - 10);
-        newWidth = (_startCropWidth! - dx).clamp(10, _startCropWidth! + _startCropX! - newX);
-        newHeight = (_startCropHeight! - dy).clamp(10, _startCropHeight! + _startCropY! - newY);
+        newX = (_startCropX! + dx).clamp(
+          0,
+          _startCropX! + _startCropWidth! - 10,
+        );
+        newY = (_startCropY! + dy).clamp(
+          0,
+          _startCropY! + _startCropHeight! - 10,
+        );
+        newWidth = (_startCropWidth! - dx).clamp(
+          10,
+          _startCropWidth! + _startCropX! - newX,
+        );
+        newHeight = (_startCropHeight! - dy).clamp(
+          10,
+          _startCropHeight! + _startCropY! - newY,
+        );
         break;
       case 'tr':
-        newY = (_startCropY! + dy).clamp(0, _startCropY! + _startCropHeight! - 10);
-        newWidth = (_startCropWidth! + dx).clamp(10, widget.imageWidth - _startCropX!);
-        newHeight = (_startCropHeight! - dy).clamp(10, _startCropHeight! + _startCropY! - newY);
+        newY = (_startCropY! + dy).clamp(
+          0,
+          _startCropY! + _startCropHeight! - 10,
+        );
+        newWidth = (_startCropWidth! + dx).clamp(
+          10,
+          widget.imageWidth - _startCropX!,
+        );
+        newHeight = (_startCropHeight! - dy).clamp(
+          10,
+          _startCropHeight! + _startCropY! - newY,
+        );
         break;
       case 'bl':
-        newX = (_startCropX! + dx).clamp(0, _startCropX! + _startCropWidth! - 10);
+        newX = (_startCropX! + dx).clamp(
+          0,
+          _startCropX! + _startCropWidth! - 10,
+        );
         newWidth = (_startCropWidth! - dx).clamp(10, widget.imageWidth - newX);
-        newHeight = (_startCropHeight! + dy).clamp(10, widget.imageHeight - _startCropY!);
+        newHeight = (_startCropHeight! + dy).clamp(
+          10,
+          widget.imageHeight - _startCropY!,
+        );
         break;
       case 'br':
-        newWidth = (_startCropWidth! + dx).clamp(10, widget.imageWidth - _startCropX!);
-        newHeight = (_startCropHeight! + dy).clamp(10, widget.imageHeight - _startCropY!);
+        newWidth = (_startCropWidth! + dx).clamp(
+          10,
+          widget.imageWidth - _startCropX!,
+        );
+        newHeight = (_startCropHeight! + dy).clamp(
+          10,
+          widget.imageHeight - _startCropY!,
+        );
         break;
       case 't':
-        newY = (_startCropY! + dy).clamp(0, _startCropY! + _startCropHeight! - 10);
-        newHeight = (_startCropHeight! - dy).clamp(10, _startCropHeight! + _startCropY! - newY);
+        newY = (_startCropY! + dy).clamp(
+          0,
+          _startCropY! + _startCropHeight! - 10,
+        );
+        newHeight = (_startCropHeight! - dy).clamp(
+          10,
+          _startCropHeight! + _startCropY! - newY,
+        );
         break;
       case 'b':
-        newHeight = (_startCropHeight! + dy).clamp(10, widget.imageHeight - _startCropY!);
+        newHeight = (_startCropHeight! + dy).clamp(
+          10,
+          widget.imageHeight - _startCropY!,
+        );
         break;
       case 'l':
-        newX = (_startCropX! + dx).clamp(0, _startCropX! + _startCropWidth! - 10);
+        newX = (_startCropX! + dx).clamp(
+          0,
+          _startCropX! + _startCropWidth! - 10,
+        );
         newWidth = (_startCropWidth! - dx).clamp(10, widget.imageWidth - newX);
         break;
       case 'r':
-        newWidth = (_startCropWidth! + dx).clamp(10, widget.imageWidth - _startCropX!);
+        newWidth = (_startCropWidth! + dx).clamp(
+          10,
+          widget.imageWidth - _startCropX!,
+        );
         break;
     }
 
-    setState(() {
-      _cropX = newX;
-      _cropY = newY;
-      _cropWidth = newWidth;
-      _cropHeight = newHeight;
-    });
-
-    widget.onCropUpdate(
+    final adjusted = _adjustCropRect(
       x: newX,
       y: newY,
       width: newWidth,
       height: newHeight,
+      handle: _draggingHandle!,
+    );
+
+    setState(() {
+      _cropX = adjusted.$1;
+      _cropY = adjusted.$2;
+      _cropWidth = adjusted.$3;
+      _cropHeight = adjusted.$4;
+    });
+
+    widget.onCropUpdate(
+      x: adjusted.$1,
+      y: adjusted.$2,
+      width: adjusted.$3,
+      height: adjusted.$4,
+      rebuild: false,
     );
   }
 
+  (int, int, int, int) _adjustCropRect({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    required String handle,
+  }) {
+    var nextX = x;
+    var nextY = y;
+    var nextWidth = width;
+    var nextHeight = height;
+
+    final ratio = widget.cropAspectRatio;
+    if (ratio != null && handle != 'move') {
+      if (handle == 't' || handle == 'b') {
+        nextWidth = math.max(10, (nextHeight * ratio).round());
+      } else {
+        nextHeight = math.max(10, (nextWidth / ratio).round());
+      }
+
+      if (handle == 'tl' || handle == 'l' || handle == 'bl') {
+        nextX = (_startCropX! + _startCropWidth! - nextWidth).clamp(
+          0,
+          widget.imageWidth - 10,
+        );
+      }
+      if (handle == 'tl' || handle == 't' || handle == 'tr') {
+        nextY = (_startCropY! + _startCropHeight! - nextHeight).clamp(
+          0,
+          widget.imageHeight - 10,
+        );
+      }
+    } else if (ratio == null) {
+      final snapped = _snapCropRect(
+        x: nextX,
+        y: nextY,
+        width: nextWidth,
+        height: nextHeight,
+      );
+      nextX = snapped.$1;
+      nextY = snapped.$2;
+      nextWidth = snapped.$3;
+      nextHeight = snapped.$4;
+    }
+
+    nextX = nextX.clamp(0, math.max(0, widget.imageWidth - 1));
+    nextY = nextY.clamp(0, math.max(0, widget.imageHeight - 1));
+    nextWidth = nextWidth.clamp(10, widget.imageWidth - nextX);
+    nextHeight = nextHeight.clamp(10, widget.imageHeight - nextY);
+
+    if (ratio != null) {
+      final preferredHeight = math.max(10, (nextWidth / ratio).round());
+      if (preferredHeight <= widget.imageHeight - nextY) {
+        nextHeight = preferredHeight;
+      } else {
+        nextHeight = widget.imageHeight - nextY;
+        nextWidth = math
+            .max(10, (nextHeight * ratio).round())
+            .clamp(10, widget.imageWidth - nextX);
+      }
+    }
+
+    return (nextX, nextY, nextWidth, nextHeight);
+  }
+
+  (int, int, int, int) _snapCropRect({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+  }) {
+    const threshold = 12;
+    var nextX = x;
+    var nextY = y;
+    var nextWidth = width;
+    var nextHeight = height;
+    final right = nextX + nextWidth;
+    final bottom = nextY + nextHeight;
+    final centerX = nextX + (nextWidth / 2).round();
+    final centerY = nextY + (nextHeight / 2).round();
+
+    if (nextX.abs() <= threshold) nextX = 0;
+    if (nextY.abs() <= threshold) nextY = 0;
+    if ((widget.imageWidth - right).abs() <= threshold) {
+      nextWidth = widget.imageWidth - nextX;
+    }
+    if ((widget.imageHeight - bottom).abs() <= threshold) {
+      nextHeight = widget.imageHeight - nextY;
+    }
+
+    final imageCenterX = widget.imageWidth ~/ 2;
+    final imageCenterY = widget.imageHeight ~/ 2;
+    if ((centerX - imageCenterX).abs() <= threshold) {
+      nextX = (imageCenterX - nextWidth / 2).round().clamp(
+        0,
+        widget.imageWidth - nextWidth,
+      );
+    }
+    if ((centerY - imageCenterY).abs() <= threshold) {
+      nextY = (imageCenterY - nextHeight / 2).round().clamp(
+        0,
+        widget.imageHeight - nextHeight,
+      );
+    }
+
+    return (nextX, nextY, nextWidth, nextHeight);
+  }
+
   void _onPanEnd(DragEndDetails details) {
+    if (_draggingHandle != null) {
+      widget.onCropUpdate(
+        x: _cropX,
+        y: _cropY,
+        width: _cropWidth,
+        height: _cropHeight,
+        rebuild: true,
+      );
+    }
     _draggingHandle = null;
     _startCropX = null;
     _startCropY = null;
     _startCropWidth = null;
     _startCropHeight = null;
+    _dragOffsetX = 0;
+    _dragOffsetY = 0;
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = math.min(constraints.maxWidth * 0.95, 600).toDouble();
-        final aspectRatio = widget.imageHeight / widget.imageWidth;
-        final previewHeight = math.min(maxWidth * aspectRatio, 450).toDouble();
+        final maxWidth = constraints.maxWidth.toDouble();
+        final normalizedRotation = widget.rotationDegrees % 360;
+        final basePreviewHeight = math
+            .min(maxWidth * (widget.imageHeight / widget.imageWidth), 340)
+            .toDouble();
+        final baseScale = math.min(
+          maxWidth / math.max(widget.imageWidth, 1),
+          basePreviewHeight / math.max(widget.imageHeight, 1),
+        );
+        final radians = normalizedRotation * math.pi / 180;
+        final sinAngle = math.sin(radians).abs();
+        final cosAngle = math.cos(radians).abs();
+        final rotatedWidth =
+            widget.imageWidth * cosAngle + widget.imageHeight * sinAngle;
+        final rotatedHeight =
+            widget.imageWidth * sinAngle + widget.imageHeight * cosAngle;
+        final rotationScale = normalizedRotation == 0
+            ? baseScale
+            : math.min(
+                maxWidth / math.max(rotatedWidth, 1),
+                340 / math.max(rotatedHeight, 1),
+              );
+        final previewWidth = normalizedRotation == 0
+            ? maxWidth
+            : rotatedWidth * rotationScale;
+        final previewHeight = normalizedRotation == 0
+            ? basePreviewHeight
+            : rotatedHeight * rotationScale;
+        final imageDisplayWidth = widget.imageWidth * rotationScale;
+        final imageDisplayHeight = widget.imageHeight * rotationScale;
+        _containerSize = Size(imageDisplayWidth, imageDisplayHeight);
 
-        return SizedBox(
-          width: maxWidth,
-          height: previewHeight,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: SizedBox(
-              width: widget.imageWidth.toDouble(),
-              height: widget.imageHeight.toDouble(),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.memory(
-                    widget.imageBytes,
-                    fit: BoxFit.fill,
-                    gaplessPlayback: true,
-                  ),
-                  if (widget.activePanel == _EditorPanel.crop)
-                    _InteractiveCropOverlay(
-                      cropX: _cropX,
-                      cropY: _cropY,
-                      cropWidth: _cropWidth,
-                      cropHeight: _cropHeight,
-                      imageWidth: widget.imageWidth,
-                      imageHeight: widget.imageHeight,
-                      onPanStart: _onPanStart,
-                      onPanUpdate: _onPanUpdate,
-                      onPanEnd: _onPanEnd,
+        return Center(
+          child: SizedBox(
+            width: previewWidth,
+            height: previewHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (normalizedRotation == 0)
+                  SizedBox(
+                    width: maxWidth,
+                    height: basePreviewHeight,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: imageDisplayWidth,
+                          height: imageDisplayHeight,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.memory(
+                                widget.imageBytes,
+                                fit: BoxFit.fill,
+                                gaplessPlayback: true,
+                                filterQuality: FilterQuality.medium,
+                              ),
+                              if (widget.activePanel == _EditorPanel.crop)
+                                _InteractiveCropOverlay(
+                                  cropX: _cropX,
+                                  cropY: _cropY,
+                                  cropWidth: _cropWidth,
+                                  cropHeight: _cropHeight,
+                                  imageWidth: widget.imageWidth,
+                                  imageHeight: widget.imageHeight,
+                                  onPanStart: _onPanStart,
+                                  onPanUpdate: _onPanUpdate,
+                                  onPanEnd: _onPanEnd,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                ],
-              ),
+                  )
+                else
+                  Transform.rotate(
+                    angle: radians,
+                    child: SizedBox(
+                      width: imageDisplayWidth,
+                      height: imageDisplayHeight,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.memory(
+                            widget.imageBytes,
+                            fit: BoxFit.fill,
+                            gaplessPlayback: true,
+                            filterQuality: FilterQuality.medium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (widget.activePanel == _EditorPanel.crop &&
+                    normalizedRotation != 0)
+                  Positioned(
+                    bottom: 12,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Reset rotation to edit crop handles',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         );
@@ -2331,7 +2903,10 @@ class _InteractiveCropOverlay extends StatelessWidget {
                   onPanEnd: onPanEnd,
                   child: Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
                     ),
                   ),
                 ),
@@ -2431,28 +3006,35 @@ class _PositionedHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const handleTouchSize = 40.0;
     return Positioned(
-      left: xRatio * containerSize.width - 12,
-      top: yRatio * containerSize.height - 12,
+      left: xRatio * containerSize.width - (handleTouchSize / 2),
+      top: yRatio * containerSize.height - (handleTouchSize / 2),
       child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
+        behavior: HitTestBehavior.opaque,
         onPanStart: onPanStart,
         onPanUpdate: onPanUpdate,
         onPanEnd: onPanEnd,
-        child: Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+        child: SizedBox(
+          width: handleTouchSize,
+          height: handleTouchSize,
+          child: Center(
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -2482,30 +3064,44 @@ class _EdgeHandle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVertical = edge == 't' || edge == 'b';
+    final touchWidth = isVertical ? 56.0 : 36.0;
+    final touchHeight = isVertical ? 28.0 : 36.0;
     return Positioned(
-      left: isVertical ? xRatio * containerSize.width - 20 : null,
-      right: isVertical ? null : xRatio * containerSize.width - 10,
-      top: isVertical ? yRatio * containerSize.height - 8 : null,
-      bottom: isVertical ? null : yRatio * containerSize.height - 6,
+      left: isVertical ? xRatio * containerSize.width - (touchWidth / 2) : null,
+      right: isVertical
+          ? null
+          : xRatio * containerSize.width - (touchWidth / 2),
+      top: isVertical
+          ? yRatio * containerSize.height - (touchHeight / 2)
+          : null,
+      bottom: isVertical
+          ? null
+          : yRatio * containerSize.height - (touchHeight / 2),
       child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
+        behavior: HitTestBehavior.opaque,
         onPanStart: onPanStart,
         onPanUpdate: onPanUpdate,
         onPanEnd: onPanEnd,
-        child: Container(
-          width: isVertical ? 40 : 20,
-          height: isVertical ? 16 : 20,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+        child: SizedBox(
+          width: touchWidth,
+          height: touchHeight,
+          child: Center(
+            child: Container(
+              width: isVertical ? 40 : 20,
+              height: isVertical ? 16 : 20,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

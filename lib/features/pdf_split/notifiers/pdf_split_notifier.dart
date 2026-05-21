@@ -151,4 +151,9 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
   void clear() {
     state = state.reset();
   }
+
+  /// Clears only the error message.
+  void clearError() {
+    state = state.copyWith(errorMessage: null);
+  }
 }

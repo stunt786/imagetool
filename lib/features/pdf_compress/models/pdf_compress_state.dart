@@ -41,7 +41,9 @@ class PdfCompressState {
   bool get hasFile => selectedFilePath != null;
   double? get compressionRatio {
     if (selectedFileSize == null || outputFileSize == null) return null;
-    return (1 - (outputFileSize! / selectedFileSize!)) * 100;
+    if (selectedFileSize == 0) return null;
+    final ratio = (1 - (outputFileSize! / selectedFileSize!)) * 100;
+    return ratio.isFinite ? ratio : null;
   }
 
   PdfCompressState copyWith({

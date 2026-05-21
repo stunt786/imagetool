@@ -19,6 +19,25 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
   bool _showSettings = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = ref.read(pdfCompressProvider);
+    if (state.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          ref.read(pdfCompressProvider.notifier).clearError();
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(pdfCompressProvider);
     final notifier = ref.read(pdfCompressProvider.notifier);

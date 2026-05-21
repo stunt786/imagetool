@@ -95,6 +95,17 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           );
           outputPaths = [outputPath];
           break;
+
+        case ConvertFormat.docx:
+          final outputPath = await PdfService.instance.convertPdfToDocx(
+            inputPath: state.selectedFilePath!,
+            outputBaseName: baseName,
+            onProgress: (progress) {
+              state = state.copyWith(progress: progress);
+            },
+          );
+          outputPaths = [outputPath];
+          break;
       }
 
       state = state.copyWith(
@@ -116,5 +127,10 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
   /// Clears the current selection and results.
   void clear() {
     state = state.reset();
+  }
+
+  /// Clears only the error message.
+  void clearError() {
+    state = state.copyWith(errorMessage: null);
   }
 }

@@ -20,6 +20,25 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
   bool _showSettings = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = ref.read(pdfConvertProvider);
+    if (state.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          ref.read(pdfConvertProvider.notifier).clearError();
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(pdfConvertProvider);
     final notifier = ref.read(pdfConvertProvider.notifier);
@@ -355,6 +374,8 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
         return Icons.image;
       case ConvertFormat.txt:
         return Icons.text_snippet;
+      case ConvertFormat.docx:
+        return Icons.description;
     }
   }
 

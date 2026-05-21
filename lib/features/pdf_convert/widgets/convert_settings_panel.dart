@@ -17,7 +17,9 @@ class ConvertSettingsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isImageFormat = state.outputFormat != ConvertFormat.txt;
+    final isImageFormat =
+        state.outputFormat == ConvertFormat.jpg ||
+        state.outputFormat == ConvertFormat.png;
 
     return Container(
       decoration: BoxDecoration(
@@ -145,35 +147,35 @@ class ConvertSettingsPanel extends StatelessWidget {
           ],
 
           // DOCX limitation note
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+          if (state.outputFormat == ConvertFormat.docx) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 18,
-                  color: theme.colorScheme.onErrorContainer,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'DOCX conversion requires server-side processing. Use TXT export as a native fallback, or integrate a cloud API for DOCX support.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onErrorContainer,
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'DOCX conversion extracts text and creates a basic Word document. Complex layouts, images, and formatting may not be preserved.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

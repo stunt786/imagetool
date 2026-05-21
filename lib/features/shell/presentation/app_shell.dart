@@ -34,50 +34,58 @@ class AppShell extends StatelessWidget {
       ),
     ];
 
+    final currentPath = GoRouterState.of(context).uri.path;
+    final isMainScreen = currentPath == '/tools' ||
+        currentPath == '/camera' ||
+        currentPath == '/images' ||
+        currentPath == '/pdfs';
+
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: SafeArea(
-        minimum: EdgeInsets.zero,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Google AdMob banner ad displayed above the navigation bar
-            const BannerAdWidget(),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLowest.withValues(alpha: 0.96),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.95),
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x140F172A),
-                    blurRadius: 28,
-                    offset: Offset(0, 14),
+      bottomNavigationBar: isMainScreen
+          ? SafeArea(
+              minimum: EdgeInsets.zero,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Google AdMob banner ad displayed above the navigation bar
+                  const BannerAdWidget(),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLowest.withValues(alpha: 0.96),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.95),
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x140F172A),
+                          blurRadius: 28,
+                          offset: Offset(0, 14),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: List.generate(destinations.length, (index) {
+                        final item = destinations[index];
+                        final selected = navigationShell.currentIndex == index;
+
+                        return _ShellNavItem(
+                          destination: item,
+                          selected: selected,
+                          onTap: () => navigationShell.goBranch(
+                            index,
+                            initialLocation: index == navigationShell.currentIndex,
+                          ),
+                        );
+                      }),
+                    ),
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(destinations.length, (index) {
-                  final item = destinations[index];
-                  final selected = navigationShell.currentIndex == index;
-
-                  return _ShellNavItem(
-                    destination: item,
-                    selected: selected,
-                    onTap: () => navigationShell.goBranch(
-                      index,
-                      initialLocation: index == navigationShell.currentIndex,
-                    ),
-                  );
-                }),
-              ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : null,
     );
   }
 }

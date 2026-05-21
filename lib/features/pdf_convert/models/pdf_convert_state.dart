@@ -4,7 +4,8 @@ import 'package:flutter/foundation.dart';
 enum ConvertFormat {
   jpg('JPG', 'jpg', 'JPEG image format, smaller file size'),
   png('PNG', 'png', 'PNG image format, lossless quality'),
-  txt('TXT', 'txt', 'Plain text extraction');
+  txt('TXT', 'txt', 'Plain text extraction'),
+  docx('DOCX', 'docx', 'Word document (text-based conversion)');
 
   const ConvertFormat(this.label, this.extension, this.description);
   final String label;

@@ -29,7 +29,7 @@ class SharedAppBar extends StatelessWidget implements PreferredSizeWidget {
             icon: Icons.menu_rounded,
             tooltip: 'Menu',
             embedded: true,
-            onTap: () => Scaffold.of(drawerKey.currentContext!).openDrawer(),
+            onTap: () => drawerKey.currentState?.openDrawer(),
           ),
         ),
       ),

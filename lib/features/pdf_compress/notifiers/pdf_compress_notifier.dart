@@ -96,4 +96,9 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
   void clear() {
     state = state.reset();
   }
+
+  /// Clears only the error message.
+  void clearError() {
+    state = state.copyWith(errorMessage: null);
+  }
 }

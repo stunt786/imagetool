@@ -19,6 +19,25 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
   bool _showSettings = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = ref.read(pdfSplitProvider);
+    if (state.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+          ref.read(pdfSplitProvider.notifier).clearError();
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(pdfSplitProvider);
     final notifier = ref.read(pdfSplitProvider.notifier);
