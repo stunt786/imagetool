@@ -56,7 +56,7 @@ class ConvertSettingsPanel extends StatelessWidget {
                       children: [
                         Radio<ConvertFormat>(
                           value: format,
-                          groupValue: state.outputFormat,
+                          // ignore: deprecated_member_use
                           onChanged: (_) => onFormatChanged(format),
                         ),
                         const SizedBox(width: 8),
@@ -125,7 +125,7 @@ class ConvertSettingsPanel extends StatelessWidget {
                         children: [
                           Radio<ConvertDpi>(
                             value: dpi,
-                            groupValue: state.dpi,
+                            // ignore: deprecated_member_use
                             onChanged: (_) => onDpiChanged(dpi),
                           ),
                           const SizedBox(width: 4),

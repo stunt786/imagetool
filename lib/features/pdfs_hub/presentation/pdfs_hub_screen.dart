@@ -32,6 +32,14 @@ const _pdfTools = <_PdfToolData>[
     gradient: [Color(0xFFFFF0E8), Color(0xFFFFFAF6)],
     accent: Color(0xFFEA580C),
   ),
+  _PdfToolData(
+    title: 'Convert PDF',
+    subtitle: 'Transform PDFs into JPG, PNG, or TXT formats.',
+    route: '/pdfs/convert',
+    icon: Icons.transform_rounded,
+    gradient: [Color(0xFFEAFBF0), Color(0xFFF8FFFB)],
+    accent: Color(0xFF15803D),
+  ),
 ];
 
 class PdfsHubScreen extends ConsumerWidget {

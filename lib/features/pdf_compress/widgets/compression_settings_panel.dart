@@ -51,7 +51,7 @@ class CompressionSettingsPanel extends StatelessWidget {
                       children: [
                         Radio<CompressionLevel>(
                           value: lvl,
-                          groupValue: level,
+                          // ignore: deprecated_member_use
                           onChanged: (_) => onLevelChanged(lvl),
                         ),
                         const SizedBox(width: 8),

@@ -57,6 +57,28 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     }
   }
 
+  Future<void> addImageFromPath(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return;
+
+    final name = path.split(Platform.pathSeparator).last;
+    final sizeBytes = await file.length();
+
+    final newItem = ImageToPdfItem(
+      path: path,
+      name: name,
+      sizeBytes: sizeBytes,
+    );
+
+    state = state.copyWith(
+      images: [...state.images, newItem],
+      errorMessage: null,
+      generatedPdfPath: null,
+    );
+
+    await _loadImage(state.images.length - 1);
+  }
+
   Future<void> _loadImage(int index) async {
     if (index < 0 || index >= state.images.length) return;
     

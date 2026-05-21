@@ -263,7 +263,7 @@ class _LocationOption extends StatelessWidget {
           children: [
             Radio<String>(
               value: value,
-              groupValue: value,
+              // ignore: deprecated_member_use
               onChanged: (_) => onTap(),
             ),
             const SizedBox(width: 8),

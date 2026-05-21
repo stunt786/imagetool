@@ -13,6 +13,7 @@ import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
 import '../../features/pdfs_hub/presentation/pdfs_hub_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
+import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 
@@ -95,6 +96,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     pageBuilder: (context, state) =>
                         const _MaterialPage(child: PdfSplitScreen()),
                   ),
+                  GoRoute(
+                    path: 'convert',
+                    pageBuilder: (context, state) =>
+                        const _MaterialPage(child: PdfConvertScreen()),
+                  ),
                 ],
               ),
             ],
@@ -129,6 +135,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pdf-splitter',
         redirect: (context, state) => '/pdfs/split',
+      ),
+      GoRoute(
+        path: '/pdf-converter',
+        redirect: (context, state) => '/pdfs/convert',
       ),
       GoRoute(
         path: '/image-to-pdf',

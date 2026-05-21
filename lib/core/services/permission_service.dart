@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class AppPermissionService {
   const AppPermissionService();
 
   Future<void> requestAllPermissions() async {
+    if (kIsWeb) return;
     await _requestPermission(Permission.photos);
     await _requestPermission(Permission.storage);
     await _requestPermission(Permission.camera);
@@ -20,16 +22,19 @@ class AppPermissionService {
   }
 
   Future<bool> hasStoragePermission() async {
+    if (kIsWeb) return true;
     final status = await Permission.photos.status;
     if (status.isGranted) return true;
     return (await Permission.storage.status).isGranted;
   }
 
   Future<bool> hasCameraPermission() async {
+    if (kIsWeb) return true;
     return (await Permission.camera.status).isGranted;
   }
 
   Future<void> openAppSettings() async {
+    if (kIsWeb) return;
     await openAppSettings();
   }
 }

@@ -61,7 +61,7 @@ class SplitSettingsPanel extends StatelessWidget {
                       children: [
                         Radio<SplitMode>(
                           value: mode,
-                          groupValue: state.splitMode,
+                          // ignore: deprecated_member_use
                           onChanged: (_) => onModeChanged(mode),
                         ),
                         const SizedBox(width: 8),
