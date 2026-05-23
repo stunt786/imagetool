@@ -835,9 +835,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           fileName: state.fileName ?? 'image.jpg',
         );
     _syncInputsFromImage(result.width, result.height);
-    _activePanel = _EditorPanel.crop;
     setState(() {});
-    _showSnack('Crop applied.');
+    _showSnack('Crop applied. Switch to Resize to adjust dimensions.');
     InterstitialTracker.instance.trackAction();
   }
 
@@ -996,7 +995,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       await _resizeImage();
     } else {
       await _applyActiveTool();
-      if (mounted) await _saveCurrentImage();
+      // Don't save here — user can resize further or save via the Save button.
     }
   }
 
@@ -1022,7 +1021,14 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       backgroundColor: theme.brightness == Brightness.dark ? scheme.surface : const Color(0xFFF9F7FF),
       appBar: AppBar(
         title: const Text('Resize Image'),
-        actions: const [],
+        actions: [
+          if (state.hasImage)
+            IconButton(
+              icon: const Icon(Icons.save_rounded),
+              tooltip: 'Save current image',
+              onPressed: _saveCurrentImage,
+            ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -1797,28 +1803,48 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
           ],
         ),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: _applyAndSave,
-            style: FilledButton.styleFrom(
-              backgroundColor: scheme.primary,
-              foregroundColor: scheme.onPrimary,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        child: Row(
+          children: [
+            if (_activePanel != _EditorPanel.resize) ...[
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.save_rounded, color: scheme.primary),
+                  tooltip: 'Save without resizing',
+                  onPressed: _saveCurrentImage,
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _applyAndSave,
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.primary,
+                  foregroundColor: scheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                icon: Icon(switch (_activePanel) {
+                  _EditorPanel.resize => Icons.auto_awesome_rounded,
+                  _EditorPanel.crop => Icons.crop_rounded,
+                  _EditorPanel.rotate => Icons.rotate_right_rounded,
+                }),
+                label: Text(
+                  _applyButtonLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
-            icon: Icon(switch (_activePanel) {
-              _EditorPanel.resize => Icons.auto_awesome_rounded,
-              _EditorPanel.crop => Icons.crop_rounded,
-              _EditorPanel.rotate => Icons.rotate_right_rounded,
-            }),
-            label: Text(
-              _applyButtonLabel,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
+          ],
         ),
       ),
     );
@@ -2750,19 +2776,6 @@ class _InteractiveImagePreview extends StatefulWidget {
 
 class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
   late MemoryImage _memoryImage;
-  late int _cropX;
-  late int _cropY;
-  late int _cropWidth;
-  late int _cropHeight;
-  Size? _containerSize;
-
-  String? _draggingHandle;
-  int? _startCropX;
-  int? _startCropY;
-  int? _startCropWidth;
-  int? _startCropHeight;
-  double _dragOffsetX = 0;
-  double _dragOffsetY = 0;
 
   @override
   void didUpdateWidget(_InteractiveImagePreview oldWidget) {
@@ -2770,303 +2783,12 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
     if (!identical(oldWidget.imageBytes, widget.imageBytes)) {
       _memoryImage = MemoryImage(widget.imageBytes);
     }
-    if (_draggingHandle != null) return;
-    if (oldWidget.cropX != widget.cropX ||
-        oldWidget.cropY != widget.cropY ||
-        oldWidget.cropWidth != widget.cropWidth ||
-        oldWidget.cropHeight != widget.cropHeight) {
-      setState(() {
-        _cropX = widget.cropX;
-        _cropY = widget.cropY;
-        _cropWidth = widget.cropWidth;
-        _cropHeight = widget.cropHeight;
-      });
-    }
   }
 
   @override
   void initState() {
     super.initState();
     _memoryImage = MemoryImage(widget.imageBytes);
-    _cropX = widget.cropX;
-    _cropY = widget.cropY;
-    _cropWidth = widget.cropWidth;
-    _cropHeight = widget.cropHeight;
-  }
-
-  void _onPanStart(DragStartDetails details, String handle) {
-    if (widget.activePanel != _EditorPanel.crop) return;
-    _draggingHandle = handle;
-    _startCropX = _cropX;
-    _startCropY = _cropY;
-    _startCropWidth = _cropWidth;
-    _startCropHeight = _cropHeight;
-    _dragOffsetX = 0;
-    _dragOffsetY = 0;
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_draggingHandle == null ||
-        widget.activePanel != _EditorPanel.crop ||
-        _containerSize == null) {
-      return;
-    }
-    _dragOffsetX += details.delta.dx;
-    _dragOffsetY += details.delta.dy;
-    final scaleX = widget.imageWidth / _containerSize!.width;
-    final scaleY = widget.imageHeight / _containerSize!.height;
-    final dx = (_dragOffsetX * scaleX).round();
-    final dy = (_dragOffsetY * scaleY).round();
-
-    int newX = _startCropX!;
-    int newY = _startCropY!;
-    int newWidth = _startCropWidth!;
-    int newHeight = _startCropHeight!;
-
-    switch (_draggingHandle) {
-      case 'move':
-        newX = (_startCropX! + dx).clamp(
-          0,
-          widget.imageWidth - _startCropWidth!,
-        );
-        newY = (_startCropY! + dy).clamp(
-          0,
-          widget.imageHeight - _startCropHeight!,
-        );
-        break;
-      case 'tl':
-        newX = (_startCropX! + dx).clamp(
-          0,
-          _startCropX! + _startCropWidth! - 10,
-        );
-        newY = (_startCropY! + dy).clamp(
-          0,
-          _startCropY! + _startCropHeight! - 10,
-        );
-        newWidth = (_startCropWidth! - dx).clamp(
-          10,
-          _startCropWidth! + _startCropX! - newX,
-        );
-        newHeight = (_startCropHeight! - dy).clamp(
-          10,
-          _startCropHeight! + _startCropY! - newY,
-        );
-        break;
-      case 'tr':
-        newY = (_startCropY! + dy).clamp(
-          0,
-          _startCropY! + _startCropHeight! - 10,
-        );
-        newWidth = (_startCropWidth! + dx).clamp(
-          10,
-          widget.imageWidth - _startCropX!,
-        );
-        newHeight = (_startCropHeight! - dy).clamp(
-          10,
-          _startCropHeight! + _startCropY! - newY,
-        );
-        break;
-      case 'bl':
-        newX = (_startCropX! + dx).clamp(
-          0,
-          _startCropX! + _startCropWidth! - 10,
-        );
-        newWidth = (_startCropWidth! - dx).clamp(10, widget.imageWidth - newX);
-        newHeight = (_startCropHeight! + dy).clamp(
-          10,
-          widget.imageHeight - _startCropY!,
-        );
-        break;
-      case 'br':
-        newWidth = (_startCropWidth! + dx).clamp(
-          10,
-          widget.imageWidth - _startCropX!,
-        );
-        newHeight = (_startCropHeight! + dy).clamp(
-          10,
-          widget.imageHeight - _startCropY!,
-        );
-        break;
-      case 't':
-        newY = (_startCropY! + dy).clamp(
-          0,
-          _startCropY! + _startCropHeight! - 10,
-        );
-        newHeight = (_startCropHeight! - dy).clamp(
-          10,
-          _startCropHeight! + _startCropY! - newY,
-        );
-        break;
-      case 'b':
-        newHeight = (_startCropHeight! + dy).clamp(
-          10,
-          widget.imageHeight - _startCropY!,
-        );
-        break;
-      case 'l':
-        newX = (_startCropX! + dx).clamp(
-          0,
-          _startCropX! + _startCropWidth! - 10,
-        );
-        newWidth = (_startCropWidth! - dx).clamp(10, widget.imageWidth - newX);
-        break;
-      case 'r':
-        newWidth = (_startCropWidth! + dx).clamp(
-          10,
-          widget.imageWidth - _startCropX!,
-        );
-        break;
-    }
-
-    final adjusted = _adjustCropRect(
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-      handle: _draggingHandle!,
-    );
-
-    setState(() {
-      _cropX = adjusted.$1;
-      _cropY = adjusted.$2;
-      _cropWidth = adjusted.$3;
-      _cropHeight = adjusted.$4;
-    });
-
-    widget.onCropUpdate(
-      x: adjusted.$1,
-      y: adjusted.$2,
-      width: adjusted.$3,
-      height: adjusted.$4,
-      rebuild: false,
-    );
-  }
-
-  (int, int, int, int) _adjustCropRect({
-    required int x,
-    required int y,
-    required int width,
-    required int height,
-    required String handle,
-  }) {
-    var nextX = x;
-    var nextY = y;
-    var nextWidth = width;
-    var nextHeight = height;
-
-    final ratio = widget.cropAspectRatio;
-    if (ratio != null && handle != 'move') {
-      if (handle == 't' || handle == 'b') {
-        nextWidth = math.max(10, (nextHeight * ratio).round());
-      } else {
-        nextHeight = math.max(10, (nextWidth / ratio).round());
-      }
-
-      if (handle == 'tl' || handle == 'l' || handle == 'bl') {
-        nextX = (_startCropX! + _startCropWidth! - nextWidth).clamp(
-          0,
-          widget.imageWidth - 10,
-        );
-      }
-      if (handle == 'tl' || handle == 't' || handle == 'tr') {
-        nextY = (_startCropY! + _startCropHeight! - nextHeight).clamp(
-          0,
-          widget.imageHeight - 10,
-        );
-      }
-    } else if (ratio == null) {
-      final snapped = _snapCropRect(
-        x: nextX,
-        y: nextY,
-        width: nextWidth,
-        height: nextHeight,
-      );
-      nextX = snapped.$1;
-      nextY = snapped.$2;
-      nextWidth = snapped.$3;
-      nextHeight = snapped.$4;
-    }
-
-    nextX = nextX.clamp(0, math.max(0, widget.imageWidth - 1));
-    nextY = nextY.clamp(0, math.max(0, widget.imageHeight - 1));
-    nextWidth = nextWidth.clamp(10, widget.imageWidth - nextX);
-    nextHeight = nextHeight.clamp(10, widget.imageHeight - nextY);
-
-    if (ratio != null) {
-      final preferredHeight = math.max(10, (nextWidth / ratio).round());
-      if (preferredHeight <= widget.imageHeight - nextY) {
-        nextHeight = preferredHeight;
-      } else {
-        nextHeight = widget.imageHeight - nextY;
-        nextWidth = math
-            .max(10, (nextHeight * ratio).round())
-            .clamp(10, widget.imageWidth - nextX);
-      }
-    }
-
-    return (nextX, nextY, nextWidth, nextHeight);
-  }
-
-  (int, int, int, int) _snapCropRect({
-    required int x,
-    required int y,
-    required int width,
-    required int height,
-  }) {
-    const threshold = 12;
-    var nextX = x;
-    var nextY = y;
-    var nextWidth = width;
-    var nextHeight = height;
-    final right = nextX + nextWidth;
-    final bottom = nextY + nextHeight;
-    final centerX = nextX + (nextWidth / 2).round();
-    final centerY = nextY + (nextHeight / 2).round();
-
-    if (nextX.abs() <= threshold) nextX = 0;
-    if (nextY.abs() <= threshold) nextY = 0;
-    if ((widget.imageWidth - right).abs() <= threshold) {
-      nextWidth = widget.imageWidth - nextX;
-    }
-    if ((widget.imageHeight - bottom).abs() <= threshold) {
-      nextHeight = widget.imageHeight - nextY;
-    }
-
-    final imageCenterX = widget.imageWidth ~/ 2;
-    final imageCenterY = widget.imageHeight ~/ 2;
-    if ((centerX - imageCenterX).abs() <= threshold) {
-      nextX = (imageCenterX - nextWidth / 2).round().clamp(
-        0,
-        widget.imageWidth - nextWidth,
-      );
-    }
-    if ((centerY - imageCenterY).abs() <= threshold) {
-      nextY = (imageCenterY - nextHeight / 2).round().clamp(
-        0,
-        widget.imageHeight - nextHeight,
-      );
-    }
-
-    return (nextX, nextY, nextWidth, nextHeight);
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_draggingHandle != null) {
-      widget.onCropUpdate(
-        x: _cropX,
-        y: _cropY,
-        width: _cropWidth,
-        height: _cropHeight,
-        rebuild: true,
-      );
-    }
-    _draggingHandle = null;
-    _startCropX = null;
-    _startCropY = null;
-    _startCropWidth = null;
-    _startCropHeight = null;
-    _dragOffsetX = 0;
-    _dragOffsetY = 0;
   }
 
   @override
@@ -3104,14 +2826,13 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
             : rotatedHeight * rotationScale;
         final imageDisplayWidth = widget.imageWidth * rotationScale;
         final imageDisplayHeight = widget.imageHeight * rotationScale;
-        _containerSize = Size(imageDisplayWidth, imageDisplayHeight);
 
         return Center(
           child: SizedBox(
             width: previewWidth,
             height: previewHeight,
             child: InteractiveViewer(
-              panEnabled: widget.activePanel == _EditorPanel.crop,
+              panEnabled: false,
               scaleEnabled: widget.activePanel == _EditorPanel.crop,
               minScale: 0.75,
               maxScale: 4,
@@ -3141,15 +2862,14 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                                   ),
                                   if (widget.activePanel == _EditorPanel.crop)
                                     _InteractiveCropOverlay(
-                                      cropX: _cropX,
-                                      cropY: _cropY,
-                                      cropWidth: _cropWidth,
-                                      cropHeight: _cropHeight,
+                                      cropX: widget.cropX,
+                                      cropY: widget.cropY,
+                                      cropWidth: widget.cropWidth,
+                                      cropHeight: widget.cropHeight,
                                       imageWidth: widget.imageWidth,
                                       imageHeight: widget.imageHeight,
-                                      onPanStart: _onPanStart,
-                                      onPanUpdate: _onPanUpdate,
-                                      onPanEnd: _onPanEnd,
+                                      cropAspectRatio: widget.cropAspectRatio,
+                                      onCropEnd: widget.onCropUpdate,
                                     ),
                                 ],
                               ),
@@ -3206,7 +2926,7 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
   }
 }
 
-class _InteractiveCropOverlay extends StatelessWidget {
+class _InteractiveCropOverlay extends StatefulWidget {
   const _InteractiveCropOverlay({
     required this.cropX,
     required this.cropY,
@@ -3214,9 +2934,8 @@ class _InteractiveCropOverlay extends StatelessWidget {
     required this.cropHeight,
     required this.imageWidth,
     required this.imageHeight,
-    required this.onPanStart,
-    required this.onPanUpdate,
-    required this.onPanEnd,
+    required this.cropAspectRatio,
+    required this.onCropEnd,
   });
 
   final int cropX;
@@ -3225,117 +2944,211 @@ class _InteractiveCropOverlay extends StatelessWidget {
   final int cropHeight;
   final int imageWidth;
   final int imageHeight;
-  final void Function(DragStartDetails details, String handle) onPanStart;
-  final void Function(DragUpdateDetails details) onPanUpdate;
-  final void Function(DragEndDetails details) onPanEnd;
+  final double? cropAspectRatio;
+  final void Function({
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    bool rebuild,
+  }) onCropEnd;
+
+  @override
+  State<_InteractiveCropOverlay> createState() =>
+      _InteractiveCropOverlayState();
+}
+
+class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
+  int _cropX = 0;
+  int _cropY = 0;
+  int _cropWidth = 0;
+  int _cropHeight = 0;
+  String? _draggingHandle;
+
+  static const int _minCropSize = 20;
+  static const double _touchRadius = 28;
+
+  @override
+  void initState() {
+    super.initState();
+    _cropX = widget.cropX;
+    _cropY = widget.cropY;
+    _cropWidth = widget.cropWidth;
+    _cropHeight = widget.cropHeight;
+  }
+
+  @override
+  void didUpdateWidget(_InteractiveCropOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_draggingHandle == null) {
+      _cropX = widget.cropX;
+      _cropY = widget.cropY;
+      _cropWidth = widget.cropWidth;
+      _cropHeight = widget.cropHeight;
+    }
+  }
+
+  String _hitTestHandle(Offset pos, Size container) {
+    final sx = container.width / widget.imageWidth;
+    final sy = container.height / widget.imageHeight;
+
+    double hx(int v) => v * sx;
+    double hy(int v) => v * sy;
+
+    final handles = <String, Offset>{
+      'tl': Offset(hx(_cropX), hy(_cropY)),
+      'tr': Offset(hx(_cropX + _cropWidth), hy(_cropY)),
+      'bl': Offset(hx(_cropX), hy(_cropY + _cropHeight)),
+      'br': Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight)),
+      't':  Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY)),
+      'b':  Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY + _cropHeight)),
+      'l':  Offset(hx(_cropX), hy(_cropY + _cropHeight ~/ 2)),
+      'r':  Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight ~/ 2)),
+    };
+
+    for (final id in ['tl', 'tr', 'bl', 'br', 't', 'b', 'l', 'r']) {
+      if ((pos - handles[id]!).distance <= _touchRadius) return id;
+    }
+
+    final r = Rect.fromLTWH(
+      hx(_cropX), hy(_cropY),
+      hx(_cropX + _cropWidth) - hx(_cropX),
+      hy(_cropY + _cropHeight) - hy(_cropY),
+    );
+    if (r.contains(pos)) return 'move';
+
+    return '';
+  }
+
+  void _onPanStart(DragStartDetails d) {
+    final handle = _hitTestHandle(d.localPosition, context.size!);
+    if (handle.isEmpty) return;
+    _draggingHandle = handle;
+  }
+
+  void _onPanUpdate(DragUpdateDetails d) {
+    if (_draggingHandle == null) return;
+    final container = context.size!;
+    final sx = widget.imageWidth / container.width;
+    final sy = widget.imageHeight / container.height;
+    final dx = (d.delta.dx * sx).round();
+    final dy = (d.delta.dy * sy).round();
+
+    int left = _cropX, top = _cropY;
+    int right = _cropX + _cropWidth, bottom = _cropY + _cropHeight;
+
+    switch (_draggingHandle) {
+      case 'move':
+        left += dx; top += dy;
+        right += dx; bottom += dy;
+        break;
+      case 'tl': left += dx; top += dy; break;
+      case 'tr': right += dx; top += dy; break;
+      case 'bl': left += dx; bottom += dy; break;
+      case 'br': right += dx; bottom += dy; break;
+      case 't': top += dy; break;
+      case 'b': bottom += dy; break;
+      case 'l': left += dx; break;
+      case 'r': right += dx; break;
+    }
+
+    left = left.clamp(0, widget.imageWidth);
+    right = right.clamp(0, widget.imageWidth);
+    top = top.clamp(0, widget.imageHeight);
+    bottom = bottom.clamp(0, widget.imageHeight);
+
+    if (right - left < _minCropSize) {
+      if (_draggingHandle == 'l' || _draggingHandle == 'tl' || _draggingHandle == 'bl') {
+        left = (right - _minCropSize).clamp(0, widget.imageWidth);
+      } else {
+        right = (left + _minCropSize).clamp(0, widget.imageWidth);
+      }
+    }
+    if (bottom - top < _minCropSize) {
+      if (_draggingHandle == 't' || _draggingHandle == 'tl' || _draggingHandle == 'tr') {
+        top = (bottom - _minCropSize).clamp(0, widget.imageHeight);
+      } else {
+        bottom = (top + _minCropSize).clamp(0, widget.imageHeight);
+      }
+    }
+
+    final ratio = widget.cropAspectRatio;
+    if (ratio != null && _draggingHandle != 'move') {
+      int w = right - left;
+      int h = bottom - top;
+
+      final topEdge = _draggingHandle == 't' || _draggingHandle == 'tl' || _draggingHandle == 'tr';
+      final bottomEdge = _draggingHandle == 'b' || _draggingHandle == 'bl' || _draggingHandle == 'br';
+      final leftEdge = _draggingHandle == 'l' || _draggingHandle == 'tl' || _draggingHandle == 'bl';
+      final rightEdge = _draggingHandle == 'r' || _draggingHandle == 'tr' || _draggingHandle == 'br';
+
+      bool adjusted = false;
+      final targetH = (w / ratio).round();
+      if (targetH >= _minCropSize) {
+        if (topEdge) {
+          final newTop = bottom - targetH;
+          if (newTop >= 0) { top = newTop; adjusted = true; }
+        }
+        if (!adjusted && bottomEdge) {
+          final newBottom = top + targetH;
+          if (newBottom <= widget.imageHeight) { bottom = newBottom; adjusted = true; }
+        }
+      }
+
+      if (!adjusted) {
+        final targetW = (h * ratio).round();
+        if (targetW >= _minCropSize) {
+          if (leftEdge) {
+            final newLeft = right - targetW;
+            if (newLeft >= 0) { left = newLeft; }
+          } else if (rightEdge) {
+            final newRight = left + targetW;
+            if (newRight <= widget.imageWidth) { right = newRight; }
+          }
+        }
+      }
+    }
+
+    _cropX = left;
+    _cropY = top;
+    _cropWidth = right - left;
+    _cropHeight = bottom - top;
+    setState(() {});
+  }
+
+  void _onPanEnd(DragEndDetails d) {
+    if (_draggingHandle != null) {
+      widget.onCropEnd(
+        x: _cropX, y: _cropY,
+        width: _cropWidth, height: _cropHeight,
+        rebuild: true,
+      );
+    }
+    _draggingHandle = null;
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final containerSize = constraints.biggest;
-        return CustomPaint(
-          painter: _InteractiveCropPainter(
-            x: cropX,
-            y: cropY,
-            width: cropWidth,
-            height: cropHeight,
-            imageWidth: imageWidth,
-            imageHeight: imageHeight,
-            containerSize: containerSize,
-          ),
-          size: Size.infinite,
-          child: Stack(
-            children: [
-              Positioned(
-                left: (cropX / imageWidth) * containerSize.width,
-                top: (cropY / imageHeight) * containerSize.height,
-                width: (cropWidth / imageWidth) * containerSize.width,
-                height: (cropHeight / imageHeight) * containerSize.height,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: (details) => onPanStart(details, 'move'),
-                  onPanUpdate: onPanUpdate,
-                  onPanEnd: onPanEnd,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                ),
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: _onPanStart,
+          onPanUpdate: _onPanUpdate,
+          onPanEnd: _onPanEnd,
+          child: RepaintBoundary(
+            child: CustomPaint(
+              size: constraints.biggest,
+              painter: _CropPainter(
+                x: _cropX,
+                y: _cropY,
+                width: _cropWidth,
+                height: _cropHeight,
+                imageWidth: widget.imageWidth,
+                imageHeight: widget.imageHeight,
+                containerSize: constraints.biggest,
               ),
-              _PositionedHandle(
-                xRatio: cropX / imageWidth,
-                yRatio: cropY / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'tl'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _PositionedHandle(
-                xRatio: (cropX + cropWidth) / imageWidth,
-                yRatio: cropY / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'tr'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _PositionedHandle(
-                xRatio: cropX / imageWidth,
-                yRatio: (cropY + cropHeight) / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'bl'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _PositionedHandle(
-                xRatio: (cropX + cropWidth) / imageWidth,
-                yRatio: (cropY + cropHeight) / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'br'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _EdgeHandle(
-                edge: 't',
-                xRatio: (cropX + cropWidth / 2) / imageWidth,
-                yRatio: cropY / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 't'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _EdgeHandle(
-                edge: 'b',
-                xRatio: (cropX + cropWidth / 2) / imageWidth,
-                yRatio: (cropY + cropHeight) / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'b'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _EdgeHandle(
-                edge: 'l',
-                xRatio: cropX / imageWidth,
-                yRatio: (cropY + cropHeight / 2) / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'l'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-              _EdgeHandle(
-                edge: 'r',
-                xRatio: (cropX + cropWidth) / imageWidth,
-                yRatio: (cropY + cropHeight / 2) / imageHeight,
-                containerSize: containerSize,
-                onPanStart: (d) => onPanStart(d, 'r'),
-                onPanUpdate: onPanUpdate,
-                onPanEnd: onPanEnd,
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -3343,130 +3156,8 @@ class _InteractiveCropOverlay extends StatelessWidget {
   }
 }
 
-class _PositionedHandle extends StatelessWidget {
-  const _PositionedHandle({
-    required this.xRatio,
-    required this.yRatio,
-    required this.containerSize,
-    required this.onPanStart,
-    required this.onPanUpdate,
-    required this.onPanEnd,
-  });
-
-  final double xRatio;
-  final double yRatio;
-  final Size containerSize;
-  final void Function(DragStartDetails details) onPanStart;
-  final void Function(DragUpdateDetails details) onPanUpdate;
-  final void Function(DragEndDetails details) onPanEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    const handleTouchSize = 40.0;
-    return Positioned(
-      left: xRatio * containerSize.width - (handleTouchSize / 2),
-      top: yRatio * containerSize.height - (handleTouchSize / 2),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: onPanStart,
-        onPanUpdate: onPanUpdate,
-        onPanEnd: onPanEnd,
-        child: SizedBox(
-          width: handleTouchSize,
-          height: handleTouchSize,
-          child: Center(
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EdgeHandle extends StatelessWidget {
-  const _EdgeHandle({
-    required this.edge,
-    required this.xRatio,
-    required this.yRatio,
-    required this.containerSize,
-    required this.onPanStart,
-    required this.onPanUpdate,
-    required this.onPanEnd,
-  });
-
-  final String edge;
-  final double xRatio;
-  final double yRatio;
-  final Size containerSize;
-  final void Function(DragStartDetails details) onPanStart;
-  final void Function(DragUpdateDetails details) onPanUpdate;
-  final void Function(DragEndDetails details) onPanEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    final isVertical = edge == 't' || edge == 'b';
-    final touchWidth = isVertical ? 56.0 : 36.0;
-    final touchHeight = isVertical ? 28.0 : 36.0;
-    return Positioned(
-      left: isVertical ? xRatio * containerSize.width - (touchWidth / 2) : null,
-      right: isVertical
-          ? null
-          : xRatio * containerSize.width - (touchWidth / 2),
-      top: isVertical
-          ? yRatio * containerSize.height - (touchHeight / 2)
-          : null,
-      bottom: isVertical
-          ? null
-          : yRatio * containerSize.height - (touchHeight / 2),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: onPanStart,
-        onPanUpdate: onPanUpdate,
-        onPanEnd: onPanEnd,
-        child: SizedBox(
-          width: touchWidth,
-          height: touchHeight,
-          child: Center(
-            child: Container(
-              width: isVertical ? 40 : 20,
-              height: isVertical ? 16 : 20,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF8B1BFF), width: 2.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InteractiveCropPainter extends CustomPainter {
-  _InteractiveCropPainter({
+class _CropPainter extends CustomPainter {
+  _CropPainter({
     required this.x,
     required this.y,
     required this.width,
@@ -3476,66 +3167,101 @@ class _InteractiveCropPainter extends CustomPainter {
     required this.containerSize,
   });
 
-  final int x;
-  final int y;
-  final int width;
-  final int height;
-  final int imageWidth;
-  final int imageHeight;
+  final int x, y, width, height;
+  final int imageWidth, imageHeight;
   final Size containerSize;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scaleX = containerSize.width / imageWidth;
-    final scaleY = containerSize.height / imageHeight;
+    final sx = containerSize.width / imageWidth;
+    final sy = containerSize.height / imageHeight;
 
-    final rect = Rect.fromLTWH(
-      x * scaleX,
-      y * scaleY,
-      width * scaleX,
-      height * scaleY,
-    );
-
+    final cropRect = Rect.fromLTWH(x * sx, y * sy, width * sx, height * sy);
     final fullRect = Offset.zero & containerSize;
 
-    final outsidePaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.5)
-      ..blendMode = BlendMode.dstOut;
+    // Dimmed overlay
+    canvas.drawPath(
+      Path.combine(
+        PathOperation.difference,
+        Path()..addRect(fullRect),
+        Path()..addRect(cropRect),
+      ),
+      Paint()..color = Colors.black.withValues(alpha: 0.45),
+    );
 
-    final path = Path()..addRect(fullRect);
-    final cropPath = Path()..addRect(rect);
-    path.addPath(cropPath, Offset.zero);
-    path.fillType = PathFillType.evenOdd;
-    canvas.drawPath(path, outsidePaint);
+    // White border
+    canvas.drawRect(
+      cropRect,
+      Paint()
+        ..color = Colors.white
+        ..strokeWidth = 2.5
+        ..style = PaintingStyle.stroke,
+    );
 
-    final borderPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-    canvas.drawRect(rect, borderPaint);
-
-    final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
+    // Rule-of-thirds grid
+    final grid = Paint()
+      ..color = Colors.white.withValues(alpha: 0.4)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    final v1 = rect.left + rect.width / 3;
-    final v2 = rect.left + 2 * rect.width / 3;
-    canvas.drawLine(Offset(v1, rect.top), Offset(v1, rect.bottom), gridPaint);
-    canvas.drawLine(Offset(v2, rect.top), Offset(v2, rect.bottom), gridPaint);
+    for (final fx in [cropRect.width / 3, 2 * cropRect.width / 3]) {
+      canvas.drawLine(
+        Offset(cropRect.left + fx, cropRect.top),
+        Offset(cropRect.left + fx, cropRect.bottom),
+        grid,
+      );
+    }
+    for (final fy in [cropRect.height / 3, 2 * cropRect.height / 3]) {
+      canvas.drawLine(
+        Offset(cropRect.left, cropRect.top + fy),
+        Offset(cropRect.right, cropRect.top + fy),
+        grid,
+      );
+    }
 
-    final h1 = rect.top + rect.height / 3;
-    final h2 = rect.top + 2 * rect.height / 3;
-    canvas.drawLine(Offset(rect.left, h1), Offset(rect.right, h1), gridPaint);
-    canvas.drawLine(Offset(rect.left, h2), Offset(rect.right, h2), gridPaint);
+    // Corner circles
+    final corners = [
+      cropRect.topLeft, cropRect.topRight,
+      cropRect.bottomLeft, cropRect.bottomRight,
+    ];
+    for (final c in corners) {
+      canvas.drawCircle(c, 12, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        c, 12,
+        Paint()
+          ..color = const Color(0xFF8B1BFF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+    }
+
+    // Edge bars
+    final edgeData = [
+      (cropRect.center.dx, cropRect.top, 40.0, 16.0),
+      (cropRect.center.dx, cropRect.bottom, 40.0, 16.0),
+      (cropRect.left, cropRect.center.dy, 16.0, 40.0),
+      (cropRect.right, cropRect.center.dy, 16.0, 40.0),
+    ];
+    for (final (cx, cy, ew, eh) in edgeData) {
+      final r = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cy), width: ew, height: eh),
+        const Radius.circular(8),
+      );
+      canvas.drawRRect(r, Paint()..color = Colors.white);
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..color = const Color(0xFF8B1BFF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _InteractiveCropPainter oldDelegate) {
-    return x != oldDelegate.x ||
-        y != oldDelegate.y ||
-        width != oldDelegate.width ||
-        height != oldDelegate.height ||
+  bool shouldRepaint(covariant _CropPainter oldDelegate) {
+    return x != oldDelegate.x || y != oldDelegate.y ||
+        width != oldDelegate.width || height != oldDelegate.height ||
         imageWidth != oldDelegate.imageWidth ||
         imageHeight != oldDelegate.imageHeight ||
         containerSize != oldDelegate.containerSize;

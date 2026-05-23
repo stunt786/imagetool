@@ -212,13 +212,12 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
-  ImageProcessResult encodeAt(int boundWidth, int boundHeight, int quality) {
-    final scale = math.min(
-      boundWidth / image.width,
-      boundHeight / image.height,
-    );
-    final w = math.max(1, (image.width * scale).round()).clamp(1, 12000);
-    final h = math.max(1, (image.height * scale).round()).clamp(1, 12000);
+  // Never scale below this many pixels on the shortest side
+  const int minDimension = 64;
+
+  ImageProcessResult encodeAt(int targetWidth, int targetHeight, int quality) {
+    final w = targetWidth.clamp(1, 12000);
+    final h = targetHeight.clamp(1, 12000);
     final processed = img.copyResize(
       image,
       width: w,
@@ -234,16 +233,28 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     );
   }
 
-  // Phase 1: quality-only binary search — find highest quality under target
-  {
-    int low = 10;
+  // Tracks the best result that fits within the target budget
+  ImageProcessResult? bestUnderTarget;
+
+  void consider(ImageProcessResult r) {
+    if (r.fileSize <= targetBytes) {
+      if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
+        bestUnderTarget = r;
+      }
+    }
+  }
+
+  // ––– Step 1: probe at full dimensions, medium quality –––
+  final probe = encodeAt(image.width, image.height, 50);
+  consider(probe);
+  if (probe.fileSize <= targetBytes) {
+    int low = 1;
     int high = 100;
     ImageProcessResult? best;
-
     while (low <= high) {
       final mid = ((low + high) / 2).round();
       final result = encodeAt(image.width, image.height, mid);
-
+      consider(result);
       if (result.fileSize <= targetBytes) {
         best = result;
         low = mid + 1;
@@ -251,41 +262,50 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
         high = mid - 1;
       }
     }
-
-    if (best != null) return best;
+    return best ?? probe;
   }
 
-  // Phase 2: progressively reduce dimensions from largest to smallest
-  // Using finer granularity to stay as close to target as possible
-  for (final scale in [
-    0.95, 0.90, 0.85, 0.80, 0.75, 0.70,
-    0.65, 0.60, 0.55, 0.50, 0.45, 0.40,
-    0.35, 0.30, 0.25, 0.20, 0.15, 0.10,
-  ]) {
-    final newWidth = math.max(1, (image.width * scale).round());
-    final newHeight = math.max(1, (image.height * scale).round());
+  // ––– Step 2: iterative dimension + quality reduction –––
+  double scale = (targetBytes / math.max(probe.fileSize, 1)).clamp(0.15, 1.0);
 
-    int low = 10;
-    int high = 100;
-    ImageProcessResult? best;
+  for (int i = 0; i < 8; i++) {
+    final int quality = math.max(15, 85 - i * 10);
+    final int w = math.max(minDimension, (image.width * scale).round());
+    final int h = math.max(minDimension, (image.height * scale).round());
 
-    while (low <= high) {
-      final mid = ((low + high) / 2).round();
-      final result = encodeAt(newWidth, newHeight, mid);
+    final result = encodeAt(w, h, quality);
+    consider(result);
 
-      if (result.fileSize <= targetBytes) {
-        best = result;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
+    if (result.fileSize <= targetBytes) {
+      int qLow = quality;
+      int qHigh = 100;
+      ImageProcessResult? best;
+      while (qLow <= qHigh) {
+        final mid = ((qLow + qHigh) / 2).round();
+        final r = encodeAt(w, h, mid);
+        consider(r);
+        if (r.fileSize <= targetBytes) {
+          best = r;
+          qLow = mid + 1;
+        } else {
+          qHigh = mid - 1;
+        }
       }
+      return best ?? result;
     }
 
-    if (best != null) return best;
+    scale *= targetBytes / math.max(result.fileSize, 1);
+    scale = scale.clamp(0.15, 1.0);
   }
 
-  // Phase 3: absolute minimum — tiny image at lowest quality
-  return encodeAt(1, 1, 10);
+  // ––– Step 3: return the best that fits, or a final reasonable attempt –––
+  if (bestUnderTarget != null) return bestUnderTarget;
+
+  return encodeAt(
+    math.max(minDimension, image.width ~/ 4),
+    math.max(minDimension, image.height ~/ 4),
+    15,
+  );
 }
 
 ImageProcessResult? _isolateDecodeInfo(Map<String, dynamic> params) {
