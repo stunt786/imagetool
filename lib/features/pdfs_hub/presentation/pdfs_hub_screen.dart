@@ -12,32 +12,32 @@ const _pdfTools = <_PdfToolData>[
     subtitle: 'Reduce file size for easy sharing and storage.',
     route: '/pdfs/compress',
     icon: Icons.compress_rounded,
-    gradient: [Color(0xFFEDEBFF), Color(0xFFF8F7FF)],
-    accent: Color(0xFF5B4DFF),
+    gradient: [Color(0xFF6366F1), Color(0xFF818CF8)], // Indigo Aurora
+    accent: Color(0xFFC7D2FE),
   ),
   _PdfToolData(
     title: 'Merge PDFs',
     subtitle: 'Combine multiple documents into one clean file.',
     route: '/pdfs/merge',
     icon: Icons.merge_type_rounded,
-    gradient: [Color(0xFFE8FAF9), Color(0xFFF8FFFE)],
-    accent: Color(0xFF0F9D9A),
+    gradient: [Color(0xFF14B8A6), Color(0xFF2DD4BF)], // Teal Aurora
+    accent: Color(0xFFCCFBF1),
   ),
   _PdfToolData(
     title: 'Split Pages',
     subtitle: 'Extract the pages you need into separate files.',
     route: '/pdfs/split',
     icon: Icons.call_split_rounded,
-    gradient: [Color(0xFFFFF0E8), Color(0xFFFFFAF6)],
-    accent: Color(0xFFEA580C),
+    gradient: [Color(0xFFF43F5E), Color(0xFFFB7185)], // Rose Aurora
+    accent: Color(0xFFFFE4E6),
   ),
   _PdfToolData(
     title: 'Convert PDF',
     subtitle: 'Transform PDFs into JPG, PNG, or TXT formats.',
     route: '/pdfs/convert',
     icon: Icons.transform_rounded,
-    gradient: [Color(0xFFEAFBF0), Color(0xFFF8FFFB)],
-    accent: Color(0xFF15803D),
+    gradient: [Color(0xFF8B5CF6), Color(0xFFA78BFA)], // Violet Aurora
+    accent: Color(0xFFEDE9FE),
   ),
 ];
 
@@ -72,11 +72,7 @@ class PdfsHubScreen extends ConsumerWidget {
           end: Alignment.bottomCenter,
           colors: isDark
               ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
-              : [
-                  Color(0xFFF8FAFF),
-                  Color(0xFFFCFAFF),
-                  Color(0xFFFFFCF8),
-                ],
+              : [Color(0xFFF8FAFF), Color(0xFFFCFAFF), Color(0xFFFFFCF8)],
         ),
       ),
       child: Stack(
@@ -155,9 +151,8 @@ class PdfsHubScreen extends ConsumerWidget {
                         ),
                         if (pdfHistory.isNotEmpty)
                           TextButton(
-                            onPressed: () => ref
-                                .read(editHistoryProvider.notifier)
-                                .clear(),
+                            onPressed: () =>
+                                ref.read(editHistoryProvider.notifier).clear(),
                             child: const Text('Clear'),
                           ),
                       ],
@@ -217,43 +212,50 @@ class _PdfToolCardState extends State<_PdfToolCard> {
         curve: Curves.easeOutCubic,
         child: Container(
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: data.gradient,
-            ),
+            borderRadius: BorderRadius.circular(28),
+            color: isDark ? Color(0xFF1E293B) : scheme.surface,
             border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.4),
+              color: isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : scheme.outlineVariant.withValues(alpha: 0.4),
             ),
             boxShadow: [
               BoxShadow(
-                color: data.accent.withValues(alpha: isDark ? 0.06 : 0.12),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
+                color: Colors.black.withOpacity(isDark ? 0.4 : 0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
           child: Stack(
             children: [
-              if (isDark)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(24),
-                      color: Colors.black.withValues(alpha: 0.45),
+              // Modern Accent Glow
+              Positioned(
+                top: -20,
+                right: -20,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        data.gradient.first.withOpacity(0.15),
+                        data.gradient.first.withOpacity(0.0),
+                      ],
                     ),
                   ),
                 ),
+              ),
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(child: _PdfToolArtwork(data: data)),
+                    _PdfToolArtwork(data: data),
                     const Spacer(),
                     Text(
                       data.title,
-                      textAlign: TextAlign.center,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.4,
@@ -263,7 +265,6 @@ class _PdfToolCardState extends State<_PdfToolCard> {
                     const SizedBox(height: 8),
                     Text(
                       data.subtitle,
-                      textAlign: TextAlign.center,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(

@@ -1,5 +1,5 @@
-name: imageai
-description: "PixelTools — offline image & PDF toolkit."
+name: pixeltools
+description: "PixelTools: Image & PDF Editor — Professional offline toolkit for privacy-focused processing."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.5
+  sdk: ^3.2.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -60,6 +60,13 @@ dev_dependencies:
     sdk: flutter
   custom_lint: ^0.7.6
   riverpod_lint: ^2.6.5
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icons/icon.png"
+  min_sdk_android: 21
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -78,6 +85,8 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/icons/icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
