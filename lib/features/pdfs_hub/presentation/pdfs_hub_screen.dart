@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-import '../../../shared/widgets/shared_app_bar.dart';
 
 const _pdfTools = <_PdfToolData>[
   _PdfToolData(
@@ -61,131 +60,125 @@ class PdfsHubScreen extends ConsumerWidget {
         : width >= 700
         ? 1.55
         : 0.82;
+    final topPadding = MediaQuery.of(context).padding.top + 72;
 
     final history = ref.watch(editHistoryProvider);
     final pdfHistory = history.where(_isPdfActivity).take(6).toList();
 
-    return Scaffold(
-      appBar: SharedAppBar(
-        drawerKey: GlobalKey<ScaffoldState>(),
-        title: 'PDFs',
-      ),
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
-                : const [
-                    Color(0xFFF8FAFF),
-                    Color(0xFFFCFAFF),
-                    Color(0xFFFFFCF8),
-                  ],
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: isDark
+              ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
+              : [
+                  Color(0xFFF8FAFF),
+                  Color(0xFFFCFAFF),
+                  Color(0xFFFFFCF8),
+                ],
         ),
-        child: Stack(
-          children: [
-            if (!isDark) ...[
-              const Positioned(
-                top: -70,
-                left: -30,
-                child: _AmbientOrb(
-                  size: 220,
-                  colors: [Color(0xFFE0DEFF), Color(0x00E0DEFF)],
-                ),
+      ),
+      child: Stack(
+        children: [
+          if (!isDark) ...[
+            const Positioned(
+              top: -70,
+              left: -30,
+              child: _AmbientOrb(
+                size: 220,
+                colors: [Color(0xFFE0DEFF), Color(0x00E0DEFF)],
               ),
-              const Positioned(
-                top: 260,
-                right: -50,
-                child: _AmbientOrb(
-                  size: 200,
-                  colors: [Color(0xFFD8F6F4), Color(0x00D8F6F4)],
+            ),
+            const Positioned(
+              top: 260,
+              right: -50,
+              child: _AmbientOrb(
+                size: 200,
+                colors: [Color(0xFFD8F6F4), Color(0x00D8F6F4)],
+              ),
+            ),
+          ],
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(padding, topPadding, padding, 0),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate.fixed([
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'PDF Tools',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.7,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${_pdfTools.length} tools',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    GridView.builder(
+                      itemCount: _pdfTools.length,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: cardAspectRatio,
+                      ),
+                      itemBuilder: (context, index) {
+                        return _PdfToolCard(data: _pdfTools[index]);
+                      },
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Historical Activity',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.7,
+                            ),
+                          ),
+                        ),
+                        if (pdfHistory.isNotEmpty)
+                          TextButton(
+                            onPressed: () => ref
+                                .read(editHistoryProvider.notifier)
+                                .clear(),
+                            child: const Text('Clear'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (pdfHistory.isEmpty)
+                      const _EmptyPdfHistoryCard()
+                    else
+                      ...pdfHistory.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: _PdfHistoryRow(item: item),
+                        ),
+                      ),
+                    const SizedBox(height: 120),
+                  ]),
                 ),
               ),
             ],
-            CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: padding),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate.fixed([
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'PDF Tools',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.7,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '${_pdfTools.length} tools',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      GridView.builder(
-                        itemCount: _pdfTools.length,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: cardAspectRatio,
-                        ),
-                        itemBuilder: (context, index) {
-                          return _PdfToolCard(data: _pdfTools[index]);
-                        },
-                      ),
-                      const SizedBox(height: 28),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Historical Activity',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.7,
-                              ),
-                            ),
-                          ),
-                          if (pdfHistory.isNotEmpty)
-                            TextButton(
-                              onPressed: () => ref
-                                  .read(editHistoryProvider.notifier)
-                                  .clear(),
-                              child: const Text('Clear'),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      if (pdfHistory.isEmpty)
-                        const _EmptyPdfHistoryCard()
-                      else
-                        ...pdfHistory.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: _PdfHistoryRow(item: item),
-                          ),
-                        ),
-                      const SizedBox(height: 120),
-                    ]),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

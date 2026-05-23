@@ -65,73 +65,60 @@ const _pdfTools = <_ToolData>[
   ),
 ];
 
-class ImagesHubScreen extends StatelessWidget {
-  const ImagesHubScreen({super.key});
+class AllToolsScreen extends StatelessWidget {
+  const AllToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final topPadding = MediaQuery.of(context).padding.top + 72;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
-              : const [Color(0xFFF7FAFF), Color(0xFFFDF7FF), Color(0xFFFFFCF7)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          if (!isDark) ...[
-            const Positioned(
-              top: -70,
-              right: -30,
-              child: _AmbientOrb(
-                size: 220,
-                colors: [Color(0xFFD9E4FF), Color(0x00D9E4FF)],
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          SliverAppBar(
+            pinned: true,
+            backgroundColor: scheme.surface,
+            surfaceTintColor: Colors.transparent,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child:               IconButton(
+                icon: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
+                onPressed: () => GoRouter.of(context).go('/tools'),
               ),
             ),
-            const Positioned(
-              top: 240,
-              left: -60,
-              child: _AmbientOrb(
-                size: 200,
-                colors: [Color(0xFFEAD6FF), Color(0x00EAD6FF)],
+            title: Text(
+              'All Tools',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
               ),
             ),
-          ],
-          CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate.fixed([
-                    _CategoryHeader(title: 'Image Tools', count: _imageTools.length),
-                    const SizedBox(height: 12),
-                    ...List.generate(_imageTools.length, (i) {
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: i < _imageTools.length - 1 ? 12 : 24),
-                        child: _ToolRow(data: _imageTools[i]),
-                      );
-                    }),
-                    _CategoryHeader(title: 'PDF Tools', count: _pdfTools.length),
-                    const SizedBox(height: 12),
-                    ...List.generate(_pdfTools.length, (i) {
-                      return Padding(
-                        padding: EdgeInsets.only(bottom: i < _pdfTools.length - 1 ? 12 : 0),
-                        child: _ToolRow(data: _pdfTools[i]),
-                      );
-                    }),
-                  ]),
-                ),
-              ),
-            ],
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 120),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate.fixed([
+                _CategoryHeader(title: 'Image Tools', count: _imageTools.length),
+                const SizedBox(height: 12),
+                ...List.generate(_imageTools.length, (i) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: i < _imageTools.length - 1 ? 12 : 24),
+                    child: _ToolRow(data: _imageTools[i]),
+                  );
+                }),
+                _CategoryHeader(title: 'PDF Tools', count: _pdfTools.length),
+                const SizedBox(height: 12),
+                ...List.generate(_pdfTools.length, (i) {
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: i < _pdfTools.length - 1 ? 12 : 0),
+                    child: _ToolRow(data: _pdfTools[i]),
+                  );
+                }),
+              ]),
+            ),
           ),
         ],
       ),
@@ -199,7 +186,7 @@ class _ToolRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         onTap: () {
           InterstitialTracker.instance.trackNavigation();
-          context.push(data.route);
+          GoRouter.of(context).go(data.route);
         },
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -242,27 +229,6 @@ class _ToolRow extends StatelessWidget {
               Icon(Icons.chevron_right_rounded, size: 20, color: scheme.onSurfaceVariant),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AmbientOrb extends StatelessWidget {
-  const _AmbientOrb({required this.size, required this.colors});
-
-  final double size;
-  final List<Color> colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: colors),
         ),
       ),
     );

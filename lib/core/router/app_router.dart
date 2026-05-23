@@ -10,10 +10,11 @@ import '../../features/images_hub/presentation/images_hub_screen.dart';
 import '../../features/image_resize/presentation/image_resize_screen.dart';
 import '../../features/image_to_pdf/presentation/image_to_pdf_screen.dart';
 import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
-import '../../features/pdfs_hub/presentation/pdfs_hub_screen.dart';
+import '../../features/files/presentation/files_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
 import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
+import '../../features/all_tools/presentation/all_tools_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 
@@ -79,7 +80,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: <RouteBase>[
               GoRoute(
                 path: '/pdfs',
-                builder: (context, state) => const PdfsHubScreen(),
+                builder: (context, state) => const FilesScreen(),
                 routes: <RouteBase>[
                   GoRoute(
                     path: 'compress',
@@ -105,12 +106,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
+          StatefulShellBranch(
+            routes: <RouteBase>[
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const SettingsScreen(),
+              ),
+            ],
+          ),
         ],
       ),
+
       GoRoute(
-        path: '/settings',
+        path: '/all-tools',
+        parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (context, state) =>
-            const _MaterialPage(child: SettingsScreen()),
+            const _MaterialPage(child: AllToolsScreen()),
       ),
 
       // Backwards-compatible deep links from the earlier scaffold.

@@ -9,7 +9,7 @@ import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/widgets/shared_app_bar.dart';
 
-const _quickTools = <_QuickToolData>[
+const _featuredTools = <_QuickToolData>[
   _QuickToolData(
     title: 'Resize Image',
     subtitle: 'Resize by pixels, aspect ratio, or ready-made presets.',
@@ -36,15 +36,6 @@ const _quickTools = <_QuickToolData>[
     gradient: [Color(0xFFEAFBF0), Color(0xFFF8FFFB)],
     accent: Color(0xFF15803D),
     glow: Color(0xFFD8F5E1),
-  ),
-  _QuickToolData(
-    title: 'Image to PDF',
-    subtitle: 'Turn scans and photos into neat, shareable PDF documents.',
-    icon: Icons.picture_as_pdf_rounded,
-    route: '/images/to-pdf',
-    gradient: [Color(0xFFFFF1E7), Color(0xFFFFFAF5)],
-    accent: Color(0xFFEA580C),
-    glow: Color(0xFFFFE3CD),
   ),
 ];
 
@@ -204,6 +195,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         : width >= 700
         ? 24.0
         : 18.0;
+    final topPadding = MediaQuery.of(context).padding.top + 72;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -228,7 +220,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onContactTap: _showContact,
         onShareTap: _shareApp,
       ),
-      appBar: SharedAppBar(drawerKey: _scaffoldKey),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -271,17 +262,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: contentPadding),
+                  padding: EdgeInsets.fromLTRB(
+                    contentPadding,
+                    topPadding,
+                    contentPadding,
+                    0,
+                  ),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate.fixed([
+                      Text(
+                        'Explore Tools',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.7,
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       _SectionHeader(
-                        title: 'Quick Tools',
+                        title: 'Featured',
                         actionLabel: 'View All',
-                        onActionTap: () => context.push('/images'),
+                        onActionTap: () => context.push('/all-tools'),
                       ),
                       const SizedBox(height: 14),
-                      _QuickToolsGrid(isWide: isWide),
+                      _FeaturedToolsGrid(isWide: isWide),
                       const SizedBox(height: 18),
                       _PdfShortcutRail(shortcuts: _pdfShortcuts),
                       const SizedBox(height: 18),
@@ -414,43 +417,31 @@ class _PremiumBanner extends StatelessWidget {
   }
 }
 
-
-
-class _QuickToolsGrid extends StatelessWidget {
-  const _QuickToolsGrid({required this.isWide});
+class _FeaturedToolsGrid extends StatelessWidget {
+  const _FeaturedToolsGrid({required this.isWide});
 
   final bool isWide;
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      itemCount: _quickTools.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: isWide ? 2.0 : 0.8,
-      ),
-      itemBuilder: (context, index) {
-        final tool = _quickTools[index];
-        return _QuickToolCard(data: tool);
-      },
+    return Wrap(
+      spacing: 20,
+      runSpacing: 12,
+      children: _featuredTools.map((tool) => _FeatureIcon(data: tool)).toList(),
     );
   }
 }
 
-class _QuickToolCard extends StatefulWidget {
-  const _QuickToolCard({required this.data});
+class _FeatureIcon extends StatefulWidget {
+  const _FeatureIcon({required this.data});
 
   final _QuickToolData data;
 
   @override
-  State<_QuickToolCard> createState() => _QuickToolCardState();
+  State<_FeatureIcon> createState() => _FeatureIconState();
 }
 
-class _QuickToolCardState extends State<_QuickToolCard> {
+class _FeatureIconState extends State<_FeatureIcon> {
   bool _pressed = false;
 
   @override
@@ -458,8 +449,6 @@ class _QuickToolCardState extends State<_QuickToolCard> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final data = widget.data;
-    final isWide = MediaQuery.sizeOf(context).width >= 900;
-    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -470,129 +459,37 @@ class _QuickToolCardState extends State<_QuickToolCard> {
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.985 : 1,
-        duration: const Duration(milliseconds: 140),
+        scale: _pressed ? 0.88 : 1,
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOutCubic,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: data.gradient,
-            ),
-            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
-            boxShadow: [
-              BoxShadow(
-                color: data.glow.withValues(alpha: isDark ? 0.15 : 0.65),
-                blurRadius: 36,
-                offset: const Offset(0, 16),
-              ),
-            ],
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: -18,
-                top: -18,
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.24),
-                  ),
-                ),
-              ),
-              if (isDark)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
-                      color: Colors.black.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Center(child: _QuickToolArtwork(data: data)),
-                    const Spacer(),
-                    Text(
-                      data.title,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      data.subtitle,
-                      maxLines: isWide ? 2 : 3,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickToolArtwork extends StatelessWidget {
-  const _QuickToolArtwork({required this.data});
-
-  final _QuickToolData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width >= 900;
-    return Container(
-      width: 84,
-      height: 84,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
-        boxShadow: [
-          BoxShadow(
-            color: data.accent.withValues(alpha: 0.12),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Stack(
-          alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: isWide ? 52 : 46,
-              height: isWide ? 52 : 46,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
+                shape: BoxShape.circle,
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
                     data.accent,
-                    Color.lerp(data.accent, Colors.white, 0.4)!,
+                    Color.lerp(data.accent, Colors.white, 0.3)!,
                   ],
                 ),
               ),
+              child: Icon(data.icon, size: 22, color: Colors.white),
             ),
-            Icon(data.icon, size: isWide ? 30 : 26, color: Colors.white),
+            const SizedBox(height: 6),
+            Text(
+              data.title,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+              ),
+            ),
           ],
         ),
       ),
@@ -892,9 +789,9 @@ class _SectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.7,
+              letterSpacing: -0.5,
             ),
           ),
         ),

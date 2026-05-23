@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/services/permission_service.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -15,117 +14,143 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final topPadding = MediaQuery.of(context).padding.top + 72;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
-      body: AdBannerWrapper(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-          _buildSection(
-            context,
-            title: 'Storage',
-            children: [
-              FutureBuilder<Directory>(
-                future: ref.read(appSettingsProvider.notifier).getSaveDirectory(),
-                builder: (context, snapshot) {
-                  final actualPath = snapshot.data?.path ?? 'Loading...';
-                  return ListTile(
-                    leading: const Icon(Icons.folder_outlined),
-                    title: const Text('Default Save Location'),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_getLocationLabel(settings.saveLocation)),
-                        if (snapshot.hasData)
-                          Text(
-                            actualPath,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontFamily: 'monospace',
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            scheme.surface,
+            scheme.surfaceContainer,
+            scheme.surface,
+          ],
+        ),
+      ),
+      child: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(16, topPadding, 16, 0),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate.fixed([
+                Text(
+                  'Settings',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.7,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _buildSection(
+                  context,
+                  title: 'Storage',
+                  children: [
+                    FutureBuilder<Directory>(
+                      future: ref.read(appSettingsProvider.notifier).getSaveDirectory(),
+                      builder: (context, snapshot) {
+                        final actualPath = snapshot.data?.path ?? 'Loading...';
+                        return ListTile(
+                          leading: const Icon(Icons.folder_outlined),
+                          title: const Text('Default Save Location'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_getLocationLabel(settings.saveLocation)),
+                              if (snapshot.hasData)
+                                Text(
+                                  actualPath,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _showLocationPicker(context, ref),
+                        );
+                      },
                     ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => _showLocationPicker(context, ref),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildSection(
-            context,
-            title: 'Permissions',
-            children: [
-              FutureBuilder<bool>(
-                future: const AppPermissionService().hasStoragePermission(),
-                builder: (context, snapshot) {
-                  final granted = snapshot.data ?? false;
-                  return ListTile(
-                    leading: Icon(
-                      granted ? Icons.check_circle : Icons.warning_amber_outlined,
-                      color: granted ? theme.colorScheme.primary : theme.colorScheme.error,
-                    ),
-                    title: const Text('Photos & Storage'),
-                    subtitle: Text(granted ? 'Granted' : 'Not granted'),
-                    trailing: granted
-                        ? null
-                        : FilledButton.tonal(
-                            onPressed: () => const AppPermissionService().requestAllPermissions(),
-                            child: const Text('Grant'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  context,
+                  title: 'Permissions',
+                  children: [
+                    FutureBuilder<bool>(
+                      future: const AppPermissionService().hasStoragePermission(),
+                      builder: (context, snapshot) {
+                        final granted = snapshot.data ?? false;
+                        return ListTile(
+                          leading: Icon(
+                            granted ? Icons.check_circle : Icons.warning_amber_outlined,
+                            color: granted ? scheme.primary : scheme.error,
                           ),
-                    onTap: granted
-                        ? null
-                        : () => const AppPermissionService().requestAllPermissions(),
-                  );
-                },
-              ),
-              FutureBuilder<bool>(
-                future: const AppPermissionService().hasCameraPermission(),
-                builder: (context, snapshot) {
-                  final granted = snapshot.data ?? false;
-                  return ListTile(
-                    leading: Icon(
-                      granted ? Icons.check_circle : Icons.warning_amber_outlined,
-                      color: granted ? theme.colorScheme.primary : theme.colorScheme.error,
+                          title: const Text('Photos & Storage'),
+                          subtitle: Text(granted ? 'Granted' : 'Not granted'),
+                          trailing: granted
+                              ? null
+                              : FilledButton.tonal(
+                                  onPressed: () => const AppPermissionService().requestAllPermissions(),
+                                  child: const Text('Grant'),
+                                ),
+                          onTap: granted
+                              ? null
+                              : () => const AppPermissionService().requestAllPermissions(),
+                        );
+                      },
                     ),
-                    title: const Text('Camera'),
-                    subtitle: Text(granted ? 'Granted' : 'Not granted'),
-                    trailing: granted
-                        ? null
-                        : FilledButton.tonal(
-                            onPressed: () => const AppPermissionService().requestAllPermissions(),
-                            child: const Text('Grant'),
+                    FutureBuilder<bool>(
+                      future: const AppPermissionService().hasCameraPermission(),
+                      builder: (context, snapshot) {
+                        final granted = snapshot.data ?? false;
+                        return ListTile(
+                          leading: Icon(
+                            granted ? Icons.check_circle : Icons.warning_amber_outlined,
+                            color: granted ? scheme.primary : scheme.error,
                           ),
-                    onTap: granted
-                        ? null
-                        : () => const AppPermissionService().requestAllPermissions(),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildSection(
-            context,
-            title: 'About',
-            children: [
-              ListTile(
-                leading: const Icon(Icons.privacy_tip_outlined),
-                title: const Text('Privacy'),
-                subtitle: const Text('All processing stays on-device.'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: const Text('About'),
-                subtitle: const Text(AppStrings.appName),
-              ),
-            ],
+                          title: const Text('Camera'),
+                          subtitle: Text(granted ? 'Granted' : 'Not granted'),
+                          trailing: granted
+                              ? null
+                              : FilledButton.tonal(
+                                  onPressed: () => const AppPermissionService().requestAllPermissions(),
+                                  child: const Text('Grant'),
+                                ),
+                          onTap: granted
+                              ? null
+                              : () => const AppPermissionService().requestAllPermissions(),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildSection(
+                  context,
+                  title: 'About',
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.privacy_tip_outlined),
+                      title: const Text('Privacy'),
+                      subtitle: const Text('All processing stays on-device.'),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.info_outline),
+                      title: const Text('About'),
+                      subtitle: const Text(AppStrings.appName),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 120),
+              ]),
+            ),
           ),
         ],
-      ),
       ),
     );
   }

@@ -57,26 +57,6 @@ abstract final class AppTheme {
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
-        indicatorColor: scheme.primaryContainer,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-          );
-        }),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return IconThemeData(
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-            size: 22,
-          );
-        }),
-      ),
     );
   }
 
@@ -135,26 +115,6 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(28),
           side: BorderSide(color: scheme.outlineVariant),
         ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
-        indicatorColor: scheme.primaryContainer,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-          );
-        }),
-        iconTheme: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return IconThemeData(
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-            size: 22,
-          );
-        }),
       ),
     );
   }
