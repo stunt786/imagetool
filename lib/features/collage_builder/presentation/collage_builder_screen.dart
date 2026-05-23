@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
@@ -16,6 +17,27 @@ class CollageBuilderScreen extends ConsumerStatefulWidget {
 }
 
 class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
+  bool _hasAutoTriggered = false;
+  bool _isOneClickOpening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isOneClickOpening && !_hasAutoTriggered) {
+        _hasAutoTriggered = true;
+        setState(() => _isOneClickOpening = false);
+        final state = ref.read(collageProvider);
+        if (state.imageCount == 0) {
+          ref.read(collageProvider.notifier).pickImages();
+          InterstitialTracker.instance.trackAction();
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(collageProvider);
@@ -34,7 +56,9 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
       ),
       body: AdBannerWrapper(
         child: state.imageCount == 0
-            ? _buildSelectPhotosScreen(context)
+            ? _isOneClickOpening
+                ? const Center(child: CircularProgressIndicator())
+                : _buildSelectPhotosScreen(context)
             : _buildCollageEditor(context),
       ),
     );
@@ -128,4 +152,5 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
       ),
     );
   }
+
 }

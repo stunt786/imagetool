@@ -204,6 +204,90 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
   );
 }
 
+ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
+  final Uint8List bytes = params['bytes'] as Uint8List;
+  final int targetBytes = params['targetBytes'] as int;
+  final OutputImageFormat format = params['format'] as OutputImageFormat;
+
+  final image = img.decodeImage(bytes);
+  if (image == null) return null;
+
+  ImageProcessResult encodeAt(int boundWidth, int boundHeight, int quality) {
+    final scale = math.min(
+      boundWidth / image.width,
+      boundHeight / image.height,
+    );
+    final w = math.max(1, (image.width * scale).round()).clamp(1, 12000);
+    final h = math.max(1, (image.height * scale).round()).clamp(1, 12000);
+    final processed = img.copyResize(
+      image,
+      width: w,
+      height: h,
+      interpolation: img.Interpolation.average,
+    );
+    final encoded = _encodeImage(processed, format: format, quality: quality);
+    return ImageProcessResult(
+      bytes: Uint8List.fromList(encoded),
+      width: processed.width,
+      height: processed.height,
+      fileSize: encoded.length,
+    );
+  }
+
+  // Phase 1: quality-only binary search — find highest quality under target
+  {
+    int low = 10;
+    int high = 100;
+    ImageProcessResult? best;
+
+    while (low <= high) {
+      final mid = ((low + high) / 2).round();
+      final result = encodeAt(image.width, image.height, mid);
+
+      if (result.fileSize <= targetBytes) {
+        best = result;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    if (best != null) return best;
+  }
+
+  // Phase 2: progressively reduce dimensions from largest to smallest
+  // Using finer granularity to stay as close to target as possible
+  for (final scale in [
+    0.95, 0.90, 0.85, 0.80, 0.75, 0.70,
+    0.65, 0.60, 0.55, 0.50, 0.45, 0.40,
+    0.35, 0.30, 0.25, 0.20, 0.15, 0.10,
+  ]) {
+    final newWidth = math.max(1, (image.width * scale).round());
+    final newHeight = math.max(1, (image.height * scale).round());
+
+    int low = 10;
+    int high = 100;
+    ImageProcessResult? best;
+
+    while (low <= high) {
+      final mid = ((low + high) / 2).round();
+      final result = encodeAt(newWidth, newHeight, mid);
+
+      if (result.fileSize <= targetBytes) {
+        best = result;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    if (best != null) return best;
+  }
+
+  // Phase 3: absolute minimum — tiny image at lowest quality
+  return encodeAt(1, 1, 10);
+}
+
 ImageProcessResult? _isolateDecodeInfo(Map<String, dynamic> params) {
   final Uint8List bytes = params['bytes'] as Uint8List;
 
@@ -312,58 +396,13 @@ class ImageProcessorService {
     required OutputImageFormat format,
     void Function(double progress)? onProgress,
   }) async {
-    if (format == OutputImageFormat.png) {
-      return resize(
-        bytes: bytes,
-        width: 0,
-        height: 0,
-        format: format,
-        quality: 100,
-      );
-    }
-
-    int low = 10;
-    int high = 100;
-    ImageProcessResult? bestResult;
-    int iteration = 0;
-    const maxIterations = 20;
-
-    while (low <= high && iteration < maxIterations) {
-      iteration++;
-      final mid = ((low + high) / 2).round();
-
-      final result = await resize(
-        bytes: bytes,
-        width: 0,
-        height: 0,
-        format: format,
-        quality: mid,
-      );
-
-      onProgress?.call(iteration / maxIterations);
-
-      if (result == null) break;
-
-      if (result.fileSize <= targetBytes) {
-        bestResult = result;
-        high = mid - 1;
-      } else {
-        low = mid + 1;
-      }
-    }
-
-    if (bestResult == null) {
-      final result = await resize(
-        bytes: bytes,
-        width: 0,
-        height: 0,
-        format: format,
-        quality: 10,
-      );
-      return result;
-    }
-
-    return bestResult;
+    return Isolate.run<ImageProcessResult?>(
+      () => _isolateCompressToTargetSize(<String, dynamic>{
+        'bytes': bytes,
+        'targetBytes': targetBytes,
+        'format': format,
+      }),
+    );
   }
 
   static Future<ImageProcessResult?> resizeToPreset({

@@ -37,7 +37,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
   _EditorTab _activeTab = _EditorTab.resize;
   bool _lockAspectRatio = true;
-  double _aspectRatio = 1;
+  int _aspectWidth = 1;
+  int _aspectHeight = 1;
   double _rotationAngle = 0;
   bool _flipHorizontal = false;
   bool _flipVertical = false;
@@ -101,7 +102,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
   }
 
   void _syncInputsFromImage(int width, int height) {
-    _aspectRatio = height == 0 ? 1 : width / height;
+    _aspectWidth = width;
+    _aspectHeight = height;
     _widthController.text = width.toString();
     _heightController.text = height.toString();
     _cropXController.text = '0';
@@ -119,7 +121,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (!_lockAspectRatio) return;
     final width = int.tryParse(value);
     if (width == null || width <= 0) return;
-    final height = (width / _aspectRatio).round();
+    if (_aspectWidth == 0 || _aspectHeight == 0) return;
+    final height = (width * _aspectHeight + _aspectWidth ~/ 2) ~/ _aspectWidth;
     _heightController.text = height.toString();
   }
 
@@ -127,7 +130,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (!_lockAspectRatio) return;
     final height = int.tryParse(value);
     if (height == null || height <= 0) return;
-    final width = (height * _aspectRatio).round();
+    if (_aspectWidth == 0 || _aspectHeight == 0) return;
+    final width = (height * _aspectWidth + _aspectHeight ~/ 2) ~/ _aspectHeight;
     _widthController.text = width.toString();
   }
 

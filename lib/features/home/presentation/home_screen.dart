@@ -290,7 +290,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               const SizedBox(height: 14),
                               _FeaturedToolsGrid(isWide: isWide),
-                              const SizedBox(height: 18),
                               const PremiumBanner(),
                               const SizedBox(height: 28),
                               _SectionHeader(

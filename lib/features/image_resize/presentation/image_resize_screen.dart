@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
@@ -19,7 +19,7 @@ class ImageResizeScreen extends ConsumerStatefulWidget {
   ConsumerState<ImageResizeScreen> createState() => _ImageResizeScreenState();
 }
 
-enum _ResizeMode { dimensions, percentage, preset, bestFit }
+enum _ResizeMode { dimensions, percentage, preset, bestFit, smartCompress }
 
 enum _EditorPanel { resize, crop, rotate }
 
@@ -80,7 +80,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   OutputImageFormat _outputFormat = OutputImageFormat.jpg;
   _QualityOption _quality = _qualityOptions[1];
   bool _lockAspectRatio = true;
-  double _aspectRatio = 1;
+  int _aspectWidth = 1;
+  int _aspectHeight = 1;
   double _percentage = 100;
   int _targetSizeKB = SocialPresets.targetFileSizeKB[2];
   int? _estimatedBytes;
@@ -98,6 +99,25 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   double _rotationPreviewDegrees = 0;
 
   final ImagePicker _imagePicker = ImagePicker();
+  bool _hasAutoTriggered = false;
+  bool _isOneClickOpening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isOneClickOpening && !_hasAutoTriggered) {
+        _hasAutoTriggered = true;
+        setState(() => _isOneClickOpening = false);
+        final state = ref.read(imageEditProvider);
+        if (!state.hasImage) {
+          _pickImage();
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -137,6 +157,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       if (!state.hasImage) return;
 
       _syncInputsFromImage(state.width, state.height);
+      setState(() => _mode = _ResizeMode.dimensions);
       await _refreshEstimate();
       InterstitialTracker.instance.trackAction();
     } finally {
@@ -148,8 +169,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   void _syncInputsFromImage(int width, int height) {
     _isSyncingFields = true;
-    _aspectRatio = height == 0 ? 1 : width / height;
-    _mode = _ResizeMode.dimensions;
+    _aspectWidth = width;
+    _aspectHeight = height;
     _activePanel = _EditorPanel.resize;
     _cropPreset = _CropAspectPreset.free;
     _presetCategory = _PresetCategory.profile;
@@ -424,6 +445,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
+    if (_mode == _ResizeMode.smartCompress) {
+      await _compressImage();
+      return;
+    }
+
     final target = _resolveTargetSize(state);
     if (target == null) {
       _showSnack('Enter a valid target size.');
@@ -597,12 +623,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         .read(imageEditProvider.notifier)
         .replaceWithResult(result: result, fileName: fileName);
     _syncInputsFromImage(result.width, result.height);
-    if (result.fileSize > targetBytes) {
-      _showSnack(
-        'Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}',
-      );
-    } else {
-      _showSnack('Compressed to ${_formatFileSize(result.fileSize)}.');
+
+    try {
+      await saveImageBytes(result.bytes, fileName: fileName);
+      if (!mounted) return;
+      if (result.fileSize > targetBytes) {
+        _showSnack('Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}');
+      } else {
+        _showSnack('Compressed to ${_formatFileSize(result.fileSize)}.');
+      }
+    } catch (error) {
+      _showSnack('Compression applied, but saving failed: $error');
     }
     InterstitialTracker.instance.trackAction();
   }
@@ -844,16 +875,21 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         final width = math.max(1, (state.width * scale).round());
         final height = math.max(1, (state.height * scale).round());
         return _ResizeTarget(width, height);
+      case _ResizeMode.smartCompress:
+        return null;
     }
   }
 
   int _scaledHeightForWidth(int width) {
-    if (_aspectRatio == 0) return width;
-    return math.max(1, (width / _aspectRatio).round());
+    if (_aspectWidth == 0 || _aspectHeight == 0) return width;
+    // Use integer arithmetic to avoid floating-point drift
+    return math.max(1, (width * _aspectHeight + _aspectWidth ~/ 2) ~/ _aspectWidth);
   }
 
   int _scaledWidthForHeight(int height) {
-    return math.max(1, (_aspectRatio * height).round());
+    if (_aspectWidth == 0 || _aspectHeight == 0) return height;
+    // Use integer arithmetic to avoid floating-point drift
+    return math.max(1, (height * _aspectWidth + _aspectHeight ~/ 2) ~/ _aspectHeight);
   }
 
   void _rememberRecentSize(Size size) {
@@ -918,24 +954,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return x == 0 ? 1 : x;
   }
 
-  void _showHelpDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resize image'),
-        content: const Text(
-          'Use the crop and resize buttons beside the image to switch the editor below. Crop first if needed, then resize and save the final file.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showSnack(String message) {
     ScaffoldMessenger.of(
       context,
@@ -973,7 +991,19 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     };
   }
 
+  Future<void> _applyAndSave() async {
+    if (_activePanel == _EditorPanel.resize) {
+      await _resizeImage();
+    } else {
+      await _applyActiveTool();
+      if (mounted) await _saveCurrentImage();
+    }
+  }
+
   String get _applyButtonLabel {
+    if (_activePanel == _EditorPanel.resize && _mode == _ResizeMode.smartCompress) {
+      return 'Apply Compression';
+    }
     return switch (_activePanel) {
       _EditorPanel.resize => 'Apply Resize',
       _EditorPanel.crop => 'Apply Crop',
@@ -991,73 +1021,106 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return Scaffold(
       backgroundColor: theme.brightness == Brightness.dark ? scheme.surface : const Color(0xFFF9F7FF),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        centerTitle: true,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: _CircleActionButton(
-            icon: Icons.arrow_back_rounded,
-            onTap: () => context.pop(),
-          ),
-        ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Resize Image',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.4,
-                color: scheme.onSurface,
-              ),
-            ),
-            Text(
-              'Resize by pixels, percentage or custom dimensions',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF7B7F95),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: _CircleActionButton(
-              icon: Icons.question_mark_rounded,
-              onTap: _showHelpDialog,
-            ),
-          ),
-        ],
+        title: const Text('Resize Image'),
+        actions: const [],
       ),
       body: SafeArea(
         top: false,
         child: AdBannerWrapper(
           child: state.isLoading
               ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (state.errorMessage != null) ...[
-                        _ErrorBanner(message: state.errorMessage!),
-                        const SizedBox(height: 12),
-                      ],
-                      _buildImageCard(state),
-                      const SizedBox(height: 14),
-                      if (state.hasImage) _buildEditorCard(state, target),
-                    ],
-                  ),
-                ),
+              : state.hasImage
+                  ? _buildEditorView(state, target)
+                  : _isOneClickOpening
+                      ? const Center(child: CircularProgressIndicator())
+                      : _buildSelectPhotosScreen(),
         ),
       ),
-      bottomNavigationBar: _buildBottomActionBar(state),
+      bottomNavigationBar: state.hasImage ? _buildBottomActionBar(state) : null,
+    );
+  }
+
+  Widget _buildSelectPhotosScreen() {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.photo_library,
+                size: 60,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Resize Image',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Pick an image from your gallery to resize, crop, rotate, or compress it',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: _pickImage,
+              icon: const Icon(Icons.add_photo_alternate),
+              label: const Text('Choose Image'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Supports JPG, PNG, WebP, GIF, BMP, HEIC & more',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditorView(ImageEditState state, _ResizeTarget? target) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (state.errorMessage != null) ...[
+            _ErrorBanner(message: state.errorMessage!),
+            const SizedBox(height: 12),
+          ],
+          _buildImageCard(state),
+          const SizedBox(height: 14),
+          _buildEditorCard(state, target),
+        ],
+      ),
     );
   }
 
   Widget _buildImageCard(ImageEditState state) {
     final scheme = Theme.of(context).colorScheme;
-    final hasImage = state.hasImage;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1072,100 +1135,61 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ),
         ],
       ),
-      child: hasImage
-          ? Column(
-              children: [
-                _InteractiveImagePreview(
-                  imageBytes: state.currentBytes!,
-                  cropX: int.tryParse(_cropXController.text) ?? 0,
-                  cropY: int.tryParse(_cropYController.text) ?? 0,
-                  cropWidth:
-                      int.tryParse(_cropWidthController.text) ?? state.width,
-                  cropHeight:
-                      int.tryParse(_cropHeightController.text) ?? state.height,
-                  imageWidth: state.width,
-                  imageHeight: state.height,
-                  activePanel: _activePanel,
-                  cropAspectRatio: _cropPreset.ratio,
-                  rotationDegrees: _rotationPreviewDegrees,
-                  onCropUpdate: _updateCropFromDrag,
-                ),
-                const SizedBox(height: 16),
-                _buildPrimaryToolStrip(),
-                const SizedBox(height: 12),
-                _buildImageMeta(state),
-              ],
-            )
-          : Column(
-              children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                          Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.4),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.photo_library_rounded,
-                      size: 60,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                const SizedBox(height: 24),
-                Text(
-                  'Resize Image',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Pick an image from your gallery to resize, crop, rotate, or compress it',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _pickImage,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    icon: const Icon(Icons.add_photo_alternate_rounded),
-                    label: const Text('Choose Image'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Supports JPG, PNG, WebP, GIF, BMP, HEIC & more',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              _InteractiveImagePreview(
+                imageBytes: state.currentBytes!,
+                cropX: int.tryParse(_cropXController.text) ?? 0,
+                cropY: int.tryParse(_cropYController.text) ?? 0,
+                cropWidth:
+                    int.tryParse(_cropWidthController.text) ?? state.width,
+                cropHeight:
+                    int.tryParse(_cropHeightController.text) ?? state.height,
+                imageWidth: state.width,
+                imageHeight: state.height,
+                activePanel: _activePanel,
+                cropAspectRatio: _cropPreset.ratio,
+                rotationDegrees: _rotationPreviewDegrees,
+                onCropUpdate: _updateCropFromDrag,
+              ),
+              const SizedBox(height: 16),
+              _buildPrimaryToolStrip(),
+              const SizedBox(height: 12),
+              _buildImageMeta(state),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.add),
+                onPressed: _pickImage,
+                tooltip: 'Add image',
+              ),
             ),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.refresh),
+                onPressed: () => ref.read(imageEditProvider.notifier).clear(),
+                tooltip: 'Reset',
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1195,6 +1219,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ),
         ),
         const SizedBox(height: 14),
+        Center(
+          child: _ModeCard(
+            title: 'Smart Compression',
+            subtitle: 'Compress to target file size',
+            icon: Icons.compress_rounded,
+            selected: _mode == _ResizeMode.smartCompress,
+            onTap: () => _setMode(_ResizeMode.smartCompress),
+          ),
+        ),
+        const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth > 560;
@@ -1411,103 +1445,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         ),
         const SizedBox(height: 12),
         ..._buildSocialPresetTiles(),
-        const SizedBox(height: 24),
-        Text(
-          'Smart Compression',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Target a final file size and compress without leaving the editor.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Target size',
-                          style: TextStyle(
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _targetSizeKB >= 1000
-                            ? '${(_targetSizeKB / 1000).toStringAsFixed(1)} MB'
-                            : '$_targetSizeKB KB',
-                        style: TextStyle(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Slider(
-                    min: 0,
-                    max: (SocialPresets.targetFileSizeKB.length - 1).toDouble(),
-                    divisions: SocialPresets.targetFileSizeKB.length - 1,
-                    value: SocialPresets.targetFileSizeKB
-                        .indexOf(_targetSizeKB)
-                        .toDouble(),
-                    activeColor: scheme.primary,
-                    onChanged: (value) {
-                      setState(() {
-                        _targetSizeKB =
-                            SocialPresets.targetFileSizeKB[value.round()];
-                      });
-                    },
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: SocialPresets.targetFileSizeKB
-                        .map(
-                          (size) => Text(
-                            size >= 1000 ? '${size ~/ 1000}MB' : '${size}KB',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _compressImage,
-                  icon: const Icon(Icons.compress_rounded),
-                  label: const Text('Apply Compression'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: scheme.outline),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -1844,10 +1781,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   Widget _buildBottomActionBar(ImageEditState state) {
-    if (!state.hasImage) {
-      return const SizedBox.shrink();
-    }
-
     final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       top: false,
@@ -1864,133 +1797,28 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
           ],
         ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final vertical = constraints.maxWidth < 420;
-            final buttons = <Widget>[
-              if (vertical)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Add'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      side: BorderSide(color: scheme.outline),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Add'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      side: BorderSide(color: scheme.outline),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                  ),
-                ),
-              if (vertical) const SizedBox(height: 10) else const SizedBox(width: 10),
-              if (vertical)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _applyActiveTool,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.primary,
-                      foregroundColor: scheme.onPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: Icon(switch (_activePanel) {
-                      _EditorPanel.resize => Icons.auto_awesome_rounded,
-                      _EditorPanel.crop => Icons.crop_rounded,
-                      _EditorPanel.rotate => Icons.rotate_right_rounded,
-                    }),
-                    label: Text(
-                      _applyButtonLabel,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  flex: 2,
-                  child: FilledButton.icon(
-                    onPressed: _applyActiveTool,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.primary,
-                      foregroundColor: scheme.onPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: Icon(switch (_activePanel) {
-                      _EditorPanel.resize => Icons.auto_awesome_rounded,
-                      _EditorPanel.crop => Icons.crop_rounded,
-                      _EditorPanel.rotate => Icons.rotate_right_rounded,
-                    }),
-                    label: Text(
-                      _applyButtonLabel,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ),
-              if (vertical) const SizedBox(height: 10) else const SizedBox(width: 10),
-              if (vertical)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _saveCurrentImage,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.secondary,
-                      foregroundColor: scheme.onSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: const Icon(Icons.save_alt_rounded),
-                    label: const Text('Save'),
-                  ),
-                )
-              else
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _saveCurrentImage,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.secondary,
-                      foregroundColor: scheme.onSecondary,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: const Icon(Icons.save_alt_rounded),
-                    label: const Text('Save'),
-                  ),
-                ),
-            ];
-
-            return vertical
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: buttons,
-                  )
-                : Row(children: buttons);
-          },
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _applyAndSave,
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            icon: Icon(switch (_activePanel) {
+              _EditorPanel.resize => Icons.auto_awesome_rounded,
+              _EditorPanel.crop => Icons.crop_rounded,
+              _EditorPanel.rotate => Icons.rotate_right_rounded,
+            }),
+            label: Text(
+              _applyButtonLabel,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
         ),
       ),
     );
@@ -2044,6 +1872,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                           _ResizeMode.percentage => 'Resize Percentage',
                           _ResizeMode.preset => 'Preset Sizes',
                           _ResizeMode.bestFit => 'Best Fit Bounds',
+                          _ResizeMode.smartCompress => 'Smart Compression',
                         },
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
@@ -2088,6 +1917,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                             _ResizeMode.percentage => 'Resize Percentage',
                             _ResizeMode.preset => 'Preset Sizes',
                             _ResizeMode.bestFit => 'Best Fit Bounds',
+                            _ResizeMode.smartCompress => 'Smart Compression',
                           },
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
@@ -2130,6 +1960,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           _ResizeMode.percentage => _buildPercentageInputs(state),
           _ResizeMode.preset => _buildPresetGrid(),
           _ResizeMode.bestFit => _buildBestFitInputs(state),
+          _ResizeMode.smartCompress => _buildSmartCompressInputs(state),
         },
         const SizedBox(height: 10),
         Text(
@@ -2386,6 +2217,86 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
   }
 
+  Widget _buildSmartCompressInputs(ImageEditState state) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Target a final file size and compress.',
+          style: TextStyle(color: scheme.onSurfaceVariant, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Target size',
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _targetSizeKB >= 1000
+                        ? '${(_targetSizeKB / 1000).toStringAsFixed(1)} MB'
+                        : '$_targetSizeKB KB',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              Slider(
+                min: 0,
+                max: (SocialPresets.targetFileSizeKB.length - 1).toDouble(),
+                divisions: SocialPresets.targetFileSizeKB.length - 1,
+                value: SocialPresets.targetFileSizeKB
+                    .indexOf(_targetSizeKB)
+                    .toDouble(),
+                activeColor: scheme.primary,
+                onChanged: (value) {
+                  setState(() {
+                    _targetSizeKB =
+                        SocialPresets.targetFileSizeKB[value.round()];
+                  });
+                },
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: SocialPresets.targetFileSizeKB
+                    .map(
+                      (size) => Text(
+                        size >= 1000 ? '${size ~/ 1000}MB' : '${size}KB',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   BoxDecoration _panelDecoration() {
     final scheme = Theme.of(context).colorScheme;
     return BoxDecoration(
@@ -2447,32 +2358,6 @@ class _QualityOption {
   final int value;
 }
 
-class _CircleActionButton extends StatelessWidget {
-  const _CircleActionButton({required this.icon, required this.onTap});
-
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
-      shape: const CircleBorder(),
-      elevation: 0,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 42,
-          height: 42,
-          child: Icon(icon, color: scheme.onSurfaceVariant),
-        ),
-      ),
-    );
-  }
-}
-
 class _ModeCard extends StatelessWidget {
   const _ModeCard({
     required this.title,
@@ -2531,7 +2416,7 @@ class _ModeCard extends StatelessWidget {
                         ? scheme.primary
                         : scheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 7),
                   Text(
                     title,
                     textAlign: TextAlign.center,
@@ -2540,7 +2425,7 @@ class _ModeCard extends StatelessWidget {
                       color: scheme.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle,
                     textAlign: TextAlign.center,
@@ -3190,8 +3075,9 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth.toDouble();
         final normalizedRotation = widget.rotationDegrees % 360;
+        final maxPreviewHeight = MediaQuery.of(context).size.height * 0.3;
         final basePreviewHeight = math
-            .min(maxWidth * (widget.imageHeight / widget.imageWidth), 340)
+            .min(maxWidth * (widget.imageHeight / widget.imageWidth), maxPreviewHeight)
             .toDouble();
         final baseScale = math.min(
           maxWidth / math.max(widget.imageWidth, 1),
@@ -3208,7 +3094,7 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
             ? baseScale
             : math.min(
                 maxWidth / math.max(rotatedWidth, 1),
-                340 / math.max(rotatedHeight, 1),
+                maxPreviewHeight / math.max(rotatedHeight, 1),
               );
         final previewWidth = normalizedRotation == 0
             ? maxWidth
@@ -3225,8 +3111,8 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
             width: previewWidth,
             height: previewHeight,
             child: InteractiveViewer(
-              panEnabled: widget.activePanel != _EditorPanel.crop,
-              scaleEnabled: widget.activePanel != _EditorPanel.crop,
+              panEnabled: widget.activePanel == _EditorPanel.crop,
+              scaleEnabled: widget.activePanel == _EditorPanel.crop,
               minScale: 0.75,
               maxScale: 4,
               clipBehavior: Clip.none,

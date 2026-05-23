@@ -11,22 +11,27 @@ class AppSettingsState {
   const AppSettingsState({
     required this.savePath,
     this.isLoading = false,
+    this.oneClickOpen = false,
   });
 
   final String savePath;
   final bool isLoading;
+  final bool oneClickOpen;
 
   AppSettingsState copyWith({
     String? savePath,
     bool? isLoading,
+    bool? oneClickOpen,
   }) {
     return AppSettingsState(
       savePath: savePath ?? this.savePath,
       isLoading: isLoading ?? this.isLoading,
+      oneClickOpen: oneClickOpen ?? this.oneClickOpen,
     );
   }
 
   static const String _key = 'custom_save_path';
+  static const String _oneClickKey = 'one_click_open';
 
   static Future<String> loadPath() async {
     final prefs = await SharedPreferences.getInstance();
@@ -48,6 +53,16 @@ class AppSettingsState {
       await dir.create(recursive: true);
     }
   }
+
+  static Future<bool> loadOneClick() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_oneClickKey) ?? false;
+  }
+
+  static Future<void> persistOneClick(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_oneClickKey, value);
+  }
 }
 
 final appSettingsProvider =
@@ -63,13 +78,19 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
   Future<void> _load() async {
     state = state.copyWith(isLoading: true);
     final path = await AppSettingsState.loadPath();
-    state = AppSettingsState(savePath: path, isLoading: false);
+    final oneClick = await AppSettingsState.loadOneClick();
+    state = AppSettingsState(savePath: path, isLoading: false, oneClickOpen: oneClick);
   }
 
   Future<void> setSavePath(String savePath) async {
     state = state.copyWith(isLoading: true);
     await AppSettingsState.persistPath(savePath);
-    state = AppSettingsState(savePath: savePath, isLoading: false);
+    state = AppSettingsState(savePath: savePath, isLoading: false, oneClickOpen: state.oneClickOpen);
+  }
+
+  Future<void> setOneClickOpen(bool value) async {
+    await AppSettingsState.persistOneClick(value);
+    state = state.copyWith(oneClickOpen: value);
   }
 
   Future<Directory> getSaveDirectory() async {

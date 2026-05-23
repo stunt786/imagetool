@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/pdf_merge_state.dart';
@@ -16,6 +17,26 @@ class PdfMergeScreen extends ConsumerStatefulWidget {
 }
 
 class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
+  bool _hasAutoTriggered = false;
+  bool _isOneClickOpening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isOneClickOpening && !_hasAutoTriggered) {
+        _hasAutoTriggered = true;
+        setState(() => _isOneClickOpening = false);
+        final state = ref.read(pdfMergeProvider);
+        if (!state.hasFiles && state.outputPath == null) {
+          ref.read(pdfMergeProvider.notifier).pickFiles();
+        }
+      }
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -65,7 +86,9 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
           Expanded(
             child: state.hasFiles || state.outputPath != null
                 ? _buildContent(context, state, notifier)
-                : _buildEmptyState(context, notifier),
+                : _isOneClickOpening
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildEmptyState(context, notifier),
           ),
           if (state.hasFiles && !state.isProcessing && state.outputPath == null)
             _buildBottomBar(context, state, notifier),

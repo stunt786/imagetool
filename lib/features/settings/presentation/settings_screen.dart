@@ -79,6 +79,21 @@ class SettingsScreen extends ConsumerWidget {
                   context,
                   title: 'General',
                   children: [
+                    StatefulBuilder(
+                      builder: (context, setLocalState) {
+                        final oneClick = ref.watch(appSettingsProvider).oneClickOpen;
+                        return SwitchListTile(
+                          secondary: const Icon(Icons.touch_app_outlined),
+                          title: const Text('One Click Open'),
+                          subtitle: const Text('Skip tool home screens and directly open gallery or file picker'),
+                          value: oneClick,
+                          onChanged: (value) {
+                            ref.read(appSettingsProvider.notifier).setOneClickOpen(value);
+                          },
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
                     ListTile(
                       leading: const Icon(Icons.star_outline),
                       title: const Text('Rate the App'),

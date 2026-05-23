@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/format_converter_notifier.dart';
@@ -17,6 +18,25 @@ class FormatConverterScreen extends ConsumerStatefulWidget {
 
 class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   bool _isPicking = false;
+  bool _hasAutoTriggered = false;
+  bool _isOneClickOpening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isOneClickOpening && !_hasAutoTriggered) {
+        _hasAutoTriggered = true;
+        setState(() => _isOneClickOpening = false);
+        final state = ref.read(formatConverterProvider);
+        if (state.images.isEmpty) {
+          _pickImages();
+        }
+      }
+    });
+  }
 
   Future<void> _pickImages() async {
     if (_isPicking) return;
@@ -139,7 +159,9 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         ],
       ),
       body: state.images.isEmpty
-          ? AdBannerWrapper(child: _buildEmptyState(context))
+          ? _isOneClickOpening
+              ? const Center(child: CircularProgressIndicator())
+              : AdBannerWrapper(child: _buildEmptyState(context))
           : Column(
               children: [
                 _buildFormatSelector(context, state),

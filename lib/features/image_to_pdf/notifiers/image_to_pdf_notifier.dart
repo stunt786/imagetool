@@ -271,7 +271,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'PixelTools_$timestamp.pdf';
+      final fileName = 'pixeltools_$timestamp.pdf';
       final outputPath = path.join(pixelToolsDir.path, fileName);
       
       final file = File(outputPath);

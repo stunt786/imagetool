@@ -32,7 +32,7 @@ class PdfService {
   /// Generates a unique filename with the given extension.
   String _generateFileName(String baseName, String extension) {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return '${baseName}_$timestamp.$extension';
+    return 'pixeltools_${baseName}_$timestamp.$extension';
   }
 
   // ─── Compress PDF ───────────────────────────────────────────────────

@@ -82,7 +82,7 @@ class StorageService {
   static String _generateFileName(String extension) {
     final now = DateTime.now();
     final formatted = DateFormat('yyyyMMdd_HHmmss').format(now);
-    return 'img_$formatted.$extension';
+    return 'pixeltools_img_$formatted.$extension';
   }
 
   static String formatFileSize(int bytes) {

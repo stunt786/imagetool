@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 
 import '../../features/image_resize/models/social_presets.dart';
+import '../../features/image_resize/services/image_processor_service.dart';
 
 img.Image? _decodeNormalizedImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
@@ -81,25 +82,30 @@ ResizeResult? _isolateResize(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
 
-  final image = _decodeNormalizedImage(sourceBytes);
+  final image = img.decodeImage(sourceBytes);
   if (image == null) return null;
 
-  final safeWidth = width.clamp(1, 12000);
-  final safeHeight = height.clamp(1, 12000);
-  final resized = img.copyResize(
-    image,
-    width: safeWidth,
-    height: safeHeight,
-    interpolation: img.Interpolation.average,
-  );
+  img.Image processed = image;
+
+  if (width > 0 && height > 0) {
+    final safeWidth = width.clamp(1, 12000);
+    final safeHeight = height.clamp(1, 12000);
+    processed = img.copyResize(
+      image,
+      width: safeWidth,
+      height: safeHeight,
+      interpolation: img.Interpolation.average,
+    );
+  }
+
   final bytes = Uint8List.fromList(
-    _encodeImage(resized, format: format, quality: quality),
+    _encodeImage(processed, format: format, quality: quality),
   );
 
   return ResizeResult(
     bytes: bytes,
-    width: resized.width,
-    height: resized.height,
+    width: processed.width,
+    height: processed.height,
     fileSize: bytes.length,
   );
 }
@@ -191,25 +197,6 @@ ResizeResult? _isolateFlip(Map<String, dynamic> params) {
   );
 }
 
-ResizeResult? _isolateCompress(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final OutputImageFormat format = params['format'] as OutputImageFormat;
-  final int quality = params['quality'] as int;
-
-  final image = _decodeNormalizedImage(sourceBytes);
-  if (image == null) return null;
-
-  final bytes = Uint8List.fromList(
-    _encodeImage(image, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: image.width,
-    height: image.height,
-    fileSize: bytes.length,
-  );
-}
 
 ResizeResult? _isolateResizeToPreset(Map<String, dynamic> params) {
   final Uint8List sourceBytes = params['bytes'] as Uint8List;
@@ -380,8 +367,8 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     try {
       state = state.copyWith(isLoading: true, clearError: true);
 
-      final result = await _binarySearchCompression(
-        sourceBytes: sourceBytes,
+      final result = await ImageProcessorService.compressToTargetSize(
+        bytes: sourceBytes,
         targetBytes: targetBytes,
         format: format,
       );
@@ -390,61 +377,22 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         state = state.copyWith(
           isLoading: false,
           errorMessage:
-              'Could not compress to target size. Minimum quality reached.',
+              'Could not compress to target size.',
         );
         return null;
       }
 
       state = state.copyWith(isLoading: false, clearError: true);
-      return result;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(isLoading: false, errorMessage: error.toString());
       return null;
     }
-  }
-
-  Future<ResizeResult?> _binarySearchCompression({
-    required Uint8List sourceBytes,
-    required int targetBytes,
-    required OutputImageFormat format,
-  }) async {
-    int low = 10;
-    int high = 100;
-    ResizeResult? bestResult;
-
-    while (low <= high) {
-      final mid = ((low + high) / 2).round();
-
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateCompress(<String, dynamic>{
-          'bytes': sourceBytes,
-          'format': format,
-          'quality': mid,
-        }),
-      );
-
-      if (result == null) break;
-
-      if (result.fileSize <= targetBytes) {
-        bestResult = result;
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-
-    if (bestResult == null) {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateCompress(<String, dynamic>{
-          'bytes': sourceBytes,
-          'format': format,
-          'quality': 10,
-        }),
-      );
-      return result;
-    }
-
-    return bestResult;
   }
 
   Future<ResizeResult?> generateCrop({

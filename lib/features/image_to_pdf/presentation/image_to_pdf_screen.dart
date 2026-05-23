@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/image_to_pdf_state.dart';
 import '../notifiers/image_to_pdf_notifier.dart';
@@ -20,6 +21,26 @@ class ImageToPdfScreen extends ConsumerStatefulWidget {
 
 class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
   bool _showSettings = false;
+  bool _hasAutoTriggered = false;
+  bool _isOneClickOpening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isOneClickOpening && !_hasAutoTriggered) {
+        _hasAutoTriggered = true;
+        setState(() => _isOneClickOpening = false);
+        final state = ref.read(imageToPdfProvider);
+        if (state.images.isEmpty) {
+          ref.read(imageToPdfProvider.notifier).pickImages();
+          InterstitialTracker.instance.trackAction();
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +83,9 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               ),
             Expanded(
               child: state.images.isEmpty
-                  ? _buildEmptyState(context, notifier)
+                  ? _isOneClickOpening
+                      ? const Center(child: CircularProgressIndicator())
+                      : _buildEmptyState(context, notifier)
                   : _buildImageGrid(context, state, notifier),
             ),
             if (state.images.isNotEmpty)

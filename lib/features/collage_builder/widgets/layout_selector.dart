@@ -12,8 +12,8 @@ class LayoutSelector extends ConsumerWidget {
     final state = ref.watch(collageProvider);
 
     return Container(
-      constraints: const BoxConstraints(maxHeight: 130),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      constraints: const BoxConstraints(maxHeight: 120),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -25,27 +25,31 @@ class LayoutSelector extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 86,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: CollageLayout.all.length,
-              itemBuilder: (context, index) {
-                final layout = CollageLayout.all[index];
-                final isSelected = state.layout.id == layout.id;
+          const SizedBox(height: 4),
+          ClipRect(
+            child: SizedBox(
+              height: 78,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: CollageLayout.all.length,
+                itemBuilder: (context, index) {
+                  final layout = CollageLayout.all[index];
+                  final isSelected = state.layout.id == layout.id;
 
-                return _LayoutOption(
-                  layout: layout,
-                  isSelected: isSelected,
-                  onTap: () {
-                    ref.read(collageProvider.notifier).changeLayout(layout);
-                  },
-                );
-              },
+                  return _LayoutOption(
+                    layout: layout,
+                    isSelected: isSelected,
+                    onTap: () {
+                      ref.read(collageProvider.notifier).changeLayout(layout);
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ],
