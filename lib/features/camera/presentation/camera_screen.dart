@@ -26,7 +26,12 @@ class _CameraScreenState extends State<CameraScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCamera();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _onVisibilityChanged();
   }
 
   @override
@@ -36,16 +41,27 @@ class _CameraScreenState extends State<CameraScreen>
     super.dispose();
   }
 
+  void _onVisibilityChanged() {
+    final isVisible = TickerMode.valuesOf(context).enabled;
+    if (isVisible && !_isCameraInitialized) {
+      _initializeCamera();
+    } else if (!isVisible && _isCameraInitialized) {
+      _disposeCamera();
+    }
+  }
+
+  void _disposeCamera() {
+    _controller?.dispose();
+    _controller = null;
+    _isCameraInitialized = false;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = _controller;
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
-    }
-    if (state == AppLifecycleState.inactive) {
-      cameraController.dispose();
+    if (state == AppLifecycleState.inactive && _isCameraInitialized) {
+      _disposeCamera();
     } else if (state == AppLifecycleState.resumed) {
-      _initCameraController(cameraController.description);
+      _onVisibilityChanged();
     }
   }
 

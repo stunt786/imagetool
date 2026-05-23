@@ -64,5 +64,29 @@ class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
       editedAt: _now.subtract(const Duration(days: 1)),
       toolIcon: Icons.photo_size_select_large,
     ),
+    EditHistoryItem(
+      fileName: 'merged_docs.pdf',
+      toolUsed: 'PDF Merger',
+      editedAt: _now.subtract(const Duration(days: 2)),
+      toolIcon: Icons.merge_type,
+    ),
+    EditHistoryItem(
+      fileName: 'banner_design.png',
+      toolUsed: 'Collage Builder',
+      editedAt: _now.subtract(const Duration(days: 3)),
+      toolIcon: Icons.dashboard_customize,
+    ),
+    EditHistoryItem(
+      fileName: 'presentation_slides.pdf',
+      toolUsed: 'PDF Converter',
+      editedAt: _now.subtract(const Duration(days: 4)),
+      toolIcon: Icons.transform,
+    ),
+    EditHistoryItem(
+      fileName: 'selfie_edited.jpg',
+      toolUsed: 'Image Resizer',
+      editedAt: _now.subtract(const Duration(days: 5)),
+      toolIcon: Icons.photo_size_select_large,
+    ),
   ];
 }

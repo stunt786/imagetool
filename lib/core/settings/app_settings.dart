@@ -2,40 +2,51 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @immutable
 class AppSettingsState {
   const AppSettingsState({
-    required this.saveLocation,
+    required this.savePath,
     this.isLoading = false,
   });
 
-  final String saveLocation;
+  final String savePath;
   final bool isLoading;
 
   AppSettingsState copyWith({
-    String? saveLocation,
+    String? savePath,
     bool? isLoading,
   }) {
     return AppSettingsState(
-      saveLocation: saveLocation ?? this.saveLocation,
+      savePath: savePath ?? this.savePath,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 
-  static const String _defaultKey = 'default_save_location';
-  static const String _defaultLocation = 'app_documents';
+  static const String _key = 'custom_save_path';
 
-  static Future<String> loadLocation() async {
+  static Future<String> loadPath() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_defaultKey) ?? _defaultLocation;
+    final stored = prefs.getString(_key);
+    if (stored != null && stored.isNotEmpty) return stored;
+    final docsDir = await getApplicationDocumentsDirectory();
+    final defaultDir = Directory(path.join(docsDir.path, 'pixeltools'));
+    if (!await defaultDir.exists()) {
+      await defaultDir.create(recursive: true);
+    }
+    return defaultDir.path;
   }
 
-  static Future<void> persistLocation(String location) async {
+  static Future<void> persistPath(String savePath) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_defaultKey, location);
+    await prefs.setString(_key, savePath);
+    final dir = Directory(savePath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
   }
 }
 
@@ -45,51 +56,30 @@ final appSettingsProvider =
 );
 
 class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
-  AppSettingsNotifier() : super(const AppSettingsState(saveLocation: '')) {
+  AppSettingsNotifier() : super(const AppSettingsState(savePath: '')) {
     _load();
   }
 
   Future<void> _load() async {
     state = state.copyWith(isLoading: true);
-    final location = await AppSettingsState.loadLocation();
-    state = AppSettingsState(saveLocation: location, isLoading: false);
+    final path = await AppSettingsState.loadPath();
+    state = AppSettingsState(savePath: path, isLoading: false);
   }
 
-  Future<void> setSaveLocation(String location) async {
+  Future<void> setSavePath(String savePath) async {
     state = state.copyWith(isLoading: true);
-    await AppSettingsState.persistLocation(location);
-    state = AppSettingsState(saveLocation: location, isLoading: false);
+    await AppSettingsState.persistPath(savePath);
+    state = AppSettingsState(savePath: savePath, isLoading: false);
   }
 
   Future<Directory> getSaveDirectory() async {
-    final location = state.saveLocation.isEmpty
-        ? AppSettingsState._defaultLocation
-        : state.saveLocation;
-
-    Directory? dir;
-    
-    switch (location) {
-      case 'downloads':
-        dir = await getDownloadsDirectory();
-        if (dir != null && await _isWritable(dir)) return dir;
-        break;
-      case 'external':
-        dir = await getExternalStorageDirectory();
-        if (dir != null && await _isWritable(dir)) return dir;
-        break;
+    final savePath = state.savePath.isEmpty
+        ? await AppSettingsState.loadPath()
+        : state.savePath;
+    final dir = Directory(savePath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
-    
-    return getApplicationDocumentsDirectory();
-  }
-
-  Future<bool> _isWritable(Directory dir) async {
-    try {
-      final testFile = File('${dir.path}/.write_test');
-      await testFile.writeAsString('test');
-      await testFile.delete();
-      return true;
-    } catch (_) {
-      return false;
-    }
+    return dir;
   }
 }

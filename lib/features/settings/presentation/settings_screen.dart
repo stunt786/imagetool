@@ -1,18 +1,19 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/settings/app_settings.dart';
-import '../../../core/services/permission_service.dart';
+import '../../../shared/widgets/premium_banner.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(appSettingsProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final topPadding = MediaQuery.of(context).padding.top + 72;
@@ -43,7 +44,9 @@ class SettingsScreen extends ConsumerWidget {
                     letterSpacing: -0.7,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                const PremiumBanner(),
+                const SizedBox(height: 24),
                 _buildSection(
                   context,
                   title: 'Storage',
@@ -54,23 +57,18 @@ class SettingsScreen extends ConsumerWidget {
                         final actualPath = snapshot.data?.path ?? 'Loading...';
                         return ListTile(
                           leading: const Icon(Icons.folder_outlined),
-                          title: const Text('Default Save Location'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(_getLocationLabel(settings.saveLocation)),
-                              if (snapshot.hasData)
-                                Text(
-                                  actualPath,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                                ),
-                            ],
+                          title: const Text('Save Location'),
+                          subtitle: Text(
+                            actualPath,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: 'monospace',
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _showLocationPicker(context, ref),
+                          onTap: () => _pickFolder(context, ref),
                         );
                       },
                     ),
@@ -79,53 +77,40 @@ class SettingsScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 _buildSection(
                   context,
-                  title: 'Permissions',
+                  title: 'General',
                   children: [
-                    FutureBuilder<bool>(
-                      future: const AppPermissionService().hasStoragePermission(),
-                      builder: (context, snapshot) {
-                        final granted = snapshot.data ?? false;
-                        return ListTile(
-                          leading: Icon(
-                            granted ? Icons.check_circle : Icons.warning_amber_outlined,
-                            color: granted ? scheme.primary : scheme.error,
-                          ),
-                          title: const Text('Photos & Storage'),
-                          subtitle: Text(granted ? 'Granted' : 'Not granted'),
-                          trailing: granted
-                              ? null
-                              : FilledButton.tonal(
-                                  onPressed: () => const AppPermissionService().requestAllPermissions(),
-                                  child: const Text('Grant'),
-                                ),
-                          onTap: granted
-                              ? null
-                              : () => const AppPermissionService().requestAllPermissions(),
+                    ListTile(
+                      leading: const Icon(Icons.star_outline),
+                      title: const Text('Rate the App'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Rate us on the App Store!')),
                         );
                       },
                     ),
-                    FutureBuilder<bool>(
-                      future: const AppPermissionService().hasCameraPermission(),
-                      builder: (context, snapshot) {
-                        final granted = snapshot.data ?? false;
-                        return ListTile(
-                          leading: Icon(
-                            granted ? Icons.check_circle : Icons.warning_amber_outlined,
-                            color: granted ? scheme.primary : scheme.error,
-                          ),
-                          title: const Text('Camera'),
-                          subtitle: Text(granted ? 'Granted' : 'Not granted'),
-                          trailing: granted
-                              ? null
-                              : FilledButton.tonal(
-                                  onPressed: () => const AppPermissionService().requestAllPermissions(),
-                                  child: const Text('Grant'),
-                                ),
-                          onTap: granted
-                              ? null
-                              : () => const AppPermissionService().requestAllPermissions(),
+                    ListTile(
+                      leading: const Icon(Icons.share_outlined),
+                      title: const Text('Share App'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Share.share(
+                          'Edit images and PDFs offline with ${AppStrings.appName}.',
+                          subject: AppStrings.appName,
                         );
                       },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.mail_outline),
+                      title: const Text('Contact Us'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showContactDialog(context),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.help_outline),
+                      title: const Text('Help'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showHelpDialog(context),
                     ),
                   ],
                 ),
@@ -141,8 +126,13 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     ListTile(
                       leading: const Icon(Icons.info_outline),
-                      title: const Text('About'),
+                      title: const Text('App'),
                       subtitle: const Text(AppStrings.appName),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.tag_outlined),
+                      title: const Text('Version'),
+                      subtitle: const Text('1.0.0'),
                     ),
                   ],
                 ),
@@ -182,62 +172,29 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  String _getLocationLabel(String location) {
-    switch (location) {
-      case 'downloads':
-        return 'Downloads';
-      case 'external':
-        return 'External Storage';
-      case 'app_documents':
-      default:
-        return 'App Documents';
+  Future<void> _pickFolder(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.platform.getDirectoryPath();
+    if (result != null && result.isNotEmpty) {
+      final dir = Directory(result);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      await ref.read(appSettingsProvider.notifier).setSavePath(result);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save location changed to $result')),
+        );
+      }
     }
   }
 
-  void _showLocationPicker(BuildContext context, WidgetRef ref) {
-    final settings = ref.read(appSettingsProvider);
-    final notifier = ref.read(appSettingsProvider.notifier);
-
-    showDialog(
+  void _showContactDialog(BuildContext context) {
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Save Location'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _LocationOption(
-              label: 'App Documents',
-              description: 'Private app folder (no permission needed)',
-              value: 'app_documents',
-              isSelected: settings.saveLocation == 'app_documents',
-              onTap: () {
-                notifier.setSaveLocation('app_documents');
-                Navigator.of(context).pop();
-              },
-            ),
-            const SizedBox(height: 8),
-            _LocationOption(
-              label: 'Downloads',
-              description: 'Save to device Downloads folder',
-              value: 'downloads',
-              isSelected: settings.saveLocation == 'downloads',
-              onTap: () {
-                notifier.setSaveLocation('downloads');
-                Navigator.of(context).pop();
-              },
-            ),
-            const SizedBox(height: 8),
-            _LocationOption(
-              label: 'External Storage',
-              description: 'Save to external SD card or storage',
-              value: 'external',
-              isSelected: settings.saveLocation == 'external',
-              onTap: () {
-                notifier.setSaveLocation('external');
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        title: const Text('Contact Us'),
+        content: const Text(
+          'Reach us at support@pixeltools.app for feedback, feature requests, or bug reports.',
         ),
         actions: [
           TextButton(
@@ -248,71 +205,21 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
-class _LocationOption extends StatelessWidget {
-  const _LocationOption({
-    required this.label,
-    required this.description,
-    required this.value,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final String description;
-  final String value;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-            width: isSelected ? 2 : 1,
+  void _showHelpDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Help'),
+        content: const Text(
+          'Use Quick Tools for fast actions, the Images tab for visual workflows, and Recent History to reopen your latest work.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
           ),
-          borderRadius: BorderRadius.circular(12),
-          color: isSelected
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surfaceContainerLowest,
-        ),
-        child: Row(
-          children: [
-            Radio<String>(
-              value: value,
-              // ignore: deprecated_member_use
-              onChanged: (_) => onTap(),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

@@ -1,13 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
 
-import '../../../core/constants/app_strings.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-import '../../../shared/widgets/shared_app_bar.dart';
+import '../../../shared/widgets/premium_banner.dart';
 
 const _featuredTools = <_QuickToolData>[
   _QuickToolData(
@@ -37,32 +37,14 @@ const _featuredTools = <_QuickToolData>[
     accent: Color(0xFF15803D),
     glow: Color(0xFFD8F5E1),
   ),
-];
-
-const _pdfShortcuts = <_ShortcutChipData>[
-  _ShortcutChipData(
-    title: 'Compress PDF',
-    icon: Icons.compress_rounded,
-    route: '/pdfs/compress',
-    tint: Color(0xFF6F63FF),
-  ),
-  _ShortcutChipData(
-    title: 'Merge PDFs',
-    icon: Icons.merge_type_rounded,
-    route: '/pdfs/merge',
-    tint: Color(0xFF00A6A6),
-  ),
-  _ShortcutChipData(
-    title: 'Split Pages',
-    icon: Icons.call_split_rounded,
-    route: '/pdfs/split',
-    tint: Color(0xFFFF7A59),
-  ),
-  _ShortcutChipData(
-    title: 'Convert PDF',
-    icon: Icons.transform_rounded,
-    route: '/pdfs/convert',
-    tint: Color(0xFF15803D),
+  _QuickToolData(
+    title: 'Image to PDF',
+    subtitle: 'Convert images to PDF documents instantly.',
+    icon: Icons.picture_as_pdf_rounded,
+    route: '/images/to-pdf',
+    gradient: [Color(0xFFFFF0ED), Color(0xFFFFF8F7)],
+    accent: Color(0xFFE64A19),
+    glow: Color(0xFFFFD8CC),
   ),
 ];
 
@@ -74,112 +56,29 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String _outputFolder = 'Default app folder';
-  String _watermarkText = 'PixelTools';
-  bool _keepExifData = true;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
-  Future<void> _editOutputFolder() async {
-    final controller = TextEditingController(text: _outputFolder);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change output folder'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Example: Pictures/PixelTools',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
-
-    if (!mounted || result == null || result.isEmpty) return;
-    setState(() => _outputFolder = result);
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  Future<void> _editWatermarkText() async {
-    final controller = TextEditingController(text: _watermarkText);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Custom text watermark'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter watermark text'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    controller.dispose();
-
-    if (!mounted || result == null || result.isEmpty) return;
-    setState(() => _watermarkText = result);
+  List<_QuickToolData> get _filteredTools {
+    if (_searchQuery.isEmpty) return _featuredTools;
+    return _featuredTools
+        .where((t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .toList();
   }
 
-  void _showHelp() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Help'),
-        content: const Text(
-          'Use Quick Tools for fast actions, the Images tab for visual workflows, and Recent History to reopen your latest work.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showContact() {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Contact us'),
-        content: const Text(
-          'Reach us at support@pixeltools.app for feedback, feature requests, or bug reports.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _shareApp() async {
-    await Share.share(
-      'Edit images and PDFs offline with ${AppStrings.appName}.',
-      subject: AppStrings.appName,
-    );
+  List<EditHistoryItem> _filteredHistory(List<EditHistoryItem> history) {
+    if (_searchQuery.isEmpty) return [];
+    return history
+        .where((item) =>
+            item.fileName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            item.toolUsed.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .toList();
   }
 
   @override
@@ -195,31 +94,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         : width >= 700
         ? 24.0
         : 18.0;
-    final topPadding = MediaQuery.of(context).padding.top + 72;
+    final topPadding = MediaQuery.of(context).padding.top + 12;
+
+    final filteredTools = _filteredTools;
+    final filteredHistory = _filteredHistory(history);
+    final isSearching = _searchQuery.isNotEmpty;
 
     return Scaffold(
-      key: _scaffoldKey,
-      drawer: SharedAppDrawer(
-        outputFolder: _outputFolder,
-        watermarkText: _watermarkText,
-        keepExifData: _keepExifData,
-        onUpgradeTap: () {
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Premium plans are coming soon.')),
-          );
-        },
-        onSettingsTap: () {
-          Navigator.of(context).pop();
-          context.go('/settings');
-        },
-        onOutputFolderTap: _editOutputFolder,
-        onWatermarkTap: _editWatermarkText,
-        onKeepExifChanged: (value) => setState(() => _keepExifData = value),
-        onHelpTap: _showHelp,
-        onContactTap: _showContact,
-        onShareTap: _shareApp,
-      ),
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -258,160 +139,204 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ],
-            CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    contentPadding,
-                    topPadding,
-                    contentPadding,
-                    0,
-                  ),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate.fixed([
-                      Text(
-                        'Explore Tools',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.7,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _SectionHeader(
-                        title: 'Featured',
-                        actionLabel: 'View All',
-                        onActionTap: () => context.push('/all-tools'),
-                      ),
-                      const SizedBox(height: 14),
-                      _FeaturedToolsGrid(isWide: isWide),
-                      const SizedBox(height: 18),
-                      _PdfShortcutRail(shortcuts: _pdfShortcuts),
-                      const SizedBox(height: 18),
-                      const _PremiumBanner(),
-                      const SizedBox(height: 28),
-                      _SectionHeader(
-                        title: 'Recent History',
-                        actionLabel: history.isNotEmpty ? 'See All' : null,
-                        onActionTap: history.isNotEmpty
-                            ? () => context.push('/images')
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      if (history.isEmpty)
-                        const _EmptyHistoryCard()
-                      else
-                        ...history
-                            .take(6)
-                            .map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: _HistoryRow(item: item),
-                              ),
+            Column(
+              children: [
+                Container(
+                  padding: EdgeInsets.fromLTRB(contentPadding, topPadding, contentPadding, 0),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Container(
+                          height: 46,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(23),
+                            color: scheme.surfaceContainerLowest,
+                            border: Border.all(color: scheme.outlineVariant),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (value) => setState(() => _searchQuery = value),
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
                             ),
-                      if (history.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton.icon(
-                              onPressed: () => ref
-                                  .read(editHistoryProvider.notifier)
-                                  .clear(),
-                              icon: const Icon(Icons.delete_outline_rounded),
-                              label: const Text('Clear history'),
+                            decoration: InputDecoration(
+                              hintText: 'Search tools...',
+                              hintStyle: TextStyle(
+                                color: scheme.onSurfaceVariant,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                size: 20,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              suffixIcon: isSearching
+                                  ? IconButton(
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        size: 20,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
                         ),
-                      const SizedBox(height: 110),
-                    ]),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFFEAB308).withValues(alpha: 0.12),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(Icons.workspace_premium_rounded,
+                              size: 20, color: Color(0xFFEAB308)),
+                          onPressed: () => context.push('/premium'),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (isSearching && filteredTools.isEmpty && filteredHistory.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.search_off_rounded, size: 48,
+                              color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No results found for "$_searchQuery"',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: isSearching
+                  ? ListView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(contentPadding, 16, contentPadding, 110),
+                      children: [
+                        if (filteredTools.isNotEmpty) ...[
+                          _SectionHeader(title: 'Tools'),
+                          const SizedBox(height: 12),
+                          ...filteredTools.map(
+                            (tool) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _SearchToolRow(data: tool),
+                            ),
+                          ),
+                        ],
+                        if (filteredHistory.isNotEmpty) ...[
+                          if (filteredTools.isNotEmpty) const SizedBox(height: 8),
+                          _SectionHeader(title: 'Files'),
+                          const SizedBox(height: 12),
+                          ...filteredHistory.map(
+                            (item) => Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _HistoryRow(item: item),
+                            ),
+                          ),
+                        ],
+                      ],
+                    )
+                  : CustomScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      slivers: [
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            contentPadding,
+                            16,
+                            contentPadding,
+                            0,
+                          ),
+                          sliver: SliverList(
+                            delegate: SliverChildListDelegate.fixed([
+                              Text(
+                                'Explore Tools',
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.7,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _SectionHeader(
+                                title: 'Featured',
+                                actionLabel: 'View All',
+                                onActionTap: () => context.push('/all-tools'),
+                              ),
+                              const SizedBox(height: 14),
+                              _FeaturedToolsGrid(isWide: isWide),
+                              const SizedBox(height: 18),
+                              const PremiumBanner(),
+                              const SizedBox(height: 28),
+                              _SectionHeader(
+                                title: 'Recent History',
+                                actionLabel: history.isNotEmpty ? 'See All' : null,
+                                onActionTap: history.isNotEmpty
+                                    ? () => context.push('/files')
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                              if (history.isEmpty)
+                                const _EmptyHistoryCard()
+                              else
+                                ...history
+                                    .take(10)
+                                    .map(
+                                      (item) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 14),
+                                        child: _HistoryRow(item: item),
+                                      ),
+                                    ),
+                              if (history.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton.icon(
+                                      onPressed: () => ref
+                                          .read(editHistoryProvider.notifier)
+                                          .clear(),
+                                      icon: const Icon(Icons.delete_outline_rounded),
+                                      label: const Text('Clear history'),
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 110),
+                            ]),
+                          ),
+                        ),
+                      ],
+                    ),
                 ),
               ],
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PremiumBanner extends StatelessWidget {
-  const _PremiumBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1F1F45), Color(0xFF4338CA), Color(0xFF0F9D9A)],
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x221C2459),
-            blurRadius: 28,
-            offset: Offset(0, 14),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Colors.white.withValues(alpha: 0.14),
-            ),
-            child: const Icon(
-              Icons.workspace_premium_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Upgrade to Premium',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Get advanced export presets, pro batch tools, and premium editing features.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF312E81),
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Premium plans are coming soon.')),
-              );
-            },
-            child: const Text('Upgrade'),
-          ),
-        ],
       ),
     );
   }
@@ -424,10 +349,19 @@ class _FeaturedToolsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 20,
-      runSpacing: 12,
-      children: _featuredTools.map((tool) => _FeatureIcon(data: tool)).toList(),
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: _featuredTools.length,
+      itemBuilder: (context, index) => Center(
+        child: _FeatureIcon(data: _featuredTools[index]),
+      ),
     );
   }
 }
@@ -497,76 +431,74 @@ class _FeatureIconState extends State<_FeatureIcon> {
   }
 }
 
-class _PdfShortcutRail extends StatelessWidget {
-  const _PdfShortcutRail({required this.shortcuts});
+class _SearchToolRow extends StatelessWidget {
+  const _SearchToolRow({required this.data});
 
-  final List<_ShortcutChipData> shortcuts;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
-        border: Border.all(color: scheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow,
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: shortcuts
-            .map((shortcut) => _PdfShortcutChip(data: shortcut))
-            .toList(),
-      ),
-    );
-  }
-}
-
-class _PdfShortcutChip extends StatelessWidget {
-  const _PdfShortcutChip({required this.data});
-
-  final _ShortcutChipData data;
+  final _QuickToolData data;
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
+    return GestureDetector(
       onTap: () {
         InterstitialTracker.instance.trackNavigation();
         context.push(data.route);
       },
-      child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: data.tint.withValues(alpha: isDark ? 0.22 : 0.08),
+          borderRadius: BorderRadius.circular(20),
+          color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
+          border: Border.all(color: scheme.outlineVariant),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 34,
-              height: 34,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: data.tint.withValues(alpha: isDark ? 0.35 : 0.14),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    data.accent,
+                    Color.lerp(data.accent, Colors.white, 0.3)!,
+                  ],
+                ),
               ),
-              child: Icon(data.icon, size: 18, color: data.tint),
+              child: Icon(data.icon, size: 22, color: Colors.white),
             ),
-            const SizedBox(width: 10),
-            Text(
-              data.title,
-              style: TextStyle(color: data.tint, fontWeight: FontWeight.w700),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    data.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: scheme.onSurfaceVariant,
             ),
           ],
         ),
@@ -689,8 +621,23 @@ class _HistoryThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradient = _historyGradient(item.toolUsed);
+    if (item.thumbnailPath != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Image.file(
+          File(item.thumbnailPath!),
+          width: 72,
+          height: 72,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildGradientFallback(),
+        ),
+      );
+    }
+    return _buildGradientFallback();
+  }
 
+  Widget _buildGradientFallback() {
+    final gradient = _historyGradient(item.toolUsed);
     return Container(
       width: 72,
       height: 72,
@@ -891,20 +838,6 @@ class _QuickToolData {
   final List<Color> gradient;
   final Color accent;
   final Color glow;
-}
-
-class _ShortcutChipData {
-  const _ShortcutChipData({
-    required this.title,
-    required this.icon,
-    required this.route,
-    required this.tint,
-  });
-
-  final String title;
-  final IconData icon;
-  final String route;
-  final Color tint;
 }
 
 (String, String) _historyTimeParts(DateTime editedAt) {

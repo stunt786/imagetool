@@ -16,132 +16,24 @@ class AppShell extends StatelessWidget {
         currentPath == '/images' ||
         currentPath == '/pdfs' ||
         currentPath == '/settings';
+    final isCameraScreen = currentPath == '/camera';
 
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          navigationShell,
-          if (isMainScreen)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 16,
-              right: 16,
-              child: _FloatingTopBar(),
-            ),
-        ],
-      ),
+      body: navigationShell,
       bottomNavigationBar: isMainScreen
           ? SafeArea(
               minimum: EdgeInsets.zero,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const BannerAdWidget(),
+                  if (!isCameraScreen) const BannerAdWidget(),
                   _BottomNavBar(navigationShell: navigationShell),
                 ],
               ),
             )
           : null,
-    );
-  }
-}
-
-class _FloatingTopBar extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        color: scheme.surfaceContainerLowest.withValues(alpha: 0.88),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow,
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 36,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: scheme.surfaceContainerHigh.withValues(alpha: 0.6),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 12),
-                  Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Search tools...',
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          _TopBarIconButton(
-            icon: Icons.workspace_premium_rounded,
-            color: const Color(0xFFEAB308),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Premium plans are coming soon.')),
-              );
-            },
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
-    );
-  }
-}
-
-class _TopBarIconButton extends StatelessWidget {
-  const _TopBarIconButton({
-    required this.icon,
-    required this.onTap,
-    this.color,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final effectiveColor = color ?? Theme.of(context).colorScheme.onSurface;
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: IconButton(
-        onPressed: onTap,
-        icon: Icon(icon, size: 22, color: effectiveColor),
-        style: IconButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
     );
   }
 }
