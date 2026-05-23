@@ -48,6 +48,8 @@ class PdfsHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final width = MediaQuery.sizeOf(context).width;
     final padding = width >= 1200
         ? 28.0
@@ -69,31 +71,39 @@ class PdfsHubScreen extends ConsumerWidget {
         title: 'PDFs',
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF8FAFF), Color(0xFFFCFAFF), Color(0xFFFFFCF8)],
+            colors: isDark
+                ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
+                : const [
+                    Color(0xFFF8FAFF),
+                    Color(0xFFFCFAFF),
+                    Color(0xFFFFFCF8),
+                  ],
           ),
         ),
         child: Stack(
           children: [
-            const Positioned(
-              top: -70,
-              left: -30,
-              child: _AmbientOrb(
-                size: 220,
-                colors: [Color(0xFFE0DEFF), Color(0x00E0DEFF)],
+            if (!isDark) ...[
+              const Positioned(
+                top: -70,
+                left: -30,
+                child: _AmbientOrb(
+                  size: 220,
+                  colors: [Color(0xFFE0DEFF), Color(0x00E0DEFF)],
+                ),
               ),
-            ),
-            const Positioned(
-              top: 260,
-              right: -50,
-              child: _AmbientOrb(
-                size: 200,
-                colors: [Color(0xFFD8F6F4), Color(0x00D8F6F4)],
+              const Positioned(
+                top: 260,
+                right: -50,
+                child: _AmbientOrb(
+                  size: 200,
+                  colors: [Color(0xFFD8F6F4), Color(0x00D8F6F4)],
+                ),
               ),
-            ),
+            ],
             CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
@@ -116,7 +126,7 @@ class PdfsHubScreen extends ConsumerWidget {
                           Text(
                             '${_pdfTools.length} tools',
                             style: theme.textTheme.titleSmall?.copyWith(
-                              color: const Color(0xFF5B4DFF),
+                              color: scheme.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -196,7 +206,9 @@ class _PdfToolCardState extends State<_PdfToolCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final data = widget.data;
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -217,44 +229,59 @@ class _PdfToolCardState extends State<_PdfToolCard> {
               end: Alignment.bottomRight,
               colors: data.gradient,
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.4),
+            ),
             boxShadow: [
               BoxShadow(
-                color: data.accent.withValues(alpha: 0.12),
+                color: data.accent.withValues(alpha: isDark ? 0.06 : 0.12),
                 blurRadius: 24,
                 offset: const Offset(0, 12),
               ),
             ],
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Center(child: _PdfToolArtwork(data: data)),
-                const Spacer(),
-                Text(
-                  data.title,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.4,
-                    color: const Color(0xFF172033),
+          child: Stack(
+            children: [
+              if (isDark)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      color: Colors.black.withValues(alpha: 0.45),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  data.subtitle,
-                  textAlign: TextAlign.center,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF526077),
-                    height: 1.35,
-                  ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Center(child: _PdfToolArtwork(data: data)),
+                    const Spacer(),
+                    Text(
+                      data.title,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      data.subtitle,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -273,7 +300,8 @@ class _PdfToolArtwork extends StatelessWidget {
       width: 66,
       height: 66,
       decoration: BoxDecoration(
-        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
             color: data.accent.withValues(alpha: 0.12),
@@ -295,17 +323,19 @@ class _PdfHistoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.86),
-        border: Border.all(color: const Color(0xFFEDEAF6)),
-        boxShadow: const [
+        borderRadius: BorderRadius.circular(24),
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.86),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0F101828),
+            color: scheme.shadow,
             blurRadius: 18,
-            offset: Offset(0, 10),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -341,14 +371,14 @@ class _PdfHistoryRow extends StatelessWidget {
                 Text(
                   item.toolUsed,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF667085),
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   item.timeAgo,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF8A94A6),
+                    color: scheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -362,10 +392,7 @@ class _PdfHistoryRow extends StatelessWidget {
                 SnackBar(content: Text('Opening ${item.fileName} soon.')),
               );
             },
-            icon: const Icon(
-              Icons.open_in_new_rounded,
-              color: Color(0xFF5B4DFF),
-            ),
+            icon: Icon(Icons.open_in_new_rounded, color: scheme.primary),
           ),
         ],
       ),
@@ -379,13 +406,15 @@ class _EmptyPdfHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.84),
-        border: Border.all(color: const Color(0xFFEDEAF6)),
+        borderRadius: BorderRadius.circular(24),
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -398,14 +427,14 @@ class _EmptyPdfHistoryCard extends StatelessWidget {
               ),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.history_rounded, color: Color(0xFF5B4DFF)),
+            child: Icon(Icons.history_rounded, color: scheme.primary),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               'Your recent PDF activity will appear here after you compress, merge, or split documents.',
               style: theme.textTheme.bodyLarge?.copyWith(
-                color: const Color(0xFF667085),
+                color: scheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),

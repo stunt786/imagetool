@@ -45,6 +45,8 @@ class ImagesHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final width = MediaQuery.sizeOf(context).width;
     final padding = width >= 1200
         ? 28.0
@@ -63,31 +65,35 @@ class ImagesHubScreen extends StatelessWidget {
         title: 'Images',
       ),
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF7FAFF), Color(0xFFFDF7FF), Color(0xFFFFFCF7)],
+            colors: isDark
+                ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
+                : const [Color(0xFFF7FAFF), Color(0xFFFDF7FF), Color(0xFFFFFCF7)],
           ),
         ),
         child: Stack(
           children: [
-            const Positioned(
-              top: -70,
-              right: -30,
-              child: _AmbientOrb(
-                size: 220,
-                colors: [Color(0xFFD9E4FF), Color(0x00D9E4FF)],
+            if (!isDark) ...[
+              const Positioned(
+                top: -70,
+                right: -30,
+                child: _AmbientOrb(
+                  size: 220,
+                  colors: [Color(0xFFD9E4FF), Color(0x00D9E4FF)],
+                ),
               ),
-            ),
-            const Positioned(
-              top: 240,
-              left: -60,
-              child: _AmbientOrb(
-                size: 200,
-                colors: [Color(0xFFEAD6FF), Color(0x00EAD6FF)],
+              const Positioned(
+                top: 240,
+                left: -60,
+                child: _AmbientOrb(
+                  size: 200,
+                  colors: [Color(0xFFEAD6FF), Color(0x00EAD6FF)],
+                ),
               ),
-            ),
+            ],
             CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
@@ -110,7 +116,7 @@ class ImagesHubScreen extends StatelessWidget {
                           Text(
                             '${_imageTools.length} tools',
                             style: theme.textTheme.titleSmall?.copyWith(
-                              color: const Color(0xFF7C3AED),
+                              color: scheme.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -161,7 +167,9 @@ class _ImageToolCardState extends State<_ImageToolCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final data = widget.data;
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -177,16 +185,15 @@ class _ImageToolCardState extends State<_ImageToolCard> {
         curve: Curves.easeOutCubic,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: data.gradient,
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
-                color: data.accent.withValues(alpha: 0.12),
+                color: data.accent.withValues(alpha: isDark ? 0.06 : 0.12),
                 blurRadius: 24,
                 offset: const Offset(0, 12),
               ),
@@ -202,10 +209,19 @@ class _ImageToolCardState extends State<_ImageToolCard> {
                   height: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.24),
+                    color: scheme.surfaceContainerLowest.withValues(alpha: 0.24),
                   ),
                 ),
               ),
+              if (isDark)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      color: Colors.black.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -219,7 +235,7 @@ class _ImageToolCardState extends State<_ImageToolCard> {
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.4,
-                        color: const Color(0xFF172033),
+                        color: scheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -229,7 +245,7 @@ class _ImageToolCardState extends State<_ImageToolCard> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF526077),
+                        color: scheme.onSurfaceVariant,
                         height: 1.35,
                       ),
                     ),
@@ -256,7 +272,7 @@ class _ImageToolArtwork extends StatelessWidget {
       height: 66,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
             color: data.accent.withValues(alpha: 0.12),
@@ -276,13 +292,14 @@ class _ImageTipsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        color: Colors.white.withValues(alpha: 0.82),
-        border: Border.all(color: const Color(0xFFE9EAF4)),
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,9 +313,9 @@ class _ImageTipsCard extends StatelessWidget {
                 colors: [Color(0xFFDBEAFE), Color(0xFFEDE9FE)],
               ),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.tips_and_updates_rounded,
-              color: Color(0xFF5B4DFF),
+              color: scheme.primary,
             ),
           ),
           const SizedBox(width: 14),
@@ -316,7 +333,7 @@ class _ImageTipsCard extends StatelessWidget {
                 Text(
                   'Each card is larger, more visual, and kept in a two-column grid so the tab feels closer to the attached reference.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF667085),
+                    color: scheme.onSurfaceVariant,
                     height: 1.45,
                   ),
                 ),

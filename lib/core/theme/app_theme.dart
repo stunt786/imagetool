@@ -81,12 +81,80 @@ abstract final class AppTheme {
   }
 
   static ThemeData dark() {
+    const scheme = ColorScheme(
+      brightness: Brightness.dark,
+      primary: Color(0xFFC4BCFF),
+      onPrimary: Color(0xFF2E2588),
+      secondary: Color(0xFF5DD9D2),
+      onSecondary: Color(0xFF003735),
+      error: Color(0xFFFFB4AB),
+      onError: Color(0xFF690005),
+      surface: Color(0xFF12141C),
+      onSurface: Color(0xFFE6E6EE),
+      primaryContainer: Color(0xFF3A309A),
+      onPrimaryContainer: Color(0xFFE7E3FF),
+      secondaryContainer: Color(0xFF00504D),
+      onSecondaryContainer: Color(0xFFD5F6F2),
+      tertiary: Color(0xFFFFB1C8),
+      onTertiary: Color(0xFF5E1135),
+      tertiaryContainer: Color(0xFF83284C),
+      onTertiaryContainer: Color(0xFFFFD9E6),
+      surfaceContainerHighest: Color(0xFF2C2E3A),
+      surfaceContainerHigh: Color(0xFF22242F),
+      surfaceContainer: Color(0xFF1A1C27),
+      surfaceContainerLow: Color(0xFF161821),
+      surfaceContainerLowest: Color(0xFF0C0E15),
+      onSurfaceVariant: Color(0xFFC4C6D4),
+      outline: Color(0xFF7A7D90),
+      outlineVariant: Color(0xFF3B3E4E),
+      shadow: Color(0x66000000),
+      scrim: Color(0x80000000),
+      inverseSurface: Color(0xFFE6E6EE),
+      onInverseSurface: Color(0xFF12141C),
+      inversePrimary: Color(0xFF5B4DFF),
+    );
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.indigo,
-        brightness: Brightness.dark,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+      ),
+      textTheme: Typography.whiteMountainView.apply(
+        bodyColor: scheme.onSurface,
+        displayColor: scheme.onSurface,
+      ),
+      cardTheme: CardThemeData(
+        color: scheme.surfaceContainerLowest,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(28),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
+        indicatorColor: scheme.primaryContainer,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            size: 22,
+          );
+        }),
       ),
     );
   }

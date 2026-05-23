@@ -86,17 +86,14 @@ class SharedAppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Drawer(
       width: 320,
       shape: const RoundedRectangleBorder(),
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF8FAFF), Color(0xFFFCFAFF), Color(0xFFFFFCF8)],
-          ),
+        decoration: BoxDecoration(
+          color: scheme.surface,
         ),
         child: SafeArea(
           child: Column(
@@ -152,27 +149,27 @@ class SharedAppDrawer extends StatelessWidget {
                           14,
                           12,
                         ),
-                        backgroundColor: Colors.white.withValues(alpha: 0.82),
-                        collapsedBackgroundColor: Colors.white.withValues(
+                        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+                        collapsedBackgroundColor: scheme.surfaceContainerLowest.withValues(
                           alpha: 0.82,
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(22),
-                          side: const BorderSide(color: Color(0xFFE8EBF4)),
+                          side: BorderSide(color: scheme.outlineVariant),
                         ),
                         collapsedShape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(22),
-                          side: const BorderSide(color: Color(0xFFE8EBF4)),
+                          side: BorderSide(color: scheme.outlineVariant),
                         ),
-                        leading: const Icon(
+                        leading: Icon(
                           Icons.settings_rounded,
-                          color: Color(0xFF2563EB),
+                          color: scheme.primary,
                         ),
-                        title: const Text(
+                        title: Text(
                           'Settings',
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                          style: TextStyle(fontWeight: FontWeight.w800, color: scheme.onSurface),
                         ),
-                        subtitle: const Text('Folders, watermark, metadata'),
+                        subtitle: Text('Folders, watermark, metadata', style: TextStyle(color: scheme.onSurfaceVariant)),
                         children: [
                           _MiniDrawerTile(
                             title: 'Change output folder',
@@ -187,9 +184,9 @@ class SharedAppDrawer extends StatelessWidget {
                           SwitchListTile.adaptive(
                             contentPadding: EdgeInsets.zero,
                             value: keepExifData,
-                            activeThumbColor: const Color(0xFF2563EB),
-                            title: const Text('Keep EXIF data'),
-                            subtitle: const Text('Preserve original metadata'),
+                            activeTrackColor: scheme.primary,
+                            title: Text('Keep EXIF data', style: TextStyle(color: scheme.onSurface)),
+                            subtitle: Text('Preserve original metadata', style: TextStyle(color: scheme.onSurfaceVariant)),
                             onChanged: onKeepExifChanged,
                           ),
                           Align(
@@ -237,7 +234,7 @@ class SharedAppDrawer extends StatelessWidget {
                   child: Text(
                     'App version v1.0.0+1',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF667085),
+                      color: scheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -280,18 +277,19 @@ class _TopBarBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       bottom: false,
       child: Container(
         height: 66,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.94),
-          border: Border.all(color: const Color(0xFFE8EBF4)),
-          boxShadow: const [
+          color: scheme.surfaceContainerLow.withValues(alpha: 0.94),
+          border: Border.all(color: scheme.outlineVariant),
+          boxShadow: [
             BoxShadow(
-              color: Color(0x120F172A),
+              color: scheme.shadow,
               blurRadius: 18,
-              offset: Offset(0, 8),
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -326,8 +324,9 @@ class _DrawerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white.withValues(alpha: 0.82),
+      color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
@@ -352,16 +351,16 @@ class _DrawerTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF172033),
+                        color: scheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        color: Color(0xFF5B6474),
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
                         height: 1.35,
                       ),
                     ),
@@ -389,17 +388,18 @@ class _MiniDrawerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
-          color: Color(0xFF172033),
+          color: scheme.onSurface,
         ),
       ),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: const Icon(Icons.edit_outlined),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: scheme.onSurfaceVariant)),
+      trailing: Icon(Icons.edit_outlined, color: scheme.onSurfaceVariant),
       onTap: onTap,
     );
   }
@@ -420,6 +420,7 @@ class _GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -432,21 +433,21 @@ class _GlassIconButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             color: embedded
                 ? Colors.transparent
-                : Colors.white.withValues(alpha: 0.92),
+                : scheme.surfaceContainerLow.withValues(alpha: 0.92),
             border: embedded
                 ? null
-                : Border.all(color: const Color(0xFFE9E6F4)),
+                : Border.all(color: scheme.outlineVariant),
             boxShadow: embedded
                 ? null
-                : const [
+                : [
                     BoxShadow(
-                      color: Color(0x120F172A),
+                      color: scheme.shadow,
                       blurRadius: 18,
-                      offset: Offset(0, 8),
+                      offset: const Offset(0, 8),
                     ),
                   ],
           ),
-          child: Icon(icon, color: const Color(0xFF2A2F4F)),
+          child: Icon(icon, color: scheme.onSurface),
         ),
       ),
     );

@@ -23,11 +23,14 @@ enum _ResizeMode { dimensions, percentage, preset, bestFit }
 
 enum _EditorPanel { resize, crop, rotate }
 
+enum _PresetCategory { profile, banner }
+
 enum _CropAspectPreset {
   free('Free', null),
   square('1:1', 1),
   landscape('4:3', 4 / 3),
-  widescreen('16:9', 16 / 9);
+  widescreen('16:9', 16 / 9),
+  portrait('9:16', 9 / 16);
 
   const _CropAspectPreset(this.label, this.ratio);
 
@@ -36,6 +39,7 @@ enum _CropAspectPreset {
 }
 
 class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
+
   static const List<_PresetSize> _presetSizes = <_PresetSize>[
     _PresetSize('Instagram', 1080, 1080),
     _PresetSize('Story', 1080, 1920),
@@ -78,9 +82,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _lockAspectRatio = true;
   double _aspectRatio = 1;
   double _percentage = 100;
+  int _targetSizeKB = SocialPresets.targetFileSizeKB[2];
   int? _estimatedBytes;
   bool _isPicking = false;
   bool _isSyncingFields = false;
+  _PresetCategory _presetCategory = _PresetCategory.profile;
+  SocialPreset? _selectedSocialPreset;
   List<Size> _recentSizes = <Size>[
     const Size(1280, 960),
     const Size(1024, 768),
@@ -145,6 +152,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _mode = _ResizeMode.dimensions;
     _activePanel = _EditorPanel.resize;
     _cropPreset = _CropAspectPreset.free;
+    _presetCategory = _PresetCategory.profile;
+    _selectedSocialPreset = null;
     _percentage = 100;
     _rotationPreviewDegrees = 0;
     _widthController.text = width.toString();
@@ -169,7 +178,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   void _setMode(_ResizeMode mode) {
-    setState(() => _mode = mode);
+    setState(() {
+      _mode = mode;
+      if (mode != _ResizeMode.preset) {
+        _selectedSocialPreset = null;
+      }
+    });
     _refreshEstimate();
   }
 
@@ -279,7 +293,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _bestFitWidthController.text = size.width.round().toString();
     _bestFitHeightController.text = size.height.round().toString();
     _isSyncingFields = false;
-    setState(() => _mode = _ResizeMode.preset);
+    setState(() {
+      _mode = _ResizeMode.preset;
+      _selectedSocialPreset = null;
+    });
     _refreshEstimate();
   }
 
@@ -288,7 +305,24 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _widthController.text = size.width.round().toString();
     _heightController.text = size.height.round().toString();
     _isSyncingFields = false;
-    setState(() => _mode = _ResizeMode.dimensions);
+    setState(() {
+      _mode = _ResizeMode.dimensions;
+      _selectedSocialPreset = null;
+    });
+    _refreshEstimate();
+  }
+
+  void _selectSocialPreset(SocialPreset preset) {
+    _isSyncingFields = true;
+    _widthController.text = preset.width.toString();
+    _heightController.text = preset.height.toString();
+    _bestFitWidthController.text = preset.width.toString();
+    _bestFitHeightController.text = preset.height.toString();
+    _isSyncingFields = false;
+    setState(() {
+      _mode = _ResizeMode.preset;
+      _selectedSocialPreset = preset;
+    });
     _refreshEstimate();
   }
 
@@ -398,14 +432,23 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
     ref.read(imageEditProvider.notifier).setLoading(true);
 
-    final result = await ref
-        .read(imageEditProvider.notifier)
-        .generateResize(
-          width: target.width,
-          height: target.height,
-          format: _outputFormat,
-          quality: _quality.value,
-        );
+    final result = _selectedSocialPreset != null && _mode == _ResizeMode.preset
+        ? await ref
+              .read(imageEditProvider.notifier)
+              .resizeToPreset(
+                _selectedSocialPreset!.width,
+                _selectedSocialPreset!.height,
+                _outputFormat,
+                _quality.value,
+              )
+        : await ref
+              .read(imageEditProvider.notifier)
+              .generateResize(
+                width: target.width,
+                height: target.height,
+                format: _outputFormat,
+                quality: _quality.value,
+              );
 
     if (!mounted) return;
 
@@ -479,6 +522,88 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
     setState(() => _rotationPreviewDegrees = 0);
     _showSnack('Rotation applied.');
+    InterstitialTracker.instance.trackAction();
+  }
+
+  Future<void> _flipImage({
+    required bool horizontal,
+    required bool vertical,
+    required String label,
+  }) async {
+    final state = ref.read(imageEditProvider);
+    if (!state.hasImage) {
+      _showSnack('Pick an image first.');
+      return;
+    }
+
+    ref.read(imageEditProvider.notifier).setLoading(true);
+    final result = await ref
+        .read(imageEditProvider.notifier)
+        .generateFlip(
+          horizontal,
+          vertical,
+          format: _outputFormat,
+          quality: _quality.value,
+        );
+
+    if (!mounted) return;
+
+    if (result == null) {
+      ref.read(imageEditProvider.notifier).setLoading(false);
+      _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Flip failed.');
+      return;
+    }
+
+    final fileName = _buildOutputFileName(
+      baseName: state.fileName ?? 'image',
+      format: _outputFormat,
+    );
+
+    ref
+        .read(imageEditProvider.notifier)
+        .replaceWithResult(result: result, fileName: fileName);
+
+    _syncInputsFromImage(result.width, result.height);
+    _showSnack('$label applied.');
+    InterstitialTracker.instance.trackAction();
+  }
+
+  Future<void> _compressImage() async {
+    final state = ref.read(imageEditProvider);
+    if (!state.hasImage) {
+      _showSnack('Pick an image first.');
+      return;
+    }
+
+    final targetBytes = _targetSizeKB * 1024;
+    final result = await ref
+        .read(imageEditProvider.notifier)
+        .compressToTargetSize(targetBytes, _outputFormat);
+
+    if (!mounted) return;
+
+    if (result == null) {
+      _showSnack(
+        ref.read(imageEditProvider).errorMessage ?? 'Compression failed.',
+      );
+      return;
+    }
+
+    final fileName = _buildOutputFileName(
+      baseName: state.fileName ?? 'image',
+      format: _outputFormat,
+    );
+    ref
+        .read(imageEditProvider.notifier)
+        .replaceWithResult(result: result, fileName: fileName);
+    _syncInputsFromImage(result.width, result.height);
+    if (result.fileSize > targetBytes) {
+      _showSnack(
+        'Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}',
+      );
+    } else {
+      _showSnack('Compressed to ${_formatFileSize(result.fileSize)}.');
+    }
     InterstitialTracker.instance.trackAction();
   }
 
@@ -655,7 +780,14 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ref.read(imageEditProvider.notifier).setLoading(true);
     final result = await ref
         .read(imageEditProvider.notifier)
-        .generateCrop(x: x, y: y, width: width, height: height);
+        .generateCrop(
+          x: x,
+          y: y,
+          width: width,
+          height: height,
+          format: _outputFormat,
+          quality: _quality.value,
+        );
 
     if (!mounted) return;
 
@@ -854,9 +986,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final state = ref.watch(imageEditProvider);
     final target = state.hasImage ? _resolveTargetSize(state) : null;
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F7FF),
+      backgroundColor: theme.brightness == Brightness.dark ? scheme.surface : const Color(0xFFF9F7FF),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         centerTitle: true,
@@ -875,6 +1008,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.4,
+                color: scheme.onSurface,
               ),
             ),
             Text(
@@ -901,12 +1035,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           child: state.isLoading
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    14,
-                    8,
-                    14,
-                    state.hasImage ? 120 : 20,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -927,18 +1056,19 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   Widget _buildImageCard(ImageEditState state) {
+    final scheme = Theme.of(context).colorScheme;
     final hasImage = state.hasImage;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
+        color: scheme.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFEDE9FF)),
-        boxShadow: const [
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x120C1234),
+            color: scheme.shadow,
             blurRadius: 30,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -968,74 +1098,71 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             )
           : Column(
               children: [
-                Container(
-                  height: 220,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFF3EEFF), Color(0xFFE8F4FF)],
-                    ),
-                    border: Border.all(
-                      color: const Color(0xFFD8D4F0),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.4),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(
-                          Icons.image_search_rounded,
-                          size: 52,
-                          color: Color(0xFF8B1BFF),
-                        ),
-                        SizedBox(height: 14),
-                        Text(
-                          'Select an image to start editing',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF30334A),
-                            fontSize: 17,
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Supports JPG, PNG, WebP, GIF, BMP, HEIC & more',
-                          style: TextStyle(
-                            color: Color(0xFF7A7F9A),
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.photo_library_rounded,
+                      size: 60,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
+                const SizedBox(height: 24),
+                Text(
+                  'Resize Image',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                Text(
+                  'Pick an image from your gallery to resize, crop, rotate, or compress it',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: _pickImage,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF8B1BFF),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                    icon: const Icon(Icons.upload_rounded),
-                    label: Text(_isPicking ? 'Opening…' : 'Choose Image'),
+                    icon: const Icon(Icons.add_photo_alternate_rounded),
+                    label: const Text('Choose Image'),
                   ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Supports JPG, PNG, WebP, GIF, BMP, HEIC & more',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontStyle: FontStyle.italic,
+                      ),
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
@@ -1055,15 +1182,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   Widget _buildResizeEditor(ImageEditState state, _ResizeTarget? target) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Select Resize Mode',
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 18,
-            color: Color(0xFF1D2033),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 14),
@@ -1161,9 +1289,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFF6F8FF),
+            color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE3E9FF)),
+            border: Border.all(color: scheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -1171,59 +1299,59 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: scheme.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.insert_chart_outlined_rounded,
-                  color: Color(0xFF6A39F9),
+                  color: scheme.primary,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Estimated File Size',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF3A3F5B),
-                      ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Estimated File Size',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatEstimateComparison(state),
+                          style: TextStyle(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatEstimateComparison(state),
-                      style: const TextStyle(
-                        color: Color(0xFF5B63C7),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
         const SizedBox(height: 22),
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'Recent Sizes',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
-                  color: Color(0xFF1D2033),
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ),
             TextButton(
               onPressed: () => setState(() => _recentSizes = <Size>[]),
-              child: const Text(
+              child: Text(
                 'Clear All',
                 style: TextStyle(
-                  color: Color(0xFF8B1BFF),
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1250,6 +1378,136 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 24),
+        Text(
+          'Social Media Presets',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<_PresetCategory>(
+          segments: const <ButtonSegment<_PresetCategory>>[
+            ButtonSegment<_PresetCategory>(
+              value: _PresetCategory.profile,
+              icon: Icon(Icons.person_rounded),
+              label: Text('Profile'),
+            ),
+            ButtonSegment<_PresetCategory>(
+              value: _PresetCategory.banner,
+              icon: Icon(Icons.photo_size_select_large_rounded),
+              label: Text('Banner'),
+            ),
+          ],
+          selected: <_PresetCategory>{_presetCategory},
+          onSelectionChanged: (selection) {
+            setState(() {
+              _presetCategory = selection.first;
+              _selectedSocialPreset = null;
+            });
+          },
+        ),
+        const SizedBox(height: 12),
+        ..._buildSocialPresetTiles(),
+        const SizedBox(height: 24),
+        Text(
+          'Smart Compression',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Target a final file size and compress without leaving the editor.',
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Target size',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _targetSizeKB >= 1000
+                            ? '${(_targetSizeKB / 1000).toStringAsFixed(1)} MB'
+                            : '$_targetSizeKB KB',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    min: 0,
+                    max: (SocialPresets.targetFileSizeKB.length - 1).toDouble(),
+                    divisions: SocialPresets.targetFileSizeKB.length - 1,
+                    value: SocialPresets.targetFileSizeKB
+                        .indexOf(_targetSizeKB)
+                        .toDouble(),
+                    activeColor: scheme.primary,
+                    onChanged: (value) {
+                      setState(() {
+                        _targetSizeKB =
+                            SocialPresets.targetFileSizeKB[value.round()];
+                      });
+                    },
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: SocialPresets.targetFileSizeKB
+                        .map(
+                          (size) => Text(
+                            size >= 1000 ? '${size ~/ 1000}MB' : '${size}KB',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _compressImage,
+                  icon: const Icon(Icons.compress_rounded),
+                  label: const Text('Apply Compression'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: scheme.outline),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1264,15 +1522,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Text(
+            Text(
               'Crop Image',
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 18,
-                color: Color(0xFF1D2033),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             TextButton.icon(
@@ -1280,16 +1540,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('Reset'),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF8B1BFF),
+                foregroundColor: Theme.of(context).colorScheme.primary,
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Drag the handles on the image to adjust the crop area, or enter values below.',
-          style: TextStyle(color: Color(0xFF6F748C), height: 1.35),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -1309,13 +1569,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFF6F8FF), Color(0xFFFAFCFF)],
-            ),
+            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE3E9FF)),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -1362,25 +1618,25 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFF6F8FF),
+            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE3E9FF)),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.info_outline_rounded,
                     size: 16,
-                    color: Color(0xFF7A3FF8),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'Image: ${state.width} × ${state.height} px',
-                    style: const TextStyle(
-                      color: Color(0xFF4A4F69),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1389,16 +1645,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.aspect_ratio_rounded,
                     size: 16,
-                    color: Color(0xFF7A3FF8),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     'Aspect ratio: $aspectText',
-                    style: const TextStyle(
-                      color: Color(0xFF5B63C7),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1419,18 +1675,18 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Rotate Preview',
           style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 18,
-            color: Color(0xFF1D2033),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Preview updates live while you rotate. Apply only when the angle looks right.',
-          style: TextStyle(color: Color(0xFF6F748C), height: 1.35),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35),
         ),
         const SizedBox(height: 18),
         Wrap(
@@ -1443,6 +1699,29 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             _RotateStepChip(label: '+90°', onTap: () => _rotatePreviewBy(90)),
           ],
         ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            _RotateStepChip(
+              label: 'Flip Horizontal',
+              onTap: () => _flipImage(
+                horizontal: true,
+                vertical: false,
+                label: 'Horizontal flip',
+              ),
+            ),
+            _RotateStepChip(
+              label: 'Flip Vertical',
+              onTap: () => _flipImage(
+                horizontal: false,
+                vertical: true,
+                label: 'Vertical flip',
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 18),
         Row(
           children: [
@@ -1452,7 +1731,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 max: 180,
                 divisions: 360,
                 value: signedAngle,
-                activeColor: const Color(0xFF8B1BFF),
+                activeColor: Theme.of(context).colorScheme.primary,
                 onChanged: (value) {
                   setState(() {
                     _rotationPreviewDegrees = _normalizeDegrees(value);
@@ -1465,8 +1744,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               child: Text(
                 '${signedAngle.round()}°',
                 textAlign: TextAlign.end,
-                style: const TextStyle(
-                  color: Color(0xFF5B63C7),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -1478,16 +1757,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFF6F8FF),
+            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE3E9FF)),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Text(
             _rotationPreviewDegrees == 0
                 ? 'Preview is aligned to the original image.'
                 : 'Rotation ready: ${_normalizedRotationDegrees.toStringAsFixed(1)}°',
-            style: const TextStyle(
-              color: Color(0xFF4A4F69),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1503,7 +1782,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             label: const Text('Reset Preview'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              side: const BorderSide(color: Color(0xFFD9DDF5)),
+              side: BorderSide(color: Theme.of(context).colorScheme.outline),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),
@@ -1522,10 +1801,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           state.fileName ?? 'Image',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w800,
             fontSize: 16,
-            color: Color(0xFF1D2033),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 6),
@@ -1548,13 +1827,13 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFFF1EEFF),
+            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             _outputFormat.label,
-            style: const TextStyle(
-              color: Color(0xFF6A39F9),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
               fontWeight: FontWeight.w700,
               fontSize: 11,
             ),
@@ -1566,99 +1845,152 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   Widget _buildBottomActionBar(ImageEditState state) {
     if (!state.hasImage) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-          child: FilledButton.icon(
-            onPressed: _pickImage,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF8B1BFF),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-            ),
-            icon: const Icon(Icons.add_photo_alternate_rounded),
-            label: Text(_isPicking ? 'Opening…' : 'Add Image'),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
+    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFE9E5FF))),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLowest,
+          border: Border(top: BorderSide(color: scheme.outlineVariant)),
           boxShadow: [
             BoxShadow(
-              color: Color(0x140C1234),
+              color: scheme.shadow,
               blurRadius: 18,
-              offset: Offset(0, -4),
+              offset: const Offset(0, -4),
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Add'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  side: const BorderSide(color: Color(0xFFD9DDF5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final vertical = constraints.maxWidth < 420;
+            final buttons = <Widget>[
+              if (vertical)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _pickImage,
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Add'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      side: BorderSide(color: scheme.outline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickImage,
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Add'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      side: BorderSide(color: scheme.outline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              flex: 2,
-              child: FilledButton.icon(
-                onPressed: _applyActiveTool,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B1BFF),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+              if (vertical) const SizedBox(height: 10) else const SizedBox(width: 10),
+              if (vertical)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _applyActiveTool,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.primary,
+                      foregroundColor: scheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: Icon(switch (_activePanel) {
+                      _EditorPanel.resize => Icons.auto_awesome_rounded,
+                      _EditorPanel.crop => Icons.crop_rounded,
+                      _EditorPanel.rotate => Icons.rotate_right_rounded,
+                    }),
+                    label: Text(
+                      _applyButtonLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: _applyActiveTool,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.primary,
+                      foregroundColor: scheme.onPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: Icon(switch (_activePanel) {
+                      _EditorPanel.resize => Icons.auto_awesome_rounded,
+                      _EditorPanel.crop => Icons.crop_rounded,
+                      _EditorPanel.rotate => Icons.rotate_right_rounded,
+                    }),
+                    label: Text(
+                      _applyButtonLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
-                icon: Icon(switch (_activePanel) {
-                  _EditorPanel.resize => Icons.auto_awesome_rounded,
-                  _EditorPanel.crop => Icons.crop_rounded,
-                  _EditorPanel.rotate => Icons.rotate_right_rounded,
-                }),
-                label: Text(
-                  _applyButtonLabel,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _saveCurrentImage,
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1F9D6A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+              if (vertical) const SizedBox(height: 10) else const SizedBox(width: 10),
+              if (vertical)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saveCurrentImage,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.secondary,
+                      foregroundColor: scheme.onSecondary,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.save_alt_rounded),
+                    label: const Text('Save'),
+                  ),
+                )
+              else
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _saveCurrentImage,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.secondary,
+                      foregroundColor: scheme.onSecondary,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.save_alt_rounded),
+                    label: const Text('Save'),
                   ),
                 ),
-                icon: const Icon(Icons.save_alt_rounded),
-                label: const Text('Save'),
-              ),
-            ),
-          ],
+            ];
+
+            return vertical
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: buttons,
+                  )
+                : Row(children: buttons);
+          },
         ),
       ),
     );
@@ -1699,48 +2031,98 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                switch (_mode) {
-                  _ResizeMode.dimensions => 'Dimensions (px)',
-                  _ResizeMode.percentage => 'Resize Percentage',
-                  _ResizeMode.preset => 'Preset Sizes',
-                  _ResizeMode.bestFit => 'Best Fit Bounds',
-                },
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: Color(0xFF1D2033),
-                ),
-              ),
-            ),
-            Row(
-              children: [
-                const Text(
-                  'Lock Aspect Ratio',
-                  style: TextStyle(
-                    color: Color(0xFF8B1BFF),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 18,
-                  color: Color(0xFF8B1BFF),
-                ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: _lockAspectRatio,
-                  onChanged: _toggleAspectLock,
-                  activeThumbColor: Colors.white,
-                  activeTrackColor: const Color(0xFF8B1BFF),
-                ),
-              ],
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 520;
+            return compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        switch (_mode) {
+                          _ResizeMode.dimensions => 'Dimensions (px)',
+                          _ResizeMode.percentage => 'Resize Percentage',
+                          _ResizeMode.preset => 'Preset Sizes',
+                          _ResizeMode.bestFit => 'Best Fit Bounds',
+                        },
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          Text(
+                            'Lock Aspect Ratio',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          Switch(
+                            value: _lockAspectRatio,
+                            onChanged: _toggleAspectLock,
+                            activeThumbColor: Colors.white,
+                            activeTrackColor: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          switch (_mode) {
+                            _ResizeMode.dimensions => 'Dimensions (px)',
+                            _ResizeMode.percentage => 'Resize Percentage',
+                            _ResizeMode.preset => 'Preset Sizes',
+                            _ResizeMode.bestFit => 'Best Fit Bounds',
+                          },
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            'Lock Aspect Ratio',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Switch(
+                            value: _lockAspectRatio,
+                            onChanged: _toggleAspectLock,
+                            activeThumbColor: Colors.white,
+                            activeTrackColor: Theme.of(context).colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+          },
         ),
         const SizedBox(height: 12),
         switch (_mode) {
@@ -1752,8 +2134,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         const SizedBox(height: 10),
         Text(
           'Aspect Ratio: ${_aspectRatioLabel(target)}',
-          style: const TextStyle(
-            color: Color(0xFF7A3FF8),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
             fontWeight: FontWeight.w800,
           ),
         ),
@@ -1777,12 +2159,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F0FF),
+              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.link_rounded,
-              color: Color(0xFF8B1BFF),
+              color: Theme.of(context).colorScheme.primary,
               size: 20,
             ),
           ),
@@ -1806,8 +2188,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE9E5FF)),
-        color: Colors.white,
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
       ),
       child: Column(
         children: [
@@ -1824,11 +2206,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
+              Text(
                 '%',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF30334A),
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
             ],
@@ -1838,15 +2220,15 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             max: 200,
             divisions: 19,
             value: _percentage.clamp(10, 200),
-            activeColor: const Color(0xFF8B1BFF),
+            activeColor: Theme.of(context).colorScheme.primary,
             onChanged: _handlePercentageSlider,
           ),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               'Result: $width × $height px',
-              style: const TextStyle(
-                color: Color(0xFF6F748C),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1870,25 +2252,25 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               width: 146,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE8E4FF)),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     preset.label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF2D3148),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     '${preset.width} × ${preset.height}',
-                    style: const TextStyle(
-                      color: Color(0xFF6F748C),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1898,6 +2280,70 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ),
       ],
     );
+  }
+
+  List<Widget> _buildSocialPresetTiles() {
+    final presets = _presetCategory == _PresetCategory.profile
+        ? SocialPresets.profilePresets
+        : SocialPresets.bannerPresets;
+
+    return presets
+        .map(
+          (preset) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _selectSocialPreset(preset),
+              child: Ink(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _selectedSocialPreset?.name == preset.name
+                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                      : Theme.of(context).colorScheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _selectedSocialPreset?.name == preset.name
+                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                        : Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            preset.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${preset.width} × ${preset.height}'
+                            '${preset.description == null ? '' : ' • ${preset.description}'}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_selectedSocialPreset?.name == preset.name)
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        )
+        .toList(growable: false);
   }
 
   Widget _buildBestFitInputs(ImageEditState state) {
@@ -1930,8 +2376,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             target == null
                 ? 'Enter bounds to fit the image.'
                 : 'Output will fit inside ${target.width} × ${target.height} px.',
-            style: const TextStyle(
-              color: Color(0xFF6F748C),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1941,37 +2387,39 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   BoxDecoration _panelDecoration() {
+    final scheme = Theme.of(context).colorScheme;
     return BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.96),
+      color: scheme.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: const Color(0xFFEDE9FF)),
-      boxShadow: const [
+      border: Border.all(color: scheme.outlineVariant),
+      boxShadow: [
         BoxShadow(
-          color: Color(0x120C1234),
+          color: scheme.shadow,
           blurRadius: 30,
-          offset: Offset(0, 12),
+          offset: const Offset(0, 12),
         ),
       ],
     );
   }
 
   InputDecoration _fieldDecoration(String label) {
+    final scheme = Theme.of(context).colorScheme;
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: const Color(0xFFFDFDFF),
+      fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+        borderSide: BorderSide(color: scheme.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+        borderSide: BorderSide(color: scheme.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF8B1BFF), width: 1.4),
+        borderSide: BorderSide(color: scheme.primary, width: 1.4),
       ),
     );
   }
@@ -2007,8 +2455,9 @@ class _CircleActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white.withValues(alpha: 0.92),
+      color: scheme.surfaceContainerLowest.withValues(alpha: 0.92),
       shape: const CircleBorder(),
       elevation: 0,
       child: InkWell(
@@ -2017,7 +2466,7 @@ class _CircleActionButton extends StatelessWidget {
         child: SizedBox(
           width: 42,
           height: 42,
-          child: Icon(icon, color: const Color(0xFF3D4159)),
+          child: Icon(icon, color: scheme.onSurfaceVariant),
         ),
       ),
     );
@@ -2041,28 +2490,33 @@ class _ModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Ink(
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF7F3FF) : Colors.white,
+          color: selected
+              ? scheme.primaryContainer.withValues(alpha: isDark ? 0.55 : 0.3)
+              : scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? const Color(0xFF8B1BFF) : const Color(0xFFE9E5FF),
+            color: selected ? scheme.primary : scheme.outlineVariant,
             width: selected ? 1.5 : 1,
           ),
         ),
         child: Stack(
           children: [
             if (selected)
-              const Positioned(
+              Positioned(
                 top: 8,
                 right: 8,
                 child: CircleAvatar(
                   radius: 10,
-                  backgroundColor: Color(0xFF8B1BFF),
-                  child: Icon(Icons.check, size: 13, color: Colors.white),
+                  backgroundColor: scheme.primary,
+                  child: const Icon(Icons.check, size: 13, color: Colors.white),
                 ),
               ),
             Padding(
@@ -2074,24 +2528,24 @@ class _ModeCard extends StatelessWidget {
                     icon,
                     size: 30,
                     color: selected
-                        ? const Color(0xFF8B1BFF)
-                        : const Color(0xFF6471FF),
+                        ? scheme.primary
+                        : scheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 12),
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF252A40),
+                      color: scheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     subtitle,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFF7B8096),
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
                       height: 1.35,
                     ),
                   ),
@@ -2118,6 +2572,7 @@ class _DimensionField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
@@ -2126,22 +2581,22 @@ class _DimensionField extends StatelessWidget {
         labelText: label,
         suffixText: 'px',
         filled: true,
-        fillColor: const Color(0xFFFDFDFF),
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+          borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+          borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFF8B1BFF), width: 1.4),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
         ),
       ),
     );
@@ -2163,19 +2618,20 @@ class _DropdownField<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
         filled: true,
-        fillColor: const Color(0xFFFDFDFF),
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+          borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Color(0xFFE5E8F5)),
+          borderSide: BorderSide(color: scheme.outlineVariant),
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -2203,29 +2659,30 @@ class _RecentSizeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF1E6FF) : Colors.white,
+          color: selected ? scheme.primaryContainer.withValues(alpha: 0.3) : scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? const Color(0xFFD9B7FF) : const Color(0xFFE8EAF3),
+            color: selected ? scheme.primary.withValues(alpha: 0.5) : scheme.outlineVariant,
           ),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
-              color: Color(0x0E0F172A),
+              color: scheme.shadow,
               blurRadius: 12,
-              offset: Offset(0, 5),
+              offset: const Offset(0, 5),
             ),
           ],
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? const Color(0xFF8B1BFF) : const Color(0xFF31364F),
+            color: selected ? scheme.primary : scheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -2249,8 +2706,9 @@ class _PreviewToolButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: selected ? const Color(0xFF8B1BFF) : const Color(0xFFF4F0FF),
+      color: selected ? scheme.primary : scheme.primaryContainer.withValues(alpha: 0.4),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -2263,13 +2721,13 @@ class _PreviewToolButton extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: selected ? Colors.white : const Color(0xFF7A54F8),
+                color: selected ? scheme.onPrimary : scheme.primary,
               ),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
-                  color: selected ? Colors.white : const Color(0xFF3A3F5B),
+                  color: selected ? scheme.onPrimary : scheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2289,15 +2747,16 @@ class _MetaPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: const Color(0xFF70758C)),
+        Icon(icon, size: 14, color: scheme.onSurfaceVariant),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF70758C),
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -2315,20 +2774,21 @@ class _RotateStepChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE8EAF3)),
+          border: Border.all(color: scheme.outlineVariant),
         ),
         child: Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF31364F),
+          style: TextStyle(
+            color: scheme.onSurface,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -2344,18 +2804,19 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFECEB),
+        color: scheme.errorContainer,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFD3D0)),
+        border: Border.all(color: scheme.errorContainer),
       ),
       child: Text(
         message,
-        style: const TextStyle(
-          color: Color(0xFF9C2D23),
+        style: TextStyle(
+          color: scheme.onErrorContainer,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -2403,6 +2864,7 @@ class _InteractiveImagePreview extends StatefulWidget {
 }
 
 class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
+  late MemoryImage _memoryImage;
   late int _cropX;
   late int _cropY;
   late int _cropWidth;
@@ -2420,6 +2882,9 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
   @override
   void didUpdateWidget(_InteractiveImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.imageBytes, widget.imageBytes)) {
+      _memoryImage = MemoryImage(widget.imageBytes);
+    }
     if (_draggingHandle != null) return;
     if (oldWidget.cropX != widget.cropX ||
         oldWidget.cropY != widget.cropY ||
@@ -2437,6 +2902,7 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
   @override
   void initState() {
     super.initState();
+    _memoryImage = MemoryImage(widget.imageBytes);
     _cropX = widget.cropX;
     _cropY = widget.cropY;
     _cropWidth = widget.cropWidth;
@@ -2758,90 +3224,94 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
           child: SizedBox(
             width: previewWidth,
             height: previewHeight,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (normalizedRotation == 0)
-                  SizedBox(
-                    width: maxWidth,
-                    height: basePreviewHeight,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
+            child: InteractiveViewer(
+              panEnabled: widget.activePanel != _EditorPanel.crop,
+              scaleEnabled: widget.activePanel != _EditorPanel.crop,
+              minScale: 0.75,
+              maxScale: 4,
+              clipBehavior: Clip.none,
+              child: RepaintBoundary(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (normalizedRotation == 0)
+                      SizedBox(
+                        width: maxWidth,
+                        height: basePreviewHeight,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: imageDisplayWidth,
+                              height: imageDisplayHeight,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image(
+                                    image: _memoryImage,
+                                    fit: BoxFit.fill,
+                                    gaplessPlayback: true,
+                                    filterQuality: FilterQuality.low,
+                                  ),
+                                  if (widget.activePanel == _EditorPanel.crop)
+                                    _InteractiveCropOverlay(
+                                      cropX: _cropX,
+                                      cropY: _cropY,
+                                      cropWidth: _cropWidth,
+                                      cropHeight: _cropHeight,
+                                      imageWidth: widget.imageWidth,
+                                      imageHeight: widget.imageHeight,
+                                      onPanStart: _onPanStart,
+                                      onPanUpdate: _onPanUpdate,
+                                      onPanEnd: _onPanEnd,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Transform.rotate(
+                        angle: radians,
+                        child: SizedBox(
                           width: imageDisplayWidth,
                           height: imageDisplayHeight,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.memory(
-                                widget.imageBytes,
-                                fit: BoxFit.fill,
-                                gaplessPlayback: true,
-                                filterQuality: FilterQuality.medium,
-                              ),
-                              if (widget.activePanel == _EditorPanel.crop)
-                                _InteractiveCropOverlay(
-                                  cropX: _cropX,
-                                  cropY: _cropY,
-                                  cropWidth: _cropWidth,
-                                  cropHeight: _cropHeight,
-                                  imageWidth: widget.imageWidth,
-                                  imageHeight: widget.imageHeight,
-                                  onPanStart: _onPanStart,
-                                  onPanUpdate: _onPanUpdate,
-                                  onPanEnd: _onPanEnd,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  Transform.rotate(
-                    angle: radians,
-                    child: SizedBox(
-                      width: imageDisplayWidth,
-                      height: imageDisplayHeight,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Image.memory(
-                            widget.imageBytes,
+                          child: Image(
+                            image: _memoryImage,
                             fit: BoxFit.fill,
                             gaplessPlayback: true,
-                            filterQuality: FilterQuality.medium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (widget.activePanel == _EditorPanel.crop &&
-                    normalizedRotation != 0)
-                  Positioned(
-                    bottom: 12,
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Reset rotation to edit crop handles',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
+                            filterQuality: FilterQuality.low,
                           ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                    if (widget.activePanel == _EditorPanel.crop &&
+                        normalizedRotation != 0)
+                      Positioned(
+                        bottom: 12,
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'Reset rotation to edit crop handles',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         );

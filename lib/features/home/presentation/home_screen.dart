@@ -193,6 +193,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final history = ref.watch(editHistoryProvider);
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 900;
@@ -227,39 +230,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       appBar: SharedAppBar(drawerKey: _scaffoldKey),
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFDF7FF), Color(0xFFF9FBFF), Color(0xFFFFFCF8)],
+            colors: isDark
+                ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
+                : const [Color(0xFFFDF7FF), Color(0xFFF9FBFF), Color(0xFFFFFCF8)],
           ),
         ),
         child: Stack(
           children: [
-            const Positioned(
-              top: -80,
-              left: -40,
-              child: _AmbientOrb(
-                size: 220,
-                colors: [Color(0xFFC9D9FF), Color(0x00C9D9FF)],
+            if (!isDark) ...[
+              const Positioned(
+                top: -80,
+                left: -40,
+                child: _AmbientOrb(
+                  size: 220,
+                  colors: [Color(0xFFC9D9FF), Color(0x00C9D9FF)],
+                ),
               ),
-            ),
-            const Positioned(
-              top: 220,
-              right: -70,
-              child: _AmbientOrb(
-                size: 250,
-                colors: [Color(0xFFFFD7F4), Color(0x00FFD7F4)],
+              const Positioned(
+                top: 220,
+                right: -70,
+                child: _AmbientOrb(
+                  size: 250,
+                  colors: [Color(0xFFFFD7F4), Color(0x00FFD7F4)],
+                ),
               ),
-            ),
-            const Positioned(
-              bottom: 120,
-              left: -60,
-              child: _AmbientOrb(
-                size: 210,
-                colors: [Color(0xFFD9FFD9), Color(0x00D9FFD9)],
+              const Positioned(
+                bottom: 120,
+                left: -60,
+                child: _AmbientOrb(
+                  size: 210,
+                  colors: [Color(0xFFD9FFD9), Color(0x00D9FFD9)],
+                ),
               ),
-            ),
+            ],
             CustomScrollView(
               physics: const BouncingScrollPhysics(),
               slivers: [
@@ -449,8 +456,10 @@ class _QuickToolCardState extends State<_QuickToolCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final data = widget.data;
     final isWide = MediaQuery.sizeOf(context).width >= 900;
+    final isDark = theme.brightness == Brightness.dark;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -472,10 +481,10 @@ class _QuickToolCardState extends State<_QuickToolCard> {
               end: Alignment.bottomRight,
               colors: data.gradient,
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
             boxShadow: [
               BoxShadow(
-                color: data.glow.withValues(alpha: 0.65),
+                color: data.glow.withValues(alpha: isDark ? 0.15 : 0.65),
                 blurRadius: 36,
                 offset: const Offset(0, 16),
               ),
@@ -495,6 +504,15 @@ class _QuickToolCardState extends State<_QuickToolCard> {
                   ),
                 ),
               ),
+              if (isDark)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      color: Colors.black.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -508,7 +526,7 @@ class _QuickToolCardState extends State<_QuickToolCard> {
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
-                        color: const Color(0xFF172033),
+                        color: scheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -518,7 +536,7 @@ class _QuickToolCardState extends State<_QuickToolCard> {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF526077),
+                        color: scheme.onSurfaceVariant,
                         height: 1.35,
                       ),
                     ),
@@ -546,7 +564,7 @@ class _QuickToolArtwork extends StatelessWidget {
       height: 84,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
             color: data.accent.withValues(alpha: 0.12),
@@ -589,17 +607,18 @@ class _PdfShortcutRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        color: Colors.white.withValues(alpha: 0.82),
-        border: Border.all(color: const Color(0xFFE9E7F2)),
-        boxShadow: const [
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x110F172A),
+            color: scheme.shadow,
             blurRadius: 24,
-            offset: Offset(0, 12),
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -621,6 +640,8 @@ class _PdfShortcutChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return InkWell(
       borderRadius: BorderRadius.circular(18),
       onTap: () {
@@ -631,7 +652,7 @@ class _PdfShortcutChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          color: data.tint.withValues(alpha: 0.08),
+          color: data.tint.withValues(alpha: isDark ? 0.22 : 0.08),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -641,7 +662,7 @@ class _PdfShortcutChip extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: data.tint.withValues(alpha: 0.14),
+                color: data.tint.withValues(alpha: isDark ? 0.35 : 0.14),
               ),
               child: Icon(data.icon, size: 18, color: data.tint),
             ),
@@ -665,20 +686,21 @@ class _HistoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final subtitleColor = const Color(0xFF6B7280);
+    final scheme = theme.colorScheme;
+    final subtitleColor = scheme.onSurfaceVariant;
     final timeParts = _historyTimeParts(item.editedAt);
 
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white.withValues(alpha: 0.84),
-        border: Border.all(color: const Color(0xFFEDEAF6)),
-        boxShadow: const [
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
+        border: Border.all(color: scheme.outlineVariant),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0F101828),
+            color: scheme.shadow,
             blurRadius: 18,
-            offset: Offset(0, 10),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -810,14 +832,15 @@ class _EmptyHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        color: Colors.white.withValues(alpha: 0.82),
-        border: Border.all(color: const Color(0xFFEDEAF6)),
+        color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -837,7 +860,7 @@ class _EmptyHistoryCard extends StatelessWidget {
             child: Text(
               'Recent edits will appear here after you start using the tools.',
               style: theme.textTheme.bodyLarge?.copyWith(
-                color: const Color(0xFF667085),
+                color: scheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),
@@ -862,6 +885,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Row(
       children: [
@@ -886,15 +910,15 @@ class _SectionHeader extends StatelessWidget {
                   Text(
                     actionLabel!,
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF8D3DFF),
+                      color: scheme.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 18,
-                    color: Color(0xFF8D3DFF),
+                    color: scheme.primary,
                   ),
                 ],
               ),
@@ -913,6 +937,7 @@ class _ActionCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
@@ -921,10 +946,10 @@ class _ActionCircleButton extends StatelessWidget {
         height: 42,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFECE9F6)),
+          color: scheme.surfaceContainerLowest,
+          border: Border.all(color: scheme.outlineVariant),
         ),
-        child: Icon(icon, color: const Color(0xFF6B4EFF)),
+        child: Icon(icon, color: scheme.primary),
       ),
     );
   }
