@@ -17,7 +17,6 @@ class PdfCompressScreen extends ConsumerStatefulWidget {
 }
 
 class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
-  bool _showSettings = false;
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
@@ -39,39 +38,26 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final state = ref.read(pdfCompressProvider);
-    if (state.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.errorMessage!),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-          ref.read(pdfCompressProvider.notifier).clearError();
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final state = ref.watch(pdfCompressProvider);
     final notifier = ref.read(pdfCompressProvider.notifier);
+
+    ref.listen(pdfCompressProvider, (previous, next) {
+      if (next.errorMessage != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.errorMessage!),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        ref.read(pdfCompressProvider.notifier).clearError();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Compress PDF'),
         actions: [
-          if (state.hasFile)
-            IconButton(
-              tooltip: _showSettings ? 'Hide Settings' : 'Show Settings',
-              onPressed: () => setState(() => _showSettings = !_showSettings),
-              icon: Icon(_showSettings ? Icons.settings : Icons.settings_outlined),
-            ),
           IconButton(
             tooltip: 'Clear',
             onPressed: state.hasFile || state.outputPath != null ? notifier.clear : null,
@@ -81,14 +67,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
       ),
       body: Column(
         children: [
-          if (_showSettings)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _CompressSettingsPanel(
-                state: state,
-                onLevelChanged: notifier.setCompressionLevel,
-              ),
-            ),
           Expanded(
             child: state.hasFile || state.outputPath != null
                 ? _buildContent(context, state, notifier)
@@ -166,6 +144,11 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _CompressionLevelCards(
+            selected: state.compressionLevel,
+            onLevelChanged: notifier.setCompressionLevel,
+          ),
+          const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -200,40 +183,16 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
                       if (state.selectedFileSize != null)
                         Text(
-                          PdfService.formatFileSize(state.selectedFileSize!),
+                          state.outputPath != null && state.outputFileSize != null
+                              ? '${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)}'
+                              : PdfService.formatFileSize(state.selectedFileSize!),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: state.outputPath != null ? FontWeight.w600 : null,
                           ),
                         ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.compress_rounded,
-                              size: 14,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              state.compressionLevel.label,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -469,92 +428,142 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
   }
 }
 
-class _CompressSettingsPanel extends StatelessWidget {
-  const _CompressSettingsPanel({
-    required this.state,
+class _CompressionLevelCards extends StatelessWidget {
+  const _CompressionLevelCards({
+    required this.selected,
     required this.onLevelChanged,
   });
 
-  final PdfCompressState state;
+  final CompressionLevel selected;
   final ValueChanged<CompressionLevel> onLevelChanged;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Compression Level',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Compression Level',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+              ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                selected.label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 3.0,
           ),
-          const SizedBox(height: 12),
-          ...CompressionLevel.values.map((level) {
-            final isSelected = level == state.compressionLevel;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: isSelected
-                    ? theme.colorScheme.primaryContainer
-                    : theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  onTap: () => onLevelChanged(level),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Radio<CompressionLevel>(
-                          value: level,
-                          // ignore: deprecated_member_use
-                          onChanged: (_) => onLevelChanged(level),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: CompressionLevel.values.length,
+          itemBuilder: (context, index) {
+            final level = CompressionLevel.values[index];
+            final isSelected = level == selected;
+            return GestureDetector(
+              onTap: () => onLevelChanged(level),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? scheme.primaryContainer
+                      : scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isSelected
+                        ? scheme.primary.withValues(alpha: 0.5)
+                        : scheme.outlineVariant.withValues(alpha: 0.6),
+                    width: isSelected ? 1.5 : 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: scheme.primary.withValues(alpha: 0.12),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? scheme.primary.withValues(alpha: 0.15)
+                              : scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                level.label,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                level.description,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                        child: Icon(
+                          isSelected
+                              ? Icons.check_circle_rounded
+                              : Icons.compress_rounded,
+                          size: 16,
+                          color: isSelected
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          level.label,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
                           ),
                         ),
-                        if (isSelected)
-                          Icon(
-                            Icons.check_circle,
-                            color: theme.colorScheme.primary,
-                            size: 20,
-                          ),
-                      ],
-                    ),
+                      ),
+                      if (isSelected)
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: scheme.primary,
+                        ),
+                    ],
                   ),
                 ),
               ),
             );
-          }),
-        ],
-      ),
+          },
+        ),
+      ],
     );
   }
 }

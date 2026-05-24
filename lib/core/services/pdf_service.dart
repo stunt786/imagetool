@@ -6,8 +6,6 @@ import 'package:archive/archive_io.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart' as pdf;
-import 'package:pdf/widgets.dart' as pw;
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
@@ -19,8 +17,22 @@ class PdfService {
 
   static final instance = PdfService._();
 
-  /// Returns the app-specific directory for saving processed PDFs.
+  /// Returns the save directory for processed PDFs.
+  /// Android: Download/PixelTools/PDFs (public folder) with fallback to app docs.
+  /// Other platforms: app documents directory.
   Future<Directory> _getSaveDir() async {
+    if (Platform.isAndroid) {
+      try {
+        final downloadDir = await getDownloadsDirectory();
+        if (downloadDir != null) {
+          final dir = Directory(path.join(downloadDir.path, 'PixelTools', 'PDFs'));
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          return dir;
+        }
+      } catch (_) {}
+    }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
     if (!await dir.exists()) {
@@ -37,69 +49,57 @@ class PdfService {
 
   // ─── Compress PDF ───────────────────────────────────────────────────
 
-  /// Compresses a PDF file by re-rendering with reduced image quality.
-  /// [quality] ranges from 0.1 (lowest) to 1.0 (highest).
+  /// Maps 0.0-1.0 quality to Syncfusion compression level.
+  syncfusion.PdfCompressionLevel _mapCompressionLevel(double quality) {
+    if (quality >= 0.8) return syncfusion.PdfCompressionLevel.belowNormal;
+    if (quality >= 0.5) return syncfusion.PdfCompressionLevel.normal;
+    if (quality >= 0.3) return syncfusion.PdfCompressionLevel.aboveNormal;
+    return syncfusion.PdfCompressionLevel.best;
+  }
+
+  /// Compresses a PDF file by rebuilding with optimized compression.
+  /// [quality] ranges from 0.1 (lowest) to 1.0 (highest / no compression).
   /// Returns the path to the compressed file.
   Future<String> compressPdf({
     required String inputPath,
     required double quality,
-    required String outputBaseName,
+    String? outputBaseName,
     void Function(double progress)? onProgress,
   }) async {
     final saveDir = await _getSaveDir();
-    final outputPath = path.join(saveDir.path, _generateFileName(outputBaseName, 'pdf'));
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final outputPath = path.join(saveDir.path, 'pixeltools_$timestamp.pdf');
 
     onProgress?.call(0.1);
 
-    // Load the PDF using Syncfusion for page count and metadata
-    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
-    final pageCount = syncDoc.pages.count;
-    syncDoc.dispose();
+    final inputBytes = File(inputPath).readAsBytesSync();
+    final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
+    final pageCount = srcDoc.pages.count;
 
     onProgress?.call(0.2);
 
-    // Use pdfx to render each page as an image, then rebuild with lower quality
-    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
-    final newPdf = pw.Document();
+    final compressionLevel = _mapCompressionLevel(quality);
+    final destDoc = syncfusion.PdfDocument();
+    destDoc.compressionLevel = compressionLevel;
 
-    for (int i = 1; i <= pdfDoc.pagesCount; i++) {
-      final page = await pdfDoc.getPage(i);
-      final pageImage = await page.render(
-        width: page.width,
-        height: page.height,
-        format: pdfx.PdfPageImageFormat.png,
-      );
-
-      if (pageImage != null) {
-        final decodedImage = img.decodeImage(pageImage.bytes);
-        if (decodedImage != null) {
-          // Apply JPEG compression at the specified quality level
-          final jpegBytes = img.encodeJpg(decodedImage, quality: (quality * 100).round());
-
-          newPdf.addPage(
-            pw.Page(
-              pageFormat: pdf.PdfPageFormat(
-                page.width,
-                page.height,
-              ),
-              build: (context) {
-                return pw.Image(
-                  pw.MemoryImage(Uint8List.fromList(jpegBytes)),
-                  fit: pw.BoxFit.contain,
-                );
-              },
-            ),
-          );
-        }
-      }
-
-      onProgress?.call(0.2 + (i / pageCount) * 0.7);
+    for (int i = 0; i < pageCount; i++) {
+      final template = srcDoc.pages[i].createTemplate();
+      destDoc.pages.add().graphics.drawPdfTemplate(template, ui.Offset.zero);
+      onProgress?.call(0.2 + ((i + 1) / pageCount) * 0.7);
     }
 
-    await pdfDoc.close();
+    srcDoc.dispose();
 
-    final pdfBytes = await newPdf.save();
-    await File(outputPath).writeAsBytes(pdfBytes);
+    final bytes = await destDoc.save();
+    destDoc.dispose();
+
+    final file = File(outputPath);
+    await file.writeAsBytes(bytes, flush: true);
+
+    final fileSize = await file.length();
+    if (!await file.exists() || fileSize == 0) {
+      throw Exception('Compressed PDF file was not created or is empty');
+    }
 
     onProgress?.call(1.0);
     return outputPath;

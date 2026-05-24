@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 
-import '../../../../core/services/pdf_service.dart';
-import '../../../../shared/services/file_picker_service.dart';
+import '../../../core/services/pdf_service.dart';
+import '../../../shared/services/file_picker_service.dart';
 import '../models/pdf_compress_state.dart';
 
 final pdfCompressProvider = NotifierProvider<PdfCompressNotifier, PdfCompressState>(
@@ -14,6 +17,31 @@ final pdfCompressProvider = NotifierProvider<PdfCompressNotifier, PdfCompressSta
 class PdfCompressNotifier extends Notifier<PdfCompressState> {
   @override
   PdfCompressState build() => const PdfCompressState();
+
+  /// Writes the picked file bytes to a permanent location in Downloads/PixelTools/.
+  Future<String> _saveBytesPermanently(Uint8List bytes, String fileName) async {
+    Directory baseDir;
+    if (Platform.isAndroid) {
+      try {
+        final downloadDir = await getDownloadsDirectory();
+        baseDir = (downloadDir != null)
+            ? Directory(path.join(downloadDir.path, 'PixelTools'))
+            : await getApplicationDocumentsDirectory();
+      } catch (_) {
+        baseDir = await getApplicationDocumentsDirectory();
+      }
+    } else {
+      baseDir = await getApplicationDocumentsDirectory();
+    }
+
+    final dir = Directory(path.join(baseDir.path, 'PDFs', 'picked'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final destPath = path.join(dir.path, 'source_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    await File(destPath).writeAsBytes(bytes, flush: true);
+    return destPath;
+  }
 
   /// Picks a single PDF file for compression.
   Future<void> pickFile(BuildContext context) async {
@@ -27,21 +55,25 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     if (picked.isEmpty) return;
 
     final file = picked.first;
-    if (file.path == null) {
-      state = state.copyWith(errorMessage: 'Could not access the selected file');
+    if (file.bytes == null) {
+      state = state.copyWith(errorMessage: 'Could not read the selected file');
       return;
     }
 
-    final fileSize = await File(file.path!).length();
+    try {
+      final permanentPath = await _saveBytesPermanently(file.bytes!, file.name);
 
-    state = state.copyWith(
-      selectedFilePath: file.path,
-      selectedFileName: file.name,
-      selectedFileSize: fileSize,
-      errorMessage: null,
-      outputPath: null,
-      outputFileSize: null,
-    );
+      state = state.copyWith(
+        selectedFilePath: permanentPath,
+        selectedFileName: file.name,
+        selectedFileSize: file.sizeBytes,
+        errorMessage: null,
+        outputPath: null,
+        outputFileSize: null,
+      );
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Failed to access file: $e');
+    }
   }
 
   /// Sets the compression level.
