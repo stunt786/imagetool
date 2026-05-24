@@ -32,7 +32,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(pdfSplitProvider);
         if (!state.hasFile && state.outputPaths.isEmpty) {
-          ref.read(pdfSplitProvider.notifier).pickFile();
+          ref.read(pdfSplitProvider.notifier).pickFile(context);
         }
       }
     });
@@ -142,7 +142,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: notifier.pickFile,
+              onPressed: () => notifier.pickFile(context),
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
@@ -218,7 +218,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                 ),
                 if (!state.isProcessing && state.outputPaths.isEmpty)
                   TextButton.icon(
-                    onPressed: notifier.pickFile,
+                    onPressed: () => notifier.pickFile(context),
                     icon: const Icon(Icons.swap_horiz, size: 18),
                     label: const Text('Change'),
                   ),

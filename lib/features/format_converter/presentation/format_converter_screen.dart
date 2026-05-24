@@ -1,9 +1,9 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/format_converter_notifier.dart';
@@ -43,40 +43,24 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     setState(() => _isPicking = true);
 
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final service = ref.read(filePickerServiceProvider);
+      final pickedFiles = await service.pick(
+        context: context,
+        target: PickTarget.images,
         allowMultiple: true,
-        type: FileType.image,
       );
 
-      if (result == null || result.files.isEmpty) return;
+      if (pickedFiles.isEmpty) return;
 
-      final imageFiles = <Map<String, dynamic>>[];
-      for (final file in result.files) {
-        if (file.path == null) continue;
-
-        final ext = file.extension?.toLowerCase() ?? '';
-        final validExts = {
-          'jpg',
-          'jpeg',
-          'png',
-          'webp',
-          'gif',
-          'bmp',
-          'tif',
-          'tiff',
-          'heic',
-          'heif',
-          'avif',
-        };
-
-        if (!validExts.contains(ext)) continue;
-
-        imageFiles.add({
-          'name': file.name,
-          'path': file.path!,
-          'sizeBytes': file.size,
-        });
-      }
+      final imageFiles = pickedFiles
+          .where((f) => f.bytes != null)
+          .map((f) => <String, dynamic>{
+                'name': f.name,
+                'path': f.path ?? '',
+                'sizeBytes': f.sizeBytes,
+                'bytes': f.bytes,
+              })
+          .toList();
 
       if (imageFiles.isEmpty) {
         if (mounted) {

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/pdf_service.dart';
@@ -15,9 +16,10 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
   PdfCompressState build() => const PdfCompressState();
 
   /// Picks a single PDF file for compression.
-  Future<void> pickFile() async {
+  Future<void> pickFile(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
+      context: context,
       target: PickTarget.pdfs,
       allowMultiple: false,
     );

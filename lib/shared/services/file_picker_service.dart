@@ -1,58 +1,36 @@
+import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 
 import '../models/picked_file.dart';
 
 enum PickTarget { images, pdfs }
 
 final filePickerServiceProvider = Provider<FilePickerService>((ref) {
-  return const FilePickerService();
+  return FilePickerService();
 });
 
 class FilePickerService {
-  const FilePickerService();
-
-  static const List<String> _imageExtensions = <String>[
-    'jpg',
-    'jpeg',
-    'png',
-    'webp',
-    'avif',
-    'gif',
-    'bmp',
-    'tif',
-    'tiff',
-    'heic',
-    'heif',
-  ];
-
   Future<List<PickedFile>> pick({
+    required BuildContext context,
     required PickTarget target,
     required bool allowMultiple,
   }) async {
-    final result = await FilePicker.platform.pickFiles(
+    if (target == PickTarget.images) {
+      return _pickAssets(context, allowMultiple);
+    }
+
+    final result = await FilePicker.pickFiles(
       allowMultiple: allowMultiple,
-      type: target == PickTarget.images ? FileType.image : FileType.custom,
-      allowedExtensions:
-          target == PickTarget.images ? null : const <String>['pdf'],
+      type: FileType.custom,
+      allowedExtensions: const <String>['pdf'],
       withData: true,
       withReadStream: false,
     );
 
-    // Extract all data into our own model objects first (bytes are now in
-    // memory via withData:true), then immediately clear the temporary copies
-    // that file_picker creates on Android. Those copies can be picked up by
-    // Android's MediaStore and incorrectly show up in the device's Pictures
-    // directory alongside our real output files.
     final files = result?.files ?? const <PlatformFile>[];
-    final filteredFiles = target == PickTarget.images
-        ? files.where((f) {
-            final ext = f.extension?.toLowerCase();
-            return ext != null && _imageExtensions.contains(ext);
-          }).toList()
-        : files;
-
-    final pickedFiles = filteredFiles
+    final pickedFiles = files
         .map(
           (f) => PickedFile(
             name: f.name,
@@ -64,14 +42,46 @@ class FilePickerService {
         )
         .toList(growable: false);
 
-    // Schedule temp-file cleanup as a fire-and-forget AFTER returning the
-    // result. Awaiting it synchronously can interfere with native buffers
-    // still referenced by the platform channel (Android) or cause unexpected
-    // behaviour on web. `.ignore()` explicitly suppresses unhandled-future
-    // warnings while letting the cleanup run in the background.
-    FilePicker.platform.clearTemporaryFiles().ignore();
+    FilePicker.clearTemporaryFiles().ignore();
+    return pickedFiles;
+  }
+
+  Future<List<PickedFile>> _pickAssets(
+    BuildContext context,
+    bool allowMultiple,
+  ) async {
+    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    if (!ps.isAuth && !ps.hasAccess) {
+      return [];
+    }
+
+    final List<AssetEntity>? result = await AssetPicker.pickAssets(
+      context,
+      pickerConfig: AssetPickerConfig(
+        maxAssets: allowMultiple ? 100 : 1,
+        requestType: RequestType.image,
+      ),
+    );
+
+    if (result == null || result.isEmpty) return [];
+
+    final pickedFiles = <PickedFile>[];
+    for (final entity in result) {
+      final bytes = await entity.originBytes;
+      if (bytes == null) continue;
+
+      final ext = (entity.title?.split('.').last.toLowerCase()) ?? 'jpg';
+      pickedFiles.add(
+        PickedFile(
+          name: entity.title ?? 'image_${DateTime.now().millisecondsSinceEpoch}',
+          sizeBytes: bytes.length,
+          extension: ext,
+          path: null,
+          bytes: bytes,
+        ),
+      );
+    }
 
     return pickedFiles;
   }
 }
-

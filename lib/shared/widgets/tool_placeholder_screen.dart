@@ -53,7 +53,7 @@ class ToolPlaceholderScreen extends ConsumerWidget {
                     onPressed: state.isPicking
                         ? null
                         : () {
-                            notifier.pick();
+                            notifier.pick(context);
                             InterstitialTracker.instance.trackAction();
                           },
                     icon: state.isPicking

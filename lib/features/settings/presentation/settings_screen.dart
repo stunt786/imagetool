@@ -188,7 +188,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _pickFolder(BuildContext context, WidgetRef ref) async {
-    final result = await FilePicker.platform.getDirectoryPath();
+    final result = await FilePicker.getDirectoryPath();
     if (result != null && result.isNotEmpty) {
       final dir = Directory(result);
       if (!await dir.exists()) {

@@ -31,7 +31,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(pdfMergeProvider);
         if (!state.hasFiles && state.outputPath == null) {
-          ref.read(pdfMergeProvider.notifier).pickFiles();
+          ref.read(pdfMergeProvider.notifier).pickFiles(context);
         }
       }
     });
@@ -67,7 +67,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
         actions: [
           if (state.hasFiles)
             FilledButton.icon(
-              onPressed: notifier.pickFiles,
+              onPressed: () => notifier.pickFiles(context),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add'),
               style: FilledButton.styleFrom(
@@ -135,7 +135,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: notifier.pickFiles,
+              onPressed: () => notifier.pickFiles(context),
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDFs'),
               style: FilledButton.styleFrom(

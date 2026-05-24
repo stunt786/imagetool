@@ -289,7 +289,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     if (state.images[index].hasImage) {
       _showSlotOptions(context, index);
     } else {
-      ref.read(collageProvider.notifier).addImageToSlot(index);
+      ref.read(collageProvider.notifier).addImageToSlot(context, index);
     }
   }
 
@@ -505,7 +505,7 @@ class _SlotOptionsSheet extends ConsumerWidget {
                 label: 'Replace',
                 onTap: () {
                   Navigator.pop(context);
-                  ref.read(collageProvider.notifier).addImageToSlot(slotIndex);
+                  ref.read(collageProvider.notifier).addImageToSlot(context, slotIndex);
                 },
               ),
               _OptionButton(

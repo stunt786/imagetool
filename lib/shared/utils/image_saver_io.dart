@@ -11,6 +11,15 @@ abstract final class AppSavePaths {
   static const String defaultDirectoryName = 'PixelTools';
   static const String _customPathKey = 'custom_save_path';
 
+  static Future<Directory> getCacheDirectory() async {
+    final temp = await getTemporaryDirectory();
+    final cacheDir = Directory(path.join(temp.path, defaultDirectoryName));
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+    return cacheDir;
+  }
+
   static Future<Directory> getOutputDirectory() async {
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_customPathKey);

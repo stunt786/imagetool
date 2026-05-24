@@ -31,7 +31,7 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(collageProvider);
         if (state.imageCount == 0) {
-          ref.read(collageProvider.notifier).pickImages();
+          ref.read(collageProvider.notifier).pickImages(context);
           InterstitialTracker.instance.trackAction();
         }
       }
@@ -103,7 +103,7 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
-                ref.read(collageProvider.notifier).pickImages();
+                ref.read(collageProvider.notifier).pickImages(context);
                 InterstitialTracker.instance.trackAction();
               },
               icon: const Icon(Icons.add_photo_alternate),

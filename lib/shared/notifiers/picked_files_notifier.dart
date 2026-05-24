@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/picked_file.dart';
@@ -43,10 +43,11 @@ class PickedFilesNotifier extends FamilyNotifier<PickedFilesState, PickTarget> {
   @override
   PickedFilesState build(PickTarget arg) => const PickedFilesState.initial();
 
-  Future<void> pick({bool allowMultiple = true}) async {
+  Future<void> pick(BuildContext context, {bool allowMultiple = true}) async {
     state = state.copyWith(isPicking: true, errorMessage: null);
     try {
       final picked = await ref.read(filePickerServiceProvider).pick(
+            context: context,
             target: arg,
             allowMultiple: allowMultiple,
           );

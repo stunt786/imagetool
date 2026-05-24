@@ -213,6 +213,24 @@ class _FileCard extends StatelessWidget {
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
+                        if (item.compressionLevel != null) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              item.compressionLevel!,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onPrimaryContainer,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         Text(
                           '\u2022',

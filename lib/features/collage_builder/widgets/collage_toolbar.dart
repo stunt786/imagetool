@@ -52,7 +52,7 @@ class CollageToolbar extends ConsumerWidget {
                 icon: Icons.add_photo_alternate,
                 label: 'Add',
                 onTap: () {
-                  ref.read(collageProvider.notifier).pickImages();
+                  ref.read(collageProvider.notifier).pickImages(context);
                   InterstitialTracker.instance.trackAction();
                 },
               ),

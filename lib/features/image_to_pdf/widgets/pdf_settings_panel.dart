@@ -107,29 +107,27 @@ class PdfSettingsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          _buildSettingRow(
-            context,
-            label: 'Margin (mm)',
-            child: SizedBox(
-              width: 80,
-              child: TextField(
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                controller: TextEditingController(text: settings.marginMm.toStringAsFixed(1)),
-                onChanged: (value) {
-                  final margin = double.tryParse(value);
-                  if (margin != null && margin >= 0 && margin <= 50) {
-                    onSettingsChanged(settings.copyWith(marginMm: margin));
-                  }
-                },
-              ),
+          Text(
+            'Margins (inches)',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
             ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _buildMarginField(context, 'Top', settings.marginTop, (v) => onSettingsChanged(settings.copyWith(marginTop: v)))),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMarginField(context, 'Bottom', settings.marginBottom, (v) => onSettingsChanged(settings.copyWith(marginBottom: v)))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _buildMarginField(context, 'Left', settings.marginLeft, (v) => onSettingsChanged(settings.copyWith(marginLeft: v)))),
+              const SizedBox(width: 8),
+              Expanded(child: _buildMarginField(context, 'Right', settings.marginRight, (v) => onSettingsChanged(settings.copyWith(marginRight: v)))),
+            ],
           ),
         ],
       ),
@@ -149,6 +147,34 @@ class PdfSettingsPanel extends StatelessWidget {
           ),
         ),
         child,
+      ],
+    );
+  }
+
+  Widget _buildMarginField(BuildContext context, String label, double value, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        TextField(
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            isDense: true,
+            suffixText: 'in',
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          controller: TextEditingController(text: value.toStringAsFixed(2)),
+          onChanged: (v) {
+            final parsed = double.tryParse(v);
+            if (parsed != null && parsed >= 0 && parsed <= 10) {
+              onChanged(parsed);
+            }
+          },
+        ),
       ],
     );
   }

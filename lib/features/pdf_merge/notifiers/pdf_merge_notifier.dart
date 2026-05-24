@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/pdf_service.dart';
@@ -13,9 +14,10 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
   PdfMergeState build() => const PdfMergeState();
 
   /// Picks multiple PDF files for merging.
-  Future<void> pickFiles() async {
+  Future<void> pickFiles(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
+      context: context,
       target: PickTarget.pdfs,
       allowMultiple: true,
     );

@@ -148,6 +148,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       final path = file['path'] as String;
       final name = file['name'] as String;
       final sizeBytes = file['sizeBytes'] as int;
+      final bytes = file['bytes'] as Uint8List?;
 
       final ext = name.contains('.')
           ? name.split('.').last.toLowerCase()
@@ -156,12 +157,27 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
       if (format == null) continue;
 
+      int? width;
+      int? height;
+      if (bytes != null) {
+        try {
+          final decoded = img.decodeImage(bytes);
+          if (decoded != null) {
+            width = decoded.width;
+            height = decoded.height;
+          }
+        } catch (_) {}
+      }
+
       newImages.add(
         ConvertibleImage(
           name: name,
           path: path,
           sizeBytes: sizeBytes,
           originalFormat: format,
+          bytes: bytes,
+          width: width ?? 0,
+          height: height ?? 0,
         ),
       );
     }
@@ -171,7 +187,10 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
     final updated = [...state.images, ...newImages];
     state = state.copyWith(images: updated, clearError: true);
 
-    await _loadImages(newImages);
+    final needLoading = newImages.where((i) => i.bytes == null).toList();
+    if (needLoading.isNotEmpty) {
+      await _loadImages(needLoading);
+    }
   }
 
   Future<void> _loadImages(List<ConvertibleImage> imagesToLoad) async {

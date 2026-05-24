@@ -8,6 +8,7 @@ class EditHistoryItem {
     required this.editedAt,
     this.thumbnailPath,
     this.toolIcon = Icons.image_outlined,
+    this.compressionLevel,
   });
 
   final String fileName;
@@ -15,6 +16,7 @@ class EditHistoryItem {
   final DateTime editedAt;
   final String? thumbnailPath;
   final IconData toolIcon;
+  final String? compressionLevel;
 
   /// Friendly relative-time label (e.g. "2 min ago", "Yesterday").
   String get timeAgo {

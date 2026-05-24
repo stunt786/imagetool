@@ -32,7 +32,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(pdfCompressProvider);
         if (!state.hasFile && state.outputPath == null) {
-          ref.read(pdfCompressProvider.notifier).pickFile();
+          ref.read(pdfCompressProvider.notifier).pickFile(context);
         }
       }
     });
@@ -141,7 +141,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: notifier.pickFile,
+              onPressed: () => notifier.pickFile(context),
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
@@ -200,15 +200,38 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        [
-                          if (state.selectedFileSize != null)
-                            PdfService.formatFileSize(state.selectedFileSize!),
-                          '→ ${state.compressionLevel.label}',
-                        ].join(' · '),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 6),
+                      if (state.selectedFileSize != null)
+                        Text(
+                          PdfService.formatFileSize(state.selectedFileSize!),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.compress_rounded,
+                              size: 14,
+                              color: theme.colorScheme.onPrimaryContainer,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              state.compressionLevel.label,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -216,7 +239,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                 ),
                 if (!state.isProcessing && state.outputPath == null)
                   TextButton.icon(
-                    onPressed: notifier.pickFile,
+                    onPressed: () => notifier.pickFile(context),
                     icon: const Icon(Icons.swap_horiz, size: 18),
                     label: const Text('Change'),
                   ),
@@ -384,40 +407,61 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
     PdfCompressNotifier notifier,
   ) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        color: scheme.surfaceContainerLowest,
+        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5))),
       ),
       child: SafeArea(
-        child: FilledButton.icon(
-          onPressed: state.hasFile
-              ? () async {
-                  final result = await notifier.compress();
-                  if (result != null && mounted) {
-                    ref.read(editHistoryProvider.notifier).addEntry(
-                          EditHistoryItem(
-                            fileName: state.selectedFileName ?? 'compressed.pdf',
-                            toolUsed: 'PDF Compressor',
-                            editedAt: DateTime.now(),
-                            toolIcon: Icons.compress_rounded,
-                          ),
-                        );
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: state.hasFile
+                ? () async {
+                    final result = await notifier.compress();
+                    if (result != null && mounted) {
+                      ref.read(editHistoryProvider.notifier).addEntry(
+                            EditHistoryItem(
+                              fileName: state.selectedFileName ?? 'compressed.pdf',
+                              toolUsed: 'PDF Compressor',
+                              editedAt: DateTime.now(),
+                              toolIcon: Icons.compress_rounded,
+                              compressionLevel: state.compressionLevel.label,
+                            ),
+                          );
+                    }
                   }
-                }
-              : null,
-          icon: const Icon(Icons.compress_rounded),
-          label: Text('Compress to ${state.compressionLevel.label}'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+                : null,
+            icon: const Icon(Icons.compress_rounded),
+            label: RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Compress PDF  ',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onPrimary,
+                    ),
+                  ),
+                  TextSpan(
+                    text: state.compressionLevel.label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w400,
+                      color: scheme.onPrimary.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
           ),
         ),
       ),

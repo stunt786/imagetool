@@ -33,7 +33,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(pdfConvertProvider);
         if (!state.hasFile && state.outputPaths.isEmpty) {
-          ref.read(pdfConvertProvider.notifier).pickFile();
+          ref.read(pdfConvertProvider.notifier).pickFile(context);
         }
       }
     });
@@ -145,7 +145,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: notifier.pickFile,
+              onPressed: () => notifier.pickFile(context),
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
@@ -222,7 +222,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                 ),
                 if (!state.isProcessing && state.outputPaths.isEmpty)
                   TextButton.icon(
-                    onPressed: notifier.pickFile,
+                    onPressed: () => notifier.pickFile(context),
                     icon: const Icon(Icons.swap_horiz, size: 18),
                     label: const Text('Change'),
                   ),

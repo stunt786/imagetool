@@ -35,7 +35,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         setState(() => _isOneClickOpening = false);
         final state = ref.read(imageToPdfProvider);
         if (state.images.isEmpty) {
-          ref.read(imageToPdfProvider.notifier).pickImages();
+          ref.read(imageToPdfProvider.notifier).pickImages(context);
           InterstitialTracker.instance.trackAction();
         }
       }
@@ -135,7 +135,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
-                notifier.pickImages();
+                notifier.pickImages(context);
                 InterstitialTracker.instance.trackAction();
               },
               icon: const Icon(Icons.add_photo_alternate_outlined),
@@ -218,7 +218,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: notifier.pickImages,
+                      onPressed: () => notifier.pickImages(context),
                       icon: const Icon(Icons.add),
                       label: const Text('Add'),
                     ),

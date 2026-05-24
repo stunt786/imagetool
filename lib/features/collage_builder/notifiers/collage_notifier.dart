@@ -28,9 +28,10 @@ class CollageNotifier extends Notifier<CollageState> {
     );
   }
 
-  Future<void> pickImages() async {
+  Future<void> pickImages(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
+      context: context,
       target: PickTarget.images,
       allowMultiple: true,
     );
@@ -121,9 +122,10 @@ class CollageNotifier extends Notifier<CollageState> {
     }
   }
 
-  Future<void> addImageToSlot(int slotIndex) async {
+  Future<void> addImageToSlot(BuildContext context, int slotIndex) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
+      context: context,
       target: PickTarget.images,
       allowMultiple: false,
     );

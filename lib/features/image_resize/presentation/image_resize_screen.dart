@@ -3,11 +3,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
-
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
+import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/social_presets.dart';
@@ -98,7 +97,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   int _estimateRequestId = 0;
   double _rotationPreviewDegrees = 0;
 
-  final ImagePicker _imagePicker = ImagePicker();
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
@@ -138,19 +136,22 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     setState(() => _isPicking = true);
 
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final service = ref.read(filePickerServiceProvider);
+      final picked = await service.pick(
+        context: context,
+        target: PickTarget.images,
+        allowMultiple: false,
       );
 
-      if (image == null) return;
+      if (picked.isEmpty) return;
 
-      final bytes = await image.readAsBytes();
-      if (bytes.isEmpty) {
+      final file = picked.first;
+      if (file.bytes == null || file.bytes!.isEmpty) {
         _showSnack('Unable to read that image.');
         return;
       }
 
-      await ref.read(imageEditProvider.notifier).loadImage(bytes, image.name);
+      await ref.read(imageEditProvider.notifier).loadImage(file.bytes!, file.name);
       if (!mounted) return;
 
       final state = ref.read(imageEditProvider);

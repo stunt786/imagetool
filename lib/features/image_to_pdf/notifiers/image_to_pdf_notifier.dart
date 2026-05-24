@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
@@ -24,9 +25,10 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     );
   }
 
-  Future<void> pickImages() async {
+  Future<void> pickImages(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
+      context: context,
       target: PickTarget.images,
       allowMultiple: true,
     );
@@ -233,10 +235,13 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           pageFormat = pageFormat.portrait;
         }
 
-        final margin = settings.marginMm * PdfPageFormat.mm;
+        final marginLeft = settings.marginLeft * PdfPageFormat.inch;
+        final marginRight = settings.marginRight * PdfPageFormat.inch;
+        final marginTop = settings.marginTop * PdfPageFormat.inch;
+        final marginBottom = settings.marginBottom * PdfPageFormat.inch;
         final availableFormat = PdfPageFormat(
-          pageFormat.width - margin * 2,
-          pageFormat.height - margin * 2,
+          pageFormat.width - marginLeft - marginRight,
+          pageFormat.height - marginTop - marginBottom,
         );
 
         Uint8List processedBytes;
@@ -260,12 +265,16 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
         pdf.addPage(
           pw.Page(
             pageFormat: pageFormat,
+            margin: pw.EdgeInsets.zero,
             build: (context) {
-              return pw.Center(
-                child: pw.Container(
-                  padding: pw.EdgeInsets.all(margin),
-                  child: _buildImageWidget(pdfImage, settings.fitMode, availableFormat, imageWidth, imageHeight),
+              return pw.Container(
+                padding: pw.EdgeInsets.only(
+                  left: marginLeft,
+                  top: marginTop,
+                  right: marginRight,
+                  bottom: marginBottom,
                 ),
+                child: _buildImageWidget(pdfImage, settings.fitMode, availableFormat, imageWidth, imageHeight),
               );
             },
           ),
@@ -349,16 +358,21 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           height: availableFormat.height,
         );
       case ImageFitMode.center:
+        final scaleX = availableFormat.width / imageWidth;
+        final scaleY = availableFormat.height / imageHeight;
+        final scale = scaleX < scaleY ? scaleX : scaleY;
+        final displayScale = scale < 1.0 ? scale : 1.0;
         return pw.Center(
           child: pw.Image(
             image,
-            width: availableFormat.width,
-            height: availableFormat.height,
+            width: imageWidth * displayScale,
+            height: imageHeight * displayScale,
           ),
         );
       case ImageFitMode.stretch:
         return pw.Image(
           image,
+          fit: pw.BoxFit.fill,
           width: availableFormat.width,
           height: availableFormat.height,
         );

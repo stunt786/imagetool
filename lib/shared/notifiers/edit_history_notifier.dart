@@ -45,6 +45,7 @@ class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
       toolUsed: 'PDF Compressor',
       editedAt: _now.subtract(const Duration(hours: 1)),
       toolIcon: Icons.compress,
+      compressionLevel: 'Medium',
     ),
     EditHistoryItem(
       fileName: 'sunset_panorama.jpg',

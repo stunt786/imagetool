@@ -15,28 +15,40 @@ class PdfPageSettings {
     required this.orientation,
     required this.fitMode,
     required this.quality,
-    required this.marginMm,
+    required this.marginTop,
+    required this.marginBottom,
+    required this.marginLeft,
+    required this.marginRight,
   });
 
   final PdfPageSize pageSize;
   final PdfOrientation orientation;
   final ImageFitMode fitMode;
   final PdfQuality quality;
-  final double marginMm;
+  final double marginTop;
+  final double marginBottom;
+  final double marginLeft;
+  final double marginRight;
 
   PdfPageSettings copyWith({
     PdfPageSize? pageSize,
     PdfOrientation? orientation,
     ImageFitMode? fitMode,
     PdfQuality? quality,
-    double? marginMm,
+    double? marginTop,
+    double? marginBottom,
+    double? marginLeft,
+    double? marginRight,
   }) {
     return PdfPageSettings(
       pageSize: pageSize ?? this.pageSize,
       orientation: orientation ?? this.orientation,
       fitMode: fitMode ?? this.fitMode,
       quality: quality ?? this.quality,
-      marginMm: marginMm ?? this.marginMm,
+      marginTop: marginTop ?? this.marginTop,
+      marginBottom: marginBottom ?? this.marginBottom,
+      marginLeft: marginLeft ?? this.marginLeft,
+      marginRight: marginRight ?? this.marginRight,
     );
   }
 
@@ -45,7 +57,10 @@ class PdfPageSettings {
     orientation: PdfOrientation.portrait,
     fitMode: ImageFitMode.fit,
     quality: PdfQuality.optimized,
-    marginMm: 10.0,
+    marginTop: 0.75,
+    marginBottom: 0.75,
+    marginLeft: 0.75,
+    marginRight: 0.75,
   );
 }
 
