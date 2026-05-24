@@ -131,6 +131,17 @@ class ImageToPdfState {
     return copyWith(images: newImages);
   }
 
+  ImageToPdfState swapImages(int index1, int index2) {
+    if (index1 == index2) return this;
+    if (index1 < 0 || index1 >= images.length) return this;
+    if (index2 < 0 || index2 >= images.length) return this;
+    final newImages = List<ImageToPdfItem>.from(images);
+    final temp = newImages[index1];
+    newImages[index1] = newImages[index2];
+    newImages[index2] = temp;
+    return copyWith(images: newImages);
+  }
+
   ImageToPdfState removeImage(int index) {
     final newImages = List<ImageToPdfItem>.from(images);
     newImages.removeAt(index);

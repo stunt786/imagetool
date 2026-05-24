@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -42,9 +41,8 @@ class CollageNotifier extends Notifier<CollageState> {
     final names = <String>[];
 
     for (final file in picked) {
-      if (file.path != null) {
-        final bytes = await File(file.path!).readAsBytes();
-        bytesList.add(bytes);
+      if (file.bytes != null) {
+        bytesList.add(file.bytes!);
         names.add(file.name);
       }
     }
@@ -130,9 +128,9 @@ class CollageNotifier extends Notifier<CollageState> {
       allowMultiple: false,
     );
 
-    if (picked.isEmpty || picked.first.path == null) return;
+    if (picked.isEmpty || picked.first.bytes == null) return;
 
-    final bytes = await File(picked.first.path!).readAsBytes();
+    final bytes = picked.first.bytes!;
 
     final newImages = List<CollageImageSlot>.from(state.images);
     newImages[slotIndex] = CollageImageSlot(

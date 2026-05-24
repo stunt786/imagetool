@@ -5,9 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:pdf/pdf.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../models/image_to_pdf_state.dart';
 
@@ -35,13 +35,26 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
     final newImages = <ImageToPdfItem>[];
     for (final file in picked) {
-      if (file.path != null) {
-        newImages.add(ImageToPdfItem(
-          path: file.path!,
-          name: file.name,
-          sizeBytes: file.sizeBytes,
-        ));
-      }
+      if (file.bytes == null) continue;
+
+      int? width;
+      int? height;
+      try {
+        final decoded = await compute(_decodeImageDimensions, file.bytes!);
+        if (decoded != null) {
+          width = decoded[0];
+          height = decoded[1];
+        }
+      } catch (_) {}
+
+      newImages.add(ImageToPdfItem(
+        path: file.path ?? '',
+        name: file.name,
+        sizeBytes: file.sizeBytes,
+        imageBytes: file.bytes,
+        width: width,
+        height: height,
+      ));
     }
 
     if (newImages.isEmpty) return;
@@ -51,10 +64,6 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       errorMessage: null,
       generatedPdfPath: null,
     );
-
-    for (int i = state.images.length - newImages.length; i < state.images.length; i++) {
-      await _loadImage(i);
-    }
   }
 
   Future<void> addImageFromPath(String path) async {
@@ -124,6 +133,10 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
   void removeImage(int index) {
     state = state.removeImage(index);
+  }
+
+  void swapImage(int index1, int index2) {
+    state = state.swapImages(index1, index2);
   }
 
   void reorderImages(int oldIndex, int newIndex) {
@@ -262,20 +275,35 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       }
 
       final pdfBytes = await pdf.save();
-      
-      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
-      final pixelToolsDir = Directory(path.join(saveDir.path, 'PixelTools'));
-      
-      if (!await pixelToolsDir.exists()) {
-        await pixelToolsDir.create(recursive: true);
+
+      Directory saveDir;
+      if (Platform.isAndroid) {
+        saveDir = Directory('/storage/emulated/0/Download/PixelTools/PDFs');
+        try {
+          if (!await saveDir.exists()) {
+            await saveDir.create(recursive: true);
+          }
+        } catch (_) {
+          final base = await getApplicationDocumentsDirectory();
+          saveDir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
+          if (!await saveDir.exists()) {
+            await saveDir.create(recursive: true);
+          }
+        }
+      } else {
+        final base = await getApplicationDocumentsDirectory();
+        saveDir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
+        if (!await saveDir.exists()) {
+          await saveDir.create(recursive: true);
+        }
       }
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'pixeltools_$timestamp.pdf';
-      final outputPath = path.join(pixelToolsDir.path, fileName);
+      final outputPath = path.join(saveDir.path, fileName);
       
       final file = File(outputPath);
-      await file.writeAsBytes(pdfBytes);
+      await file.writeAsBytes(pdfBytes, flush: true);
       
       final fileSize = await file.length();
       if (!await file.exists() || fileSize == 0) {

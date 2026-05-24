@@ -171,7 +171,14 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             imageBytes: item.imageBytes ?? Uint8List(0),
             imageName: item.name,
             imageSize: item.sizeBytes,
+            totalImages: state.images.length,
             onRemove: () => notifier.removeImage(index),
+            onSwapBefore: index > 0
+                ? () => notifier.swapImage(index, index - 1)
+                : null,
+            onSwapAfter: index < state.images.length - 1
+                ? () => notifier.swapImage(index, index + 1)
+                : null,
             isDragging: false,
           ),
         );
@@ -213,7 +220,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
                     child: OutlinedButton.icon(
                       onPressed: notifier.pickImages,
                       icon: const Icon(Icons.add),
-                      label: const Text('Add More'),
+                      label: const Text('Add'),
                     ),
                   ),
                   const SizedBox(width: 12),

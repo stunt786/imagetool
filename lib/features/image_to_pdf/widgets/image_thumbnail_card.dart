@@ -9,7 +9,10 @@ class ImageThumbnailCard extends StatelessWidget {
     required this.imageBytes,
     required this.imageName,
     required this.imageSize,
+    required this.totalImages,
     this.onRemove,
+    this.onSwapBefore,
+    this.onSwapAfter,
     this.onDragStart,
     this.onDragEnd,
     this.isDragging = false,
@@ -19,7 +22,10 @@ class ImageThumbnailCard extends StatelessWidget {
   final Uint8List imageBytes;
   final String imageName;
   final int imageSize;
+  final int totalImages;
   final VoidCallback? onRemove;
+  final VoidCallback? onSwapBefore;
+  final VoidCallback? onSwapAfter;
   final VoidCallback? onDragStart;
   final VoidCallback? onDragEnd;
   final bool isDragging;
@@ -54,6 +60,8 @@ class ImageThumbnailCard extends StatelessWidget {
                     child: Image.memory(
                       imageBytes,
                       fit: BoxFit.cover,
+                      cacheWidth: 180,
+                      cacheHeight: 240,
                       errorBuilder: (context, error, stackTrace) {
                         return Center(
                           child: Icon(
@@ -106,7 +114,7 @@ class ImageThumbnailCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -119,11 +127,48 @@ class ImageThumbnailCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    '${(imageSize / 1024).toStringAsFixed(1)} KB',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '${(imageSize / 1024).toStringAsFixed(1)} KB',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (onSwapBefore != null)
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: onSwapBefore,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.arrow_back_ios_new,
+                                size: 14,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (onSwapAfter != null)
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: onSwapAfter,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),

@@ -14,6 +14,13 @@ img.Image? _decodeNormalizedImage(Uint8List bytes) {
   return img.bakeOrientation(decoded);
 }
 
+Map<String, int>? _isolateDecodeDimensions(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+  final oriented = img.bakeOrientation(decoded);
+  return {'width': oriented.width, 'height': oriented.height};
+}
+
 class ImageEditState {
   const ImageEditState({
     this.originalBytes,
@@ -284,21 +291,25 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
 
   Future<void> loadImage(Uint8List bytes, String fileName) async {
     state = state.copyWith(isLoading: true, clearError: true);
+
+    if (bytes.length > 50 * 1024 * 1024) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage:
+            'Image is too large (>50MB). Please choose a smaller image.',
+      );
+      return;
+    }
+
     try {
-      final image = _decodeNormalizedImage(bytes);
-      if (image == null) {
+      final dimensions = await Isolate.run<Map<String, int>?>(
+        () => _isolateDecodeDimensions(bytes),
+      );
+
+      if (dimensions == null) {
         state = state.copyWith(
           isLoading: false,
           errorMessage: 'Failed to decode image.',
-        );
-        return;
-      }
-
-      if (bytes.length > 50 * 1024 * 1024) {
-        state = state.copyWith(
-          isLoading: false,
-          errorMessage:
-              'Image is too large (>50MB). Please choose a smaller image.',
         );
         return;
       }
@@ -307,8 +318,8 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         originalBytes: bytes,
         currentBytes: bytes,
         fileName: fileName,
-        width: image.width,
-        height: image.height,
+        width: dimensions['width']!,
+        height: dimensions['height']!,
         fileSize: bytes.length,
       );
     } catch (error) {

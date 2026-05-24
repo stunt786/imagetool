@@ -520,7 +520,11 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                     : image.bytes != null
                     ? Image.memory(
                         image.bytes!,
+                        width: 56,
+                        height: 56,
                         fit: BoxFit.cover,
+                        cacheWidth: 56,
+                        cacheHeight: 56,
                         errorBuilder: (context, error, stackTrace) => Icon(
                           Icons.image,
                           color: Colors.grey[400],

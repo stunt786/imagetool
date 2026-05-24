@@ -483,6 +483,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
               child: Image.memory(
                 state.currentBytes!,
                 fit: BoxFit.contain,
+                cacheWidth: MediaQuery.of(context).size.width.ceil(),
+                cacheHeight: (MediaQuery.of(context).size.height * 0.35).ceil(),
                 errorBuilder: (context, error, stackTrace) => Icon(
                   Icons.broken_image,
                   size: 64,

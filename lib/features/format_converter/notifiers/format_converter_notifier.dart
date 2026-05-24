@@ -187,35 +187,42 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       if (newImageIndex == -1) continue;
 
       updated[i] = image.copyWith(status: ConvertStatus.loading);
-      state = state.copyWith(images: updated);
+    }
+    state = state.copyWith(images: updated);
 
-      try {
-        final file = File(image.path);
-        final bytes = await file.readAsBytes();
+    await Future.wait(
+      imagesToLoad.map((imageToLoad) async {
+        final index = updated.indexWhere((u) => u.path == imageToLoad.path);
+        if (index == -1) return;
 
-        final decoded = img.decodeImage(bytes);
-        if (decoded == null) {
-          updated[i] = updated[i].copyWith(
+        try {
+          final file = File(imageToLoad.path);
+          final bytes = await file.readAsBytes();
+
+          final decoded = img.decodeImage(bytes);
+          if (decoded == null) {
+            updated[index] = updated[index].copyWith(
+              status: ConvertStatus.failed,
+              error: 'Invalid or corrupted image',
+            );
+          } else {
+            updated[index] = updated[index].copyWith(
+              bytes: bytes,
+              width: decoded.width,
+              height: decoded.height,
+              status: ConvertStatus.pending,
+            );
+          }
+        } catch (e) {
+          updated[index] = updated[index].copyWith(
             status: ConvertStatus.failed,
-            error: 'Invalid or corrupted image',
-          );
-        } else {
-          updated[i] = updated[i].copyWith(
-            bytes: bytes,
-            width: decoded.width,
-            height: decoded.height,
-            status: ConvertStatus.pending,
+            error: 'Failed to load: ${e.toString()}',
           );
         }
-      } catch (e) {
-        updated[i] = updated[i].copyWith(
-          status: ConvertStatus.failed,
-          error: 'Failed to load: ${e.toString()}',
-        );
-      }
+      }),
+    );
 
-      state = state.copyWith(images: updated);
-    }
+    state = state.copyWith(images: updated);
   }
 
   Future<void> convertAll() async {

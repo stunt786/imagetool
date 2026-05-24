@@ -2775,22 +2775,6 @@ class _InteractiveImagePreview extends StatefulWidget {
 }
 
 class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
-  late MemoryImage _memoryImage;
-
-  @override
-  void didUpdateWidget(_InteractiveImagePreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.imageBytes, widget.imageBytes)) {
-      _memoryImage = MemoryImage(widget.imageBytes);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _memoryImage = MemoryImage(widget.imageBytes);
-  }
-
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -2854,9 +2838,13 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Image(
-                                    image: _memoryImage,
+                                  Image.memory(
+                                    widget.imageBytes,
+                                    width: imageDisplayWidth,
+                                    height: imageDisplayHeight,
                                     fit: BoxFit.fill,
+                                    cacheWidth: imageDisplayWidth.ceil(),
+                                    cacheHeight: imageDisplayHeight.ceil(),
                                     gaplessPlayback: true,
                                     filterQuality: FilterQuality.low,
                                   ),
@@ -2883,9 +2871,13 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                         child: SizedBox(
                           width: imageDisplayWidth,
                           height: imageDisplayHeight,
-                          child: Image(
-                            image: _memoryImage,
+                          child: Image.memory(
+                            widget.imageBytes,
+                            width: imageDisplayWidth,
+                            height: imageDisplayHeight,
                             fit: BoxFit.fill,
+                            cacheWidth: imageDisplayWidth.ceil(),
+                            cacheHeight: imageDisplayHeight.ceil(),
                             gaplessPlayback: true,
                             filterQuality: FilterQuality.low,
                           ),

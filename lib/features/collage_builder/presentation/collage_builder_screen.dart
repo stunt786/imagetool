@@ -128,28 +128,26 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
   }
 
   Widget _buildCollageEditor(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: const CollageCanvas(),
-                    ),
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: const CollageCanvas(),
                   ),
-                  const SizedBox(height: 12),
-                  const LayoutSelector(),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                const LayoutSelector(),
+              ],
             ),
           ),
-          const CollageToolbar(),
-        ],
-      ),
+        ),
+        const CollageToolbar(),
+      ],
     );
   }
 
