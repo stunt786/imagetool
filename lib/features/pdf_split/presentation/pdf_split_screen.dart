@@ -74,7 +74,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFile || state.outputPaths.isNotEmpty ? notifier.clear : null,
+            onPressed: state.hasFile || state.outputPaths.isNotEmpty || state.publicExportPaths.isNotEmpty ? notifier.clear : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -97,7 +97,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFile && !state.isProcessing && state.outputPaths.isEmpty)
+          if (state.hasFile && !state.isProcessing && state.outputPaths.isEmpty && state.publicExportPaths.isEmpty)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -346,25 +346,48 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                       color: theme.colorScheme.onSecondaryContainer,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Saved to:',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSecondaryContainer,
+                  if (state.publicExportPaths.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ready to export — files are in temporary storage.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    state.outputPaths.first.split('/').sublist(0, state.outputPaths.first.split('/').length - 1).join('/'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: theme.colorScheme.onSecondaryContainer,
+                  ],
+                  if (state.publicExportPaths.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Saved to:',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 20),
+
+            if (state.publicExportPaths.isEmpty) ...[
+              FilledButton.icon(
+                onPressed: () => notifier.exportFiles(),
+                icon: const Icon(Icons.save_alt),
+                label: const Text('Export to Device'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             Text(
               'Output Files',
@@ -419,35 +442,37 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
               );
             }),
 
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Files Saved'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('${state.outputPaths.length} files created'),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Location: ${state.outputPaths.first.split('/').sublist(0, state.outputPaths.first.split('/').length - 1).join('/')}',
+            if (state.publicExportPaths.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Files Saved'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('${state.publicExportPaths.length} files created'),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Location: ${state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/')}',
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
                         ),
                       ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.folder_open),
-              label: const Text('View Location'),
-            ),
+                  );
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('View Location'),
+              ),
+            ],
           ],
         ],
       ),

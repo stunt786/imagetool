@@ -26,6 +26,7 @@ class PdfCompressState {
     this.errorMessage,
     this.outputPath,
     this.outputFileSize,
+    this.publicExportPath,
   });
 
   final String? selectedFilePath;
@@ -37,6 +38,7 @@ class PdfCompressState {
   final String? errorMessage;
   final String? outputPath;
   final int? outputFileSize;
+  final String? publicExportPath;
 
   bool get hasFile => selectedFilePath != null;
   double? get compressionRatio {
@@ -56,6 +58,7 @@ class PdfCompressState {
     String? errorMessage,
     String? outputPath,
     int? outputFileSize,
+    String? publicExportPath,
   }) {
     return PdfCompressState(
       selectedFilePath: selectedFilePath ?? this.selectedFilePath,
@@ -67,6 +70,7 @@ class PdfCompressState {
       errorMessage: errorMessage,
       outputPath: outputPath ?? this.outputPath,
       outputFileSize: outputFileSize ?? this.outputFileSize,
+      publicExportPath: publicExportPath ?? this.publicExportPath,
     );
   }
 

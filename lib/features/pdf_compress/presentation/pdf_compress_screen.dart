@@ -60,7 +60,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
         actions: [
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFile || state.outputPath != null ? notifier.clear : null,
+            onPressed: state.hasFile || state.outputPath != null || state.publicExportPath != null ? notifier.clear : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -74,7 +74,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFile && !state.isProcessing && state.outputPath == null)
+          if (state.hasFile && !state.isProcessing && state.outputPath == null && state.publicExportPath == null)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -255,25 +255,48 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Saved to:',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSecondaryContainer,
+                  if (state.publicExportPath == null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ready to export — file is in temporary storage.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    state.outputPath!.split('/').sublist(0, state.outputPath!.split('/').length - 1).join('/'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: theme.colorScheme.onSecondaryContainer,
+                  ],
+                  if (state.publicExportPath != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Saved to:',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 20),
+
+            if (state.publicExportPath == null) ...[
+              FilledButton.icon(
+                onPressed: () => notifier.exportFile(),
+                icon: const Icon(Icons.save_alt),
+                label: const Text('Export to Device'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             Text(
               'Output File',
@@ -322,38 +345,40 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('File Saved'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Compressed PDF created'),
-                        const SizedBox(height: 8),
-                        if (state.compressionRatio != null)
-                          Text('Size reduced by ${state.compressionRatio!.toStringAsFixed(1)}%'),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Location: ${state.outputPath!.split('/').sublist(0, state.outputPath!.split('/').length - 1).join('/')}',
+            if (state.publicExportPath != null) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('File Saved'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Compressed PDF created'),
+                          const SizedBox(height: 8),
+                          if (state.compressionRatio != null)
+                            Text('Size reduced by ${state.compressionRatio!.toStringAsFixed(1)}%'),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Location: ${state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/')}',
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
                         ),
                       ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.folder_open),
-              label: const Text('View Location'),
-            ),
+                  );
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('View Location'),
+              ),
+            ],
           ],
         ],
       ),

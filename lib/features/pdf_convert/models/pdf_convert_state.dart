@@ -38,6 +38,7 @@ class PdfConvertState {
     this.progress = 0.0,
     this.errorMessage,
     this.outputPaths = const [],
+    this.publicExportPaths = const [],
   });
 
   final String? selectedFilePath;
@@ -50,6 +51,7 @@ class PdfConvertState {
   final double progress;
   final String? errorMessage;
   final List<String> outputPaths;
+  final List<String> publicExportPaths;
 
   bool get hasFile => selectedFilePath != null;
   bool get hasPageInfo => pageCount != null && pageCount! > 0;
@@ -66,6 +68,7 @@ class PdfConvertState {
     double? progress,
     String? errorMessage,
     List<String>? outputPaths,
+    List<String>? publicExportPaths,
   }) {
     return PdfConvertState(
       selectedFilePath: selectedFilePath ?? this.selectedFilePath,
@@ -78,6 +81,7 @@ class PdfConvertState {
       progress: progress ?? this.progress,
       errorMessage: errorMessage,
       outputPaths: outputPaths ?? this.outputPaths,
+      publicExportPaths: publicExportPaths ?? this.publicExportPaths,
     );
   }
 

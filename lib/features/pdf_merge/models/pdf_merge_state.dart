@@ -34,6 +34,7 @@ class PdfMergeState {
     this.progress = 0.0,
     this.errorMessage,
     this.outputPath,
+    this.publicExportPath,
   });
 
   final List<MergePdfItem> files;
@@ -41,6 +42,7 @@ class PdfMergeState {
   final double progress;
   final String? errorMessage;
   final String? outputPath;
+  final String? publicExportPath;
 
   bool get hasFiles => files.isNotEmpty;
   bool get canMerge => files.length >= 2 && !isProcessing;
@@ -51,6 +53,7 @@ class PdfMergeState {
     double? progress,
     String? errorMessage,
     String? outputPath,
+    String? publicExportPath,
   }) {
     return PdfMergeState(
       files: files ?? this.files,
@@ -58,6 +61,7 @@ class PdfMergeState {
       progress: progress ?? this.progress,
       errorMessage: errorMessage,
       outputPath: outputPath ?? this.outputPath,
+      publicExportPath: publicExportPath ?? this.publicExportPath,
     );
   }
 

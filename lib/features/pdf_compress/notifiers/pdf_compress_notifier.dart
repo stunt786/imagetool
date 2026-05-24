@@ -1,12 +1,11 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../models/pdf_compress_state.dart';
 
@@ -15,35 +14,12 @@ final pdfCompressProvider = NotifierProvider<PdfCompressNotifier, PdfCompressSta
 );
 
 class PdfCompressNotifier extends Notifier<PdfCompressState> {
+  final _manager = PrivateToPublicPdfManager();
+
   @override
   PdfCompressState build() => const PdfCompressState();
 
-  /// Writes the picked file bytes to a permanent location in Downloads/PixelTools/.
-  Future<String> _saveBytesPermanently(Uint8List bytes, String fileName) async {
-    Directory baseDir;
-    if (Platform.isAndroid) {
-      try {
-        final downloadDir = await getDownloadsDirectory();
-        baseDir = (downloadDir != null)
-            ? Directory(path.join(downloadDir.path, 'PixelTools'))
-            : await getApplicationDocumentsDirectory();
-      } catch (_) {
-        baseDir = await getApplicationDocumentsDirectory();
-      }
-    } else {
-      baseDir = await getApplicationDocumentsDirectory();
-    }
-
-    final dir = Directory(path.join(baseDir.path, 'PDFs', 'picked'));
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    final destPath = path.join(dir.path, 'source_${DateTime.now().millisecondsSinceEpoch}.pdf');
-    await File(destPath).writeAsBytes(bytes, flush: true);
-    return destPath;
-  }
-
-  /// Picks a single PDF file for compression.
+  /// Picks a single PDF file and copies it into the sandbox cache.
   Future<void> pickFile(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
@@ -55,21 +31,27 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     if (picked.isEmpty) return;
 
     final file = picked.first;
-    if (file.bytes == null) {
+    if (file.bytes == null && file.path == null) {
       state = state.copyWith(errorMessage: 'Could not read the selected file');
       return;
     }
 
     try {
-      final permanentPath = await _saveBytesPermanently(file.bytes!, file.name);
+      String sandboxPath;
+      if (file.bytes != null) {
+        sandboxPath = await _manager.writeToSandbox(file.bytes!, file.name);
+      } else {
+        sandboxPath = await _manager.copyToSandbox(file.path!);
+      }
 
       state = state.copyWith(
-        selectedFilePath: permanentPath,
+        selectedFilePath: sandboxPath,
         selectedFileName: file.name,
         selectedFileSize: file.sizeBytes,
         errorMessage: null,
         outputPath: null,
         outputFileSize: null,
+        publicExportPath: null,
       );
     } catch (e) {
       state = state.copyWith(errorMessage: 'Failed to access file: $e');
@@ -81,7 +63,8 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     state = state.copyWith(compressionLevel: level);
   }
 
-  /// Compresses the selected PDF file.
+  /// Compresses the selected PDF file in a background isolate.
+  /// The result stays in the sandbox until [exportFile] is called.
   Future<String?> compress() async {
     if (!state.hasFile) {
       state = state.copyWith(errorMessage: 'No file selected');
@@ -94,20 +77,34 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
       errorMessage: null,
       outputPath: null,
       outputFileSize: null,
+      publicExportPath: null,
     );
 
     try {
-      final baseName = state.selectedFileName!.replaceAll('.pdf', '');
-      final outputPath = await PdfService.instance.compressPdf(
-        inputPath: state.selectedFilePath!,
-        quality: state.compressionLevel.qualityFactor,
-        outputBaseName: baseName,
-        onProgress: (progress) {
-          state = state.copyWith(progress: progress);
+      final inputBytes = File(state.selectedFilePath!).readAsBytesSync();
+      state = state.copyWith(progress: 0.2);
+
+      final resultBytes = await compute(
+        PdfService.isolateCompressWorker,
+        {
+          'inputBytes': inputBytes,
+          'quality': state.compressionLevel.qualityFactor,
         },
       );
 
-      final outputFileSize = await File(outputPath).length();
+      state = state.copyWith(progress: 0.8);
+
+      // Write result to sandbox (not public dir)
+      final baseName = (state.selectedFileName ?? 'compressed').replaceAll('.pdf', '');
+      final outputPath = await _manager.writeToSandbox(
+        resultBytes,
+        '${baseName}_compressed.pdf',
+      );
+
+      final outputFileSize = File(outputPath).lengthSync();
+      if (!File(outputPath).existsSync() || outputFileSize == 0) {
+        throw Exception('Compressed PDF file was not created or is empty');
+      }
 
       state = state.copyWith(
         isProcessing: false,
@@ -118,6 +115,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
 
       return outputPath;
     } catch (e) {
+      await _manager.cleanup();
       state = state.copyWith(
         isProcessing: false,
         errorMessage: 'Compression failed: $e',
@@ -126,8 +124,34 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     }
   }
 
-  /// Clears the current selection and results.
+  /// Exports the compressed file from the sandbox to a user-chosen public
+  /// directory via the Storage Access Framework (SAF).
+  Future<String?> exportFile() async {
+    if (state.outputPath == null) return null;
+
+    try {
+      final resultPath = await _manager.exportSingleFile(
+        sandboxPath: state.outputPath!,
+        suggestedName: (state.selectedFileName ?? 'compressed')
+            .replaceAll('.pdf', '_compressed.pdf'),
+      );
+
+      if (resultPath != null) {
+        state = state.copyWith(publicExportPath: resultPath);
+      }
+
+      return resultPath;
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Export failed: $e');
+      return null;
+    } finally {
+      await _manager.cleanup();
+    }
+  }
+
+  /// Clears the current selection and results, cleaning the sandbox.
   void clear() {
+    _manager.cleanup();
     state = state.reset();
   }
 

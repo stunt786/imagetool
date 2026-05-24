@@ -76,7 +76,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
             ),
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFiles || state.outputPath != null ? notifier.clear : null,
+            onPressed: state.hasFiles || state.outputPath != null || state.publicExportPath != null ? notifier.clear : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -90,7 +90,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFiles && !state.isProcessing && state.outputPath == null)
+          if (state.hasFiles && !state.isProcessing && state.outputPath == null && state.publicExportPath == null)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -253,25 +253,48 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                       color: theme.colorScheme.onSecondaryContainer,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Saved to:',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSecondaryContainer,
+                  if (state.publicExportPath == null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Ready to export — file is in temporary storage.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    state.outputPath!.split('/').sublist(0, state.outputPath!.split('/').length - 1).join('/'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: theme.colorScheme.onSecondaryContainer,
+                  ],
+                  if (state.publicExportPath != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Saved to:',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 20),
+
+            if (state.publicExportPath == null) ...[
+              FilledButton.icon(
+                onPressed: () => notifier.exportFile(),
+                icon: const Icon(Icons.save_alt),
+                label: const Text('Export to Device'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             Text(
               'Output File',
@@ -320,35 +343,37 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('File Saved'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Merged PDF created from ${state.files.length} files'),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Location: ${state.outputPath!.split('/').sublist(0, state.outputPath!.split('/').length - 1).join('/')}',
+            if (state.publicExportPath != null) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('File Saved'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Merged PDF created from ${state.files.length} files'),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Location: ${state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/')}',
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
                         ),
                       ],
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                );
-              },
-              icon: const Icon(Icons.folder_open),
-              label: const Text('View Location'),
-            ),
+                  );
+                },
+                icon: const Icon(Icons.folder_open),
+                label: const Text('View Location'),
+              ),
+            ],
           ],
         ],
       ),

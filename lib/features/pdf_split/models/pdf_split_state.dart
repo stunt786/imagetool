@@ -26,6 +26,7 @@ class PdfSplitState {
     this.progress = 0.0,
     this.errorMessage,
     this.outputPaths = const [],
+    this.publicExportPaths = const [],
   });
 
   final String? selectedFilePath;
@@ -39,6 +40,7 @@ class PdfSplitState {
   final double progress;
   final String? errorMessage;
   final List<String> outputPaths;
+  final List<String> publicExportPaths;
 
   bool get hasFile => selectedFilePath != null;
   bool get hasPageInfo => pageCount != null && pageCount! > 0;
@@ -66,6 +68,7 @@ class PdfSplitState {
     double? progress,
     String? errorMessage,
     List<String>? outputPaths,
+    List<String>? publicExportPaths,
   }) {
     return PdfSplitState(
       selectedFilePath: selectedFilePath ?? this.selectedFilePath,
@@ -79,6 +82,7 @@ class PdfSplitState {
       progress: progress ?? this.progress,
       errorMessage: errorMessage,
       outputPaths: outputPaths ?? this.outputPaths,
+      publicExportPaths: publicExportPaths ?? this.publicExportPaths,
     );
   }
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/services/pdf_service.dart';
+import '../../../core/services/pdf_service.dart';
 import '../models/pdf_merge_state.dart';
 
 class PdfFileListTile extends StatelessWidget {
