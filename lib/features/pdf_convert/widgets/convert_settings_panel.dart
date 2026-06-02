@@ -146,8 +146,9 @@ class ConvertSettingsPanel extends StatelessWidget {
             }),
           ],
 
-          // DOCX limitation note
-          if (state.outputFormat == ConvertFormat.docx) ...[
+          // TXT/DOCX info note
+          if (state.outputFormat == ConvertFormat.txt ||
+              state.outputFormat == ConvertFormat.docx) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -166,7 +167,9 @@ class ConvertSettingsPanel extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'DOCX conversion extracts text and creates a basic Word document. Complex layouts, images, and formatting may not be preserved.',
+                      state.outputFormat == ConvertFormat.docx
+                          ? 'Text extracted via OCR with table detection. Complex layouts may vary.'
+                          : 'Text extracted via OCR. Images and tables are not included.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

@@ -156,6 +156,35 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
           }
           break;
 
+        case SplitMode.byPages:
+          {
+            if (state.selectedPages.isEmpty) {
+              state = state.copyWith(
+                isProcessing: false,
+                errorMessage: 'No pages selected',
+              );
+              return null;
+            }
+            final sortedPages = state.selectedPages.toList()..sort();
+            final results = await compute(
+              PdfService.isolateSplitSelectedPagesWorker,
+              {
+                'inputBytes': inputBytes,
+                'pageNumbers': sortedPages,
+              },
+            );
+            state = state.copyWith(progress: 0.7);
+            outputPaths = [];
+            for (int i = 0; i < results.length; i++) {
+              final sandboxPath = await _manager.writeToSandbox(
+                results[i],
+                '${baseName}_page_${sortedPages[i]}.pdf',
+              );
+              outputPaths.add(sandboxPath);
+            }
+          }
+          break;
+
         case SplitMode.byChunks:
           {
             final results = await compute(

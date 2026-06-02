@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
+
+import 'pdf_ocr_service.dart';
 
 /// Core service for all PDF processing operations.
 /// Uses syncfusion_flutter_pdf for reading/manipulating existing PDFs
@@ -131,8 +132,14 @@ class PdfService {
       final doc = syncfusion.PdfDocument(inputBytes: inputBytes);
 
       for (int j = 0; j < doc.pages.count; j++) {
-        final template = doc.pages[j].createTemplate();
-        mergedDoc.pages.add().graphics.drawPdfTemplate(
+        final page = doc.pages[j];
+        final template = page.createTemplate();
+        final pageSize = page.size;
+
+        final section = mergedDoc.sections!.add();
+        section.pageSettings.size = pageSize;
+        section.pageSettings.margins.all = 0;
+        section.pages.add().graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
@@ -164,8 +171,13 @@ class PdfService {
     final outputPaths = <String>[];
 
     for (int i = 0; i < pageCount; i++) {
+      final page = syncDoc.pages[i];
+      final template = page.createTemplate();
+      final pageSize = page.size;
+
       final newDoc = syncfusion.PdfDocument();
-      final template = syncDoc.pages[i].createTemplate();
+      newDoc.pageSettings.size = pageSize;
+      newDoc.pageSettings.margins.all = 0;
       newDoc.pages.add().graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
@@ -213,9 +225,15 @@ class PdfService {
 
     final newDoc = syncfusion.PdfDocument();
     for (int i = 0; i < pageNumbers.length; i++) {
-      final pageIndex = pageNumbers[i] - 1; // Convert to 0-indexed
-      final template = syncDoc.pages[pageIndex].createTemplate();
-      newDoc.pages.add().graphics.drawPdfTemplate(
+      final pageIndex = pageNumbers[i] - 1;
+      final page = syncDoc.pages[pageIndex];
+      final template = page.createTemplate();
+      final pageSize = page.size;
+
+      final section = newDoc.sections!.add();
+      section.pageSettings.size = pageSize;
+      section.pageSettings.margins.all = 0;
+      section.pages.add().graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
           );
@@ -256,8 +274,14 @@ class PdfService {
       final end = (i + pageSize < pageCount) ? i + pageSize : pageCount;
 
       for (int j = i; j < end; j++) {
-        final template = syncDoc.pages[j].createTemplate();
-        newDoc.pages.add().graphics.drawPdfTemplate(
+        final page = syncDoc.pages[j];
+        final template = page.createTemplate();
+        final pageSize = page.size;
+
+        final section = newDoc.sections!.add();
+        section.pageSettings.size = pageSize;
+        section.pageSettings.margins.all = 0;
+        section.pages.add().graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
@@ -336,7 +360,7 @@ class PdfService {
     return outputPaths;
   }
 
-  /// Converts a PDF to plain text.
+  /// Converts a PDF to plain text using ML Kit OCR.
   /// Returns the path to the text file.
   Future<String> convertPdfToText({
     required String inputPath,
@@ -347,37 +371,15 @@ class PdfService {
     final fileName = _generateFileName(outputBaseName, 'txt');
     final outputPath = path.join(saveDir.path, fileName);
 
-    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
-    final pageCount = pdfDoc.pagesCount;
-    final buffer = StringBuffer();
-
-    for (int i = 1; i <= pageCount; i++) {
-      try {
-        await pdfDoc.getPage(i);
-        // Note: pdfx doesn't expose text extraction directly
-        // We use a placeholder indicating limitation
-        buffer.writeln('--- Page $i ---');
-        buffer.writeln('[Text extraction requires OCR or server-side processing]');
-        buffer.writeln();
-      } catch (_) {
-        buffer.writeln('--- Page $i ---');
-        buffer.writeln('[Page processing error]');
-        buffer.writeln();
-      }
-
-      onProgress?.call(i / pageCount);
-    }
-
-    await pdfDoc.close();
-
-    await File(outputPath).writeAsString(buffer.toString());
-    return outputPath;
+    return PdfOcrService.instance.convertToText(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      onProgress: onProgress,
+    );
   }
 
-  /// Converts a PDF to DOCX format using text-based extraction.
-  /// Note: This creates a basic DOCX with extracted text. Complex layouts,
-  /// images, and formatting may not be preserved. For full-fidelity conversion,
-  /// consider using a server-side solution or native platform channels.
+  /// Converts a PDF to DOCX format using ML Kit OCR with formatting.
+  /// Preserves text, paragraphs, and detected tables.
   /// Returns the path to the DOCX file.
   Future<String> convertPdfToDocx({
     required String inputPath,
@@ -388,101 +390,11 @@ class PdfService {
     final fileName = _generateFileName(outputBaseName, 'docx');
     final outputPath = path.join(saveDir.path, fileName);
 
-    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
-    final pageCount = pdfDoc.pagesCount;
-    final textContent = StringBuffer();
-
-    for (int i = 1; i <= pageCount; i++) {
-      try {
-        await pdfDoc.getPage(i);
-        // Note: Native DOCX conversion with full text extraction requires
-        // server-side processing or platform channels. This creates a basic
-        // DOCX structure with page placeholders.
-        if (i > 1) {
-          textContent.writeln();
-        }
-        textContent.writeln('[Page $i - Text extraction requires OCR or server-side processing]');
-      } catch (_) {
-        textContent.writeln('[Page $i processing error]');
-      }
-
-      onProgress?.call(i / pageCount);
-    }
-
-    await pdfDoc.close();
-
-    // Create a minimal DOCX file (ZIP archive with XML content)
-    final archive = Archive();
-
-    // [Content_Types].xml
-    archive.addFile(ArchiveFile(
-      '[Content_Types].xml',
-      _contentTypesXml.codeUnits.length,
-      _contentTypesXml.codeUnits,
-    ));
-
-    // _rels/.rels
-    archive.addFile(ArchiveFile(
-      '_rels/.rels',
-      _relsXml.codeUnits.length,
-      _relsXml.codeUnits,
-    ));
-
-    // word/document.xml
-    final documentXml = _buildDocumentXml(textContent.toString());
-    archive.addFile(ArchiveFile(
-      'word/document.xml',
-      documentXml.codeUnits.length,
-      documentXml.codeUnits,
-    ));
-
-    // Write ZIP file
-    final zipData = ZipEncoder().encode(archive);
-    await File(outputPath).writeAsBytes(zipData);
-    return outputPath;
-  }
-
-  // DOCX XML templates
-  static const String _contentTypesXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>''';
-
-  static const String _relsXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>''';
-
-  String _buildDocumentXml(String text) {
-    final buffer = StringBuffer();
-    buffer.writeln('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-    buffer.writeln(
-        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">');
-    buffer.writeln('<w:body>');
-
-    // Split text into paragraphs
-    final paragraphs = text.split('\n');
-    for (final paragraph in paragraphs) {
-      final trimmed = paragraph.trim();
-      if (trimmed.isNotEmpty) {
-        // Escape XML special characters
-        final escapedText = trimmed
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;');
-        buffer.writeln(
-            '<w:p><w:r><w:t xml:space="preserve">$escapedText</w:t></w:r></w:p>');
-      } else {
-        // Empty paragraph
-        buffer.writeln('<w:p/>');
-      }
-    }
-
-    buffer.writeln('</w:body>');
-    buffer.writeln('</w:document>');
-    return buffer.toString();
+    return PdfOcrService.instance.convertToDocx(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      onProgress: onProgress,
+    );
   }
 
   /// Gets the number of pages in a PDF file.
@@ -576,8 +488,14 @@ class PdfService {
     for (final fileBytes in filesData) {
       final doc = syncfusion.PdfDocument(inputBytes: fileBytes);
       for (int j = 0; j < doc.pages.count; j++) {
-        final template = doc.pages[j].createTemplate();
-        mergedDoc.pages.add().graphics.drawPdfTemplate(
+        final page = doc.pages[j];
+        final template = page.createTemplate();
+        final pageSize = page.size;
+
+        final section = mergedDoc.sections!.add();
+        section.pageSettings.size = pageSize;
+        section.pageSettings.margins.all = 0;
+        section.pages.add().graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
@@ -604,8 +522,13 @@ class PdfService {
     final results = <Uint8List>[];
 
     for (int i = 0; i < pageCount; i++) {
+      final page = srcDoc.pages[i];
+      final template = page.createTemplate();
+      final pageSize = page.size;
+
       final newDoc = syncfusion.PdfDocument();
-      final template = srcDoc.pages[i].createTemplate();
+      newDoc.pageSettings.size = pageSize;
+      newDoc.pageSettings.margins.all = 0;
       newDoc.pages.add().graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
@@ -634,8 +557,14 @@ class PdfService {
 
     for (final pageNum in pageNumbers) {
       final pageIndex = pageNum - 1;
-      final template = srcDoc.pages[pageIndex].createTemplate();
-      newDoc.pages.add().graphics.drawPdfTemplate(
+      final page = srcDoc.pages[pageIndex];
+      final template = page.createTemplate();
+      final pageSize = page.size;
+
+      final section = newDoc.sections!.add();
+      section.pageSettings.size = pageSize;
+      section.pageSettings.margins.all = 0;
+      section.pages.add().graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
           );
@@ -666,12 +595,55 @@ class PdfService {
       final end = (i + pageSize < pageCount) ? i + pageSize : pageCount;
 
       for (int j = i; j < end; j++) {
-        final template = srcDoc.pages[j].createTemplate();
-        newDoc.pages.add().graphics.drawPdfTemplate(
+        final page = srcDoc.pages[j];
+        final template = page.createTemplate();
+        final pageSize = page.size;
+
+        final section = newDoc.sections!.add();
+        section.pageSettings.size = pageSize;
+        section.pageSettings.margins.all = 0;
+        section.pages.add().graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
       }
+
+      final bytes = await newDoc.save();
+      newDoc.dispose();
+      results.add(Uint8List.fromList(bytes));
+    }
+
+    srcDoc.dispose();
+    return results;
+  }
+
+  /// Split selected pages worker for background isolate execution.
+  /// Each selected page becomes its own independent PDF.
+  /// Params: inputBytes (Uint8List), pageNumbers (List<int>) — 1-indexed
+  /// Returns: List<Uint8List> — one per selected page
+  static Future<List<Uint8List>> isolateSplitSelectedPagesWorker(
+      Map<String, dynamic> params) async {
+    final inputBytes =
+        Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final pageNumbers =
+        (params['pageNumbers'] as List<dynamic>).cast<int>();
+
+    final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
+    final results = <Uint8List>[];
+
+    for (final pageNum in pageNumbers) {
+      final pageIndex = pageNum - 1;
+      final page = srcDoc.pages[pageIndex];
+      final template = page.createTemplate();
+      final pageSize = page.size;
+
+      final newDoc = syncfusion.PdfDocument();
+      newDoc.pageSettings.size = pageSize;
+      newDoc.pageSettings.margins.all = 0;
+      newDoc.pages.add().graphics.drawPdfTemplate(
+            template,
+            ui.Offset.zero,
+          );
 
       final bytes = await newDoc.save();
       newDoc.dispose();

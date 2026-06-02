@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 enum SplitMode {
   allPages('All Pages', 'Split each page into a separate PDF'),
   pageRange('Page Range', 'Extract specific pages into one PDF'),
+  byPages('Split by Pages', 'Split selected pages into separate PDFs'),
   byChunks('By Chunks', 'Split into groups of N pages');
 
   const SplitMode(this.label, this.description);
@@ -50,6 +51,8 @@ class PdfSplitState {
       case SplitMode.allPages:
         return true;
       case SplitMode.pageRange:
+        return selectedPages.isNotEmpty;
+      case SplitMode.byPages:
         return selectedPages.isNotEmpty;
       case SplitMode.byChunks:
         return chunkSize >= 1 && chunkSize <= (pageCount ?? 0);

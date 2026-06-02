@@ -227,9 +227,9 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
           ),
           const SizedBox(height: 20),
 
-          if (state.splitMode == SplitMode.pageRange && state.hasPageInfo) ...[
+          if ((state.splitMode == SplitMode.pageRange || state.splitMode == SplitMode.byPages) && state.hasPageInfo) ...[
             Text(
-              'Select Pages to Extract',
+              state.splitMode == SplitMode.byPages ? 'Select Pages to Split' : 'Select Pages to Extract',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -486,43 +486,65 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
   ) {
     final theme = Theme.of(context);
 
+    String buttonLabel;
+    if (state.splitMode == SplitMode.pageRange) {
+      final count = state.selectedPages.length;
+      buttonLabel = 'Extract $count page${count > 1 ? 's' : ''}';
+    } else if (state.splitMode == SplitMode.byPages) {
+      final count = state.selectedPages.length;
+      buttonLabel = 'Split $count page${count > 1 ? 's' : ''}';
+    } else if (state.splitMode == SplitMode.byChunks) {
+      final parts = (state.pageCount! / state.chunkSize).ceil();
+      buttonLabel = 'Split into $parts part${parts > 1 ? 's' : ''}';
+    } else {
+      buttonLabel = 'Split all ${state.pageCount} pages';
+    }
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
       child: SafeArea(
-        child: FilledButton.icon(
-          onPressed: state.canSplit
-              ? () async {
-                  final result = await notifier.split();
-                  if (result != null && mounted) {
-                    ref.read(editHistoryProvider.notifier).addEntry(
-                          EditHistoryItem(
-                            fileName: state.selectedFileName ?? 'split.pdf',
-                            toolUsed: 'PDF Splitter',
-                            editedAt: DateTime.now(),
-                            toolIcon: Icons.call_split_rounded,
-                          ),
-                        );
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: state.canSplit
+                ? () async {
+                    final result = await notifier.split();
+                    if (result != null && mounted) {
+                      ref.read(editHistoryProvider.notifier).addEntry(
+                            EditHistoryItem(
+                              fileName: state.selectedFileName ?? 'split.pdf',
+                              toolUsed: 'PDF Splitter',
+                              editedAt: DateTime.now(),
+                              toolIcon: Icons.call_split_rounded,
+                            ),
+                          );
+                    }
                   }
-                }
-              : null,
-          icon: const Icon(Icons.call_split_rounded),
-          label: Text(state.splitMode == SplitMode.pageRange
-              ? 'Extract ${state.selectedPages.length} page${state.selectedPages.length > 1 ? 's' : ''}'
-              : state.splitMode == SplitMode.byChunks
-                  ? 'Split into ${(state.pageCount! / state.chunkSize).ceil()} part${(state.pageCount! / state.chunkSize).ceil() > 1 ? 's' : ''}'
-                  : 'Split all ${state.pageCount} pages'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+                : null,
+            icon: const Icon(Icons.call_split_rounded, size: 20),
+            label: Flexible(
+              child: Text(
+                buttonLabel,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
         ),
       ),

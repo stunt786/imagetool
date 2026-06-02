@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/camera/presentation/camera_screen.dart';
+import '../../features/camera/presentation/screens/document_review_screen.dart';
+import '../../features/camera/presentation/screens/document_filter_screen.dart';
+import '../../features/camera/presentation/screens/perspective_correction_screen.dart';
 import '../../features/collage_builder/presentation/collage_builder_screen.dart';
 import '../../features/format_converter/presentation/format_converter_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -44,6 +47,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/camera',
                 builder: (context, state) => const CameraScreen(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: 'review',
+                    pageBuilder: (context, state) =>
+                        const _MaterialPage(child: DocumentReviewScreen()),
+                  ),
+                  GoRoute(
+                    path: 'filter',
+                    pageBuilder: (context, state) =>
+                        const _MaterialPage(child: DocumentFilterScreen()),
+                  ),
+                  GoRoute(
+                    path: 'correct-perspective',
+                    pageBuilder: (context, state) =>
+                        const _MaterialPage(
+                            child: PerspectiveCorrectionScreen()),
+                  ),
+                ],
               ),
             ],
           ),

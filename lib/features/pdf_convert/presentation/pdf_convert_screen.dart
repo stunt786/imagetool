@@ -84,15 +84,6 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
       ),
       body: Column(
         children: [
-          if (_showSettings)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: ConvertSettingsPanel(
-                state: state,
-                onFormatChanged: notifier.setOutputFormat,
-                onDpiChanged: notifier.setDpi,
-              ),
-            ),
           Expanded(
             child: state.hasFile || state.outputPaths.isNotEmpty
                 ? _buildContent(context, state, notifier)
@@ -170,6 +161,16 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_showSettings)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: ConvertSettingsPanel(
+                state: state,
+                onFormatChanged: notifier.setOutputFormat,
+                onDpiChanged: notifier.setDpi,
+              ),
+            ),
+
           // Selected file card
           Container(
             padding: const EdgeInsets.all(16),
@@ -433,41 +434,55 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
   ) {
     final theme = Theme.of(context);
 
+    final buttonLabel = state.hasPageInfo
+        ? 'Convert ${state.pageCount} page${state.pageCount! > 1 ? 's' : ''} to ${state.outputFormat.label}'
+        : 'Convert to ${state.outputFormat.label}';
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
       child: SafeArea(
-        child: FilledButton.icon(
-          onPressed: state.canConvert
-              ? () async {
-                  final result = await notifier.convert();
-                  if (result != null && mounted) {
-                    ref.read(editHistoryProvider.notifier).addEntry(
-                          EditHistoryItem(
-                            fileName: state.selectedFileName ?? 'converted.${state.outputFormat.extension}',
-                            toolUsed: 'PDF Converter',
-                            editedAt: DateTime.now(),
-                            toolIcon: Icons.transform_rounded,
-                          ),
-                        );
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: state.canConvert
+                ? () async {
+                    final result = await notifier.convert();
+                    if (result != null && mounted) {
+                      ref.read(editHistoryProvider.notifier).addEntry(
+                            EditHistoryItem(
+                              fileName: state.selectedFileName ?? 'converted.${state.outputFormat.extension}',
+                              toolUsed: 'PDF Converter',
+                              editedAt: DateTime.now(),
+                              toolIcon: Icons.transform_rounded,
+                            ),
+                          );
+                    }
                   }
-                }
-              : null,
-          icon: const Icon(Icons.transform_rounded),
-          label: Text(state.hasPageInfo
-              ? 'Convert ${state.pageCount} page${state.pageCount! > 1 ? 's' : ''} to ${state.outputFormat.label}'
-              : 'Convert to ${state.outputFormat.label}'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+                : null,
+            icon: const Icon(Icons.transform_rounded, size: 20),
+            label: Flexible(
+              child: Text(
+                buttonLabel,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
         ),
       ),

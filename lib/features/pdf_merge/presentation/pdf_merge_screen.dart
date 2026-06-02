@@ -386,40 +386,53 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
     PdfMergeNotifier notifier,
   ) {
     final theme = Theme.of(context);
+    final fileCount = state.files.length;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: theme.colorScheme.shadow.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
       child: SafeArea(
-        child: FilledButton.icon(
-          onPressed: state.canMerge
-              ? () async {
-                  final result = await notifier.merge();
-                  if (result != null && mounted) {
-                    ref.read(editHistoryProvider.notifier).addEntry(
-                          EditHistoryItem(
-                            fileName: 'merged.pdf',
-                            toolUsed: 'PDF Merger',
-                            editedAt: DateTime.now(),
-                            toolIcon: Icons.merge_type_rounded,
-                          ),
-                        );
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: state.canMerge
+                ? () async {
+                    final result = await notifier.merge();
+                    if (result != null && mounted) {
+                      ref.read(editHistoryProvider.notifier).addEntry(
+                            EditHistoryItem(
+                              fileName: 'merged.pdf',
+                              toolUsed: 'PDF Merger',
+                              editedAt: DateTime.now(),
+                              toolIcon: Icons.merge_type_rounded,
+                            ),
+                          );
+                    }
                   }
-                }
-              : null,
-          icon: const Icon(Icons.merge_type_rounded),
-          label: Text('Merge ${state.files.length} PDFs'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
+                : null,
+            icon: const Icon(Icons.merge_type_rounded, size: 20),
+            label: Flexible(
+              child: Text(
+                'Merge $fileCount PDF${fileCount > 1 ? 's' : ''}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
         ),
       ),
