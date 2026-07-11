@@ -61,7 +61,7 @@ class SharedAppDrawer extends StatelessWidget {
     required this.outputFolder,
     required this.watermarkText,
     required this.keepExifData,
-    required this.onUpgradeTap,
+    // required this.onUpgradeTap, // TODO: Re-enable in upcoming version with premium features
     required this.onSettingsTap,
     required this.onOutputFolderTap,
     required this.onWatermarkTap,
@@ -74,7 +74,7 @@ class SharedAppDrawer extends StatelessWidget {
   final String outputFolder;
   final String watermarkText;
   final bool keepExifData;
-  final VoidCallback onUpgradeTap;
+  // final VoidCallback onUpgradeTap; // TODO: Re-enable in upcoming version with premium features
   final VoidCallback onSettingsTap;
   final VoidCallback onOutputFolderTap;
   final VoidCallback onWatermarkTap;
@@ -128,13 +128,14 @@ class SharedAppDrawer extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
                   children: [
-                    _DrawerTile(
-                      icon: Icons.workspace_premium_rounded,
-                      title: 'Upgrade to Premium',
-                      subtitle: 'Unlock advanced exports and pro workflows',
-                      accent: const Color(0xFF7C3AED),
-                      onTap: onUpgradeTap,
-                    ),
+                    // TODO: Re-enable premium upgrade tile in upcoming version with premium features
+                    // _DrawerTile(
+                    //   icon: Icons.workspace_premium_rounded,
+                    //   title: 'Upgrade to Premium',
+                    //   subtitle: 'Unlock advanced exports and pro workflows',
+                    //   accent: const Color(0xFF7C3AED),
+                    //   onTap: onUpgradeTap,
+                    // ),
                     const SizedBox(height: 8),
                     Theme(
                       data: theme.copyWith(dividerColor: Colors.transparent),

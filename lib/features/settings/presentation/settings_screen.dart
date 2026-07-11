@@ -7,7 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/settings/app_settings.dart';
-import '../../../shared/widgets/premium_banner.dart';
+// import '../../../shared/widgets/premium_banner.dart'; // TODO: Re-enable in upcoming version with premium features
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -45,7 +45,8 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const PremiumBanner(),
+                // TODO: Re-enable PremiumBanner in upcoming version with premium features
+                // const PremiumBanner(),
                 const SizedBox(height: 24),
                 _buildSection(
                   context,

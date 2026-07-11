@@ -8,11 +8,13 @@ class DocumentBatch {
     required this.id,
     required this.pages,
     this.createdAt,
+    this.batchDirectory,
   });
 
   final String id;
   final List<ScannedPage> pages;
   final DateTime? createdAt;
+  final String? batchDirectory;
 
   int get pageCount => pages.length;
 
@@ -20,11 +22,13 @@ class DocumentBatch {
     String? id,
     List<ScannedPage>? pages,
     DateTime? createdAt,
+    String? batchDirectory,
   }) {
     return DocumentBatch(
       id: id ?? this.id,
       pages: pages ?? this.pages,
       createdAt: createdAt ?? this.createdAt,
+      batchDirectory: batchDirectory ?? this.batchDirectory,
     );
   }
 

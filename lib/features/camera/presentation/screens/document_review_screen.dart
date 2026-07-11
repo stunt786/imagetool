@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 
 class DocumentReviewScreen extends ConsumerWidget {
@@ -170,11 +171,10 @@ class _PageTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (page.filterType != null &&
-                          page.filterType.name != 'none')
+                      if (page.filterType != FilterType.none)
                         Chip(
                           label: Text(
-                            page.filterType.name,
+                            _filterLabel(page.filterType),
                             style: TextStyle(
                               fontSize: 11,
                               color: scheme.primary,
@@ -217,5 +217,18 @@ class _PageTile extends StatelessWidget {
       child: Icon(Icons.image_outlined,
           color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
     );
+  }
+}
+
+String _filterLabel(FilterType type) {
+  switch (type) {
+    case FilterType.magicColor:
+      return 'Magic Color';
+    case FilterType.binarization:
+      return 'Binarization';
+    case FilterType.shadowRemoval:
+      return 'Shadow Removal';
+    case FilterType.none:
+      return 'Original';
   }
 }

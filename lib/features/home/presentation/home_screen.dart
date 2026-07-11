@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-import '../../../shared/widgets/premium_banner.dart';
+// import '../../../shared/widgets/premium_banner.dart'; // TODO: Re-enable in upcoming version with premium features
 
 const _featuredTools = <_QuickToolData>[
   _QuickToolData(
@@ -196,22 +196,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFEAB308).withValues(alpha: 0.12),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.workspace_premium_rounded,
-                              size: 20, color: Color(0xFFEAB308)),
-                          onPressed: () => context.push('/premium'),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                          ),
-                        ),
-                      ),
+                      // TODO: Re-enable premium button in upcoming version
+                      // Container(
+                      //   width: 42,
+                      //   height: 42,
+                      //   decoration: BoxDecoration(
+                      //     shape: BoxShape.circle,
+                      //     color: const Color(0xFFEAB308).withValues(alpha: 0.12),
+                      //   ),
+                      //   child: IconButton(
+                      //     icon: const Icon(Icons.workspace_premium_rounded,
+                      //         size: 20, color: Color(0xFFEAB308)),
+                      //     onPressed: () => context.push('/premium'),
+                      //     style: IconButton.styleFrom(
+                      //       backgroundColor: Colors.transparent,
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   ),
                   if (isSearching && filteredTools.isEmpty && filteredHistory.isEmpty)
@@ -290,7 +291,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               const SizedBox(height: 14),
                               _FeaturedToolsGrid(isWide: isWide),
-                              const PremiumBanner(),
+                              // TODO: Re-enable PremiumBanner in upcoming version with premium features
+                              // const PremiumBanner(),
                               const SizedBox(height: 28),
                               _SectionHeader(
                                 title: 'Recent History',

@@ -2,10 +2,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
+import 'package:path/path.dart' as p;
 
 import '../models/document_batch.dart';
 import '../models/scanned_page.dart';
+import '../services/batch_storage_service.dart';
 import '../services/image_filter_service.dart';
 
 final documentBatchProvider =
@@ -22,11 +23,15 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     );
   }
 
-  void startNewBatch() {
+  Future<void> startNewBatch() async {
+    final batchId = DateTime.now().millisecondsSinceEpoch.toString();
+    final batchDir = await BatchStorageService.createBatchDirectory(batchId);
+
     state = DocumentBatch(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: batchId,
       pages: [],
       createdAt: DateTime.now(),
+      batchDirectory: batchDir.path,
     );
   }
 
@@ -35,11 +40,21 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     if (!await file.exists()) return;
 
     final bytes = await file.readAsBytes();
-    final name = path.basename(filePath);
+    final name = p.basename(filePath);
     final sizeBytes = bytes.length;
 
+    var savedPath = filePath;
+    if (state.id.isNotEmpty && state.batchDirectory != null) {
+      final pageIndex = state.pages.length;
+      savedPath = await BatchStorageService.savePage(
+        batchId: state.id,
+        pageIndex: pageIndex,
+        imageBytes: bytes,
+      );
+    }
+
     final page = ScannedPage(
-      path: filePath,
+      path: savedPath,
       name: name,
       sizeBytes: sizeBytes,
       imageBytes: bytes,
@@ -50,7 +65,11 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     state = state.addPage(page);
   }
 
-  void removePage(int index) {
+  Future<void> removePage(int index) async {
+    final page = state.pages.elementAtOrNull(index);
+    if (page != null && page.path.isNotEmpty) {
+      await BatchStorageService.deletePageFile(page.path);
+    }
     state = state.removePage(index);
   }
 
@@ -111,7 +130,10 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     }
   }
 
-  void clearBatch() {
+  Future<void> clearBatch() async {
+    if (state.id.isNotEmpty) {
+      await BatchStorageService.deleteBatch(state.id);
+    }
     state = const DocumentBatch(
       id: '',
       pages: [],

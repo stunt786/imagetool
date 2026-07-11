@@ -18,7 +18,7 @@ import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
 import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 import '../../features/all_tools/presentation/all_tools_screen.dart';
-import '../../features/premium/presentation/premium_screen.dart';
+// import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 
@@ -145,12 +145,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) =>
             const _MaterialPage(child: AllToolsScreen()),
       ),
-      GoRoute(
-        path: '/premium',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: PremiumScreen()),
-      ),
+      // TODO: Re-enable premium route in upcoming version with premium features
+      // GoRoute(
+      //   path: '/premium',
+      //   parentNavigatorKey: rootNavigatorKey,
+      //   pageBuilder: (context, state) =>
+      //       const _MaterialPage(child: PremiumScreen()),
+      // ),
 
       // Backwards-compatible deep links from the earlier scaffold.
       GoRoute(path: '/', redirect: (context, state) => '/tools'),
