@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../models/document_batch.dart';
 import '../notifiers/document_batch_notifier.dart';
 import '../services/document_scanner_service.dart';
 import '../services/perspective_correction_service.dart';
@@ -33,7 +33,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _isDocumentMode = false;
   bool _isFlashOn = false;
   String? _capturedImagePath;
-  int _batchPageCount = 0;
   bool _wasCameraTab = false;
   bool _isScanningDocument = false;
 
@@ -142,56 +141,52 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  // ─── Document Scanning (Android: ML Kit, iOS: Manual Fallback) ──────────
+  // ─── Document Scanning (Continuous Multi-Page Capture) ─────────────────
 
-  Future<void> _startDocumentScan() async {
-    if (_isScanningDocument) return;
-    setState(() => _isScanningDocument = true);
-
-    try {
-      // Try ML Kit document scanner first
-      final result = await DocumentScannerService.scanDocument();
-
-      if (result != null && result.files.isNotEmpty) {
-        await _addScannedFiles(result.files);
-      } else {
-        // ML Kit failed (iOS or unavailable) — use manual camera capture
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Scanner unavailable, using manual capture'),
-              behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (_) {
-      // Fallback: manual capture in document mode
-    } finally {
-      if (mounted) {
-        setState(() => _isScanningDocument = false);
-      }
-    }
-  }
-
-  Future<void> _addScannedFiles(List<File> files) async {
+  Future<void> _startNewBatchIfNeeded() async {
     final notifier = ref.read(documentBatchProvider.notifier);
     if (!ref.read(documentBatchProvider).hasPages) {
       await notifier.startNewBatch();
     }
+  }
 
-    for (final file in files) {
-      await notifier.addPageFromPath(file.path);
-    }
+  /// Launch ML Kit document scanner (base mode — no slow filter UI).
+  /// Camera is released before ML Kit and re-initialized after to prevent
+  /// the frozen preview that occurs when ML Kit is dismissed.
+  Future<void> _launchMlKitScanner() async {
+    if (_isScanningDocument) return;
+    setState(() => _isScanningDocument = true);
 
-    if (mounted) {
-      setState(() {
-        _batchPageCount = ref.read(documentBatchProvider).pageCount;
-      });
+    // Release our camera so ML Kit can take over cleanly
+    _disposeCamera();
 
-      // Navigate to review with the scanned pages
-      context.push('/camera/review');
+    try {
+      final result = await DocumentScannerService.scanDocument();
+      if (result != null && result.files.isNotEmpty) {
+        await _startNewBatchIfNeeded();
+        final notifier = ref.read(documentBatchProvider.notifier);
+        for (int i = 0; i < result.files.length; i++) {
+          final file = result.files[i];
+          final pageIndex = ref.read(documentBatchProvider).pages.length;
+          await notifier.addPageFromPath(file.path);
+          // Run background correction on ML Kit pages too
+          final rawBytes = await file.readAsBytes();
+          _autoCorrectInBackground(rawBytes, pageIndex);
+        }
+        if (mounted) {
+          setState(() {});
+          HapticFeedback.lightImpact();
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) {
+        setState(() => _isScanningDocument = false);
+        // Always reinitialize camera after ML Kit to avoid frozen preview
+        if (_cameras.isNotEmpty) {
+          _initCameraController(_cameras[_selectedCameraIndex]);
+        }
+      }
     }
   }
 
@@ -221,48 +216,55 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _addDocumentPage(XFile file) async {
-    final fileBytes = await File(file.path).readAsBytes();
-    Uint8List finalBytes = fileBytes;
+    final rawBytes = await File(file.path).readAsBytes();
 
-    // Post-capture auto-correction: detect document and straighten
-    try {
-      final corrected = await _autoCorrectDocument(fileBytes);
-      if (corrected != null) {
-        finalBytes = corrected;
-      }
-    } catch (_) {}
-
-    // Save corrected image to temp location
+    // Save raw image to temp location immediately
     final tempDir = Directory('${await _tempDirPath()}');
     if (!await tempDir.exists()) {
       await tempDir.create(recursive: true);
     }
-    final correctedPath =
+    final rawPath =
         '${tempDir.path}/doc_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    await File(correctedPath).writeAsBytes(finalBytes);
+    await File(rawPath).writeAsBytes(rawBytes);
 
+    await _startNewBatchIfNeeded();
+    final pageIndex = ref.read(documentBatchProvider).pages.length;
     final notifier = ref.read(documentBatchProvider.notifier);
-    if (!ref.read(documentBatchProvider).hasPages) {
-      await notifier.startNewBatch();
-    }
-    await notifier.addPageFromPath(correctedPath);
+    await notifier.addPageFromPath(rawPath);
 
     if (mounted) {
-      setState(() {
-        _batchPageCount = ref.read(documentBatchProvider).pageCount;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Page ${_batchPageCount} captured'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 1),
-          action: SnackBarAction(
-            label: 'Review',
-            onPressed: () => _openDocumentReview(),
-          ),
-        ),
-      );
+      setState(() {});
+      HapticFeedback.lightImpact();
     }
+
+    // Process auto-correction in background — camera stays ready immediately
+    _autoCorrectInBackground(rawBytes, pageIndex);
+  }
+
+  Future<void> _autoCorrectInBackground(Uint8List rawBytes, int pageIndex) async {
+    try {
+      final corrected = await _autoCorrectDocument(rawBytes);
+      if (corrected == null || !mounted) return;
+
+      // Save corrected version to a temp file
+      final tempDir = Directory('${await _tempDirPath()}');
+      final correctedPath =
+          '${tempDir.path}/doc_${DateTime.now().millisecondsSinceEpoch}_corrected.jpg';
+      await File(correctedPath).writeAsBytes(corrected);
+
+      // Update the page in-place with corrected image
+      final batch = ref.read(documentBatchProvider);
+      if (pageIndex < batch.pages.length) {
+        final currentPage = batch.pages[pageIndex];
+        ref.read(documentBatchProvider.notifier).updatePage(
+          pageIndex,
+          currentPage.copyWith(
+            path: correctedPath,
+            imageBytes: corrected,
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   /// Post-capture document auto-correction.
@@ -444,6 +446,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     context.push('/camera/review');
   }
 
+  Future<void> _removePage(int index) async {
+    final notifier = ref.read(documentBatchProvider.notifier);
+    await notifier.removePage(index);
+    if (mounted) setState(() {});
+  }
+
   void _showPostCaptureMenu() {
     if (_capturedImagePath == null) return;
     showModalBottomSheet(
@@ -469,8 +477,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     setState(() => _isDocumentMode = isDocumentMode);
 
     if (_isDocumentMode) {
-      // Launch ML Kit document scanner for a CamScanner-like experience
-      _startDocumentScan();
+      _startNewBatchIfNeeded();
+      // Auto-launch ML Kit scanner as the auto scan mode on first entry
+      if (!ref.read(documentBatchProvider).hasPages) {
+        _launchMlKitScanner();
+      }
     }
   }
 
@@ -483,6 +494,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    final batch = ref.watch(documentBatchProvider);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -521,6 +534,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Thumbnail strip + Done button
+                    if (_isDocumentMode && batch.hasPages)
+                      _buildThumbnailStrip(batch, context),
+
                     // Mode Toggle
                     Container(
                       margin: const EdgeInsets.only(bottom: 24),
@@ -549,43 +566,34 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        IconButton(
-                          onPressed: () {},
-                          icon: const Icon(Icons.photo_library_rounded,
-                              color: Colors.white, size: 28),
-                        ),
-                        if (_isDocumentMode && _batchPageCount > 0)
-                          GestureDetector(
-                            onTap: _openDocumentReview,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color:
-                                    Colors.amberAccent.withValues(alpha: 0.3),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                    color: Colors.amberAccent
-                                        .withValues(alpha: 0.6)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.description,
-                                      color: Colors.amberAccent, size: 18),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '$_batchPageCount',
-                                    style: const TextStyle(
-                                      color: Colors.amberAccent,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
+                        // ML Kit Smart Scan (document mode only)
+                        if (_isDocumentMode)
+                          IconButton(
+                            onPressed: _isScanningDocument
+                                ? null
+                                : _launchMlKitScanner,
+                            icon: _isScanningDocument
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white70,
                                     ),
+                                  )
+                                : const Icon(
+                                    Icons.auto_fix_high_rounded,
+                                    color: Colors.white,
+                                    size: 28,
                                   ),
-                                ],
-                              ),
-                            ),
+                          )
+                        else
+                          IconButton(
+                            onPressed: () {},
+                            icon: const Icon(Icons.photo_library_rounded,
+                                color: Colors.white, size: 28),
                           ),
+
                         GestureDetector(
                           onTap: _isScanningDocument ? null : _takePicture,
                           behavior: HitTestBehavior.opaque,
@@ -642,9 +650,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          _batchPageCount > 0
-                              ? 'Tap to add another page'
-                              : 'Launching scanner...',
+                          batch.hasPages
+                              ? 'Tap thumbnail to finish · Tap ○ for more'
+                              : 'Auto Scan active — capture pages via ML Kit',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.6),
                             fontSize: 12,
@@ -657,6 +665,115 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildThumbnailStrip(DocumentBatch batch, BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 8, right: 8),
+      child: SizedBox(
+        height: 80,
+        child: Row(
+          children: [
+            Expanded(
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: batch.pages.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final page = batch.pages[index];
+                  return Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _openDocumentReview,
+                        child: Container(
+                          width: 56,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              width: 1.5,
+                            ),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: page.imageBytes != null
+                              ? Image.memory(
+                                  page.displayBytes,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      _thumbnailPlaceholder(),
+                                )
+                              : _thumbnailPlaceholder(),
+                        ),
+                      ),
+                      // Remove button
+                      Positioned(
+                        top: 2,
+                        right: 2,
+                        child: GestureDetector(
+                          onTap: () => _removePage(index),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Page number
+                      Positioned(
+                        bottom: 2,
+                        left: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _openDocumentReview,
+              icon: const Icon(Icons.check, size: 18),
+              label: Text('Done (${batch.pageCount})'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(80, 48),
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbnailPlaceholder() {
+    return Container(
+      color: Colors.grey.shade800,
+      child: const Icon(Icons.image_outlined, color: Colors.white38, size: 24),
     );
   }
 }
