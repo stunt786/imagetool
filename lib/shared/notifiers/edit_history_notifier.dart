@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/edit_history_item.dart';
@@ -13,81 +12,18 @@ final editHistoryProvider =
 });
 
 class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
-  EditHistoryNotifier() : super(_demoData);
+  EditHistoryNotifier() : super([]);
 
   /// Adds a new entry at the top of the list.
   void addEntry(EditHistoryItem item) {
     state = [item, ...state].take(_maxHistoryItems).toList();
   }
 
+  /// Removes a specific entry from history.
+  void removeEntry(EditHistoryItem item) {
+    state = state.where((e) => e != item).toList();
+  }
+
   /// Clears all history.
   void clear() => state = [];
-
-  // ── Sample data so the UI is populated on first launch ──────────────
-
-  static final _now = DateTime.now();
-
-  static final List<EditHistoryItem> _demoData = [
-    EditHistoryItem(
-      fileName: 'vacation_photo.jpg',
-      toolUsed: 'Image Resizer',
-      editedAt: _now.subtract(const Duration(minutes: 3)),
-      toolIcon: Icons.photo_size_select_large,
-    ),
-    EditHistoryItem(
-      fileName: 'family_collage.png',
-      toolUsed: 'Collage Builder',
-      editedAt: _now.subtract(const Duration(minutes: 25)),
-      toolIcon: Icons.grid_view_rounded,
-    ),
-    EditHistoryItem(
-      fileName: 'report_2026.pdf',
-      toolUsed: 'PDF Compressor',
-      editedAt: _now.subtract(const Duration(hours: 1)),
-      toolIcon: Icons.compress,
-      compressionLevel: 'Medium',
-    ),
-    EditHistoryItem(
-      fileName: 'sunset_panorama.jpg',
-      toolUsed: 'Format Converter',
-      editedAt: _now.subtract(const Duration(hours: 3)),
-      toolIcon: Icons.transform,
-    ),
-    EditHistoryItem(
-      fileName: 'invoice_scan.pdf',
-      toolUsed: 'Image to PDF',
-      editedAt: _now.subtract(const Duration(hours: 8)),
-      toolIcon: Icons.picture_as_pdf,
-    ),
-    EditHistoryItem(
-      fileName: 'profile_pic.webp',
-      toolUsed: 'Image Resizer',
-      editedAt: _now.subtract(const Duration(days: 1)),
-      toolIcon: Icons.photo_size_select_large,
-    ),
-    EditHistoryItem(
-      fileName: 'merged_docs.pdf',
-      toolUsed: 'PDF Merger',
-      editedAt: _now.subtract(const Duration(days: 2)),
-      toolIcon: Icons.merge_type,
-    ),
-    EditHistoryItem(
-      fileName: 'banner_design.png',
-      toolUsed: 'Collage Builder',
-      editedAt: _now.subtract(const Duration(days: 3)),
-      toolIcon: Icons.dashboard_customize,
-    ),
-    EditHistoryItem(
-      fileName: 'presentation_slides.pdf',
-      toolUsed: 'PDF Converter',
-      editedAt: _now.subtract(const Duration(days: 4)),
-      toolIcon: Icons.transform,
-    ),
-    EditHistoryItem(
-      fileName: 'selfie_edited.jpg',
-      toolUsed: 'Image Resizer',
-      editedAt: _now.subtract(const Duration(days: 5)),
-      toolIcon: Icons.photo_size_select_large,
-    ),
-  ];
 }

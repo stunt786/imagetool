@@ -527,6 +527,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                               toolUsed: 'PDF Splitter',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.call_split_rounded,
+                              thumbnailPath: state.outputPaths.isNotEmpty ? state.outputPaths.first : null,
                             ),
                           );
                     }

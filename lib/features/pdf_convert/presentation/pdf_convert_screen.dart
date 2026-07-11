@@ -465,6 +465,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                               toolUsed: 'PDF Converter',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.transform_rounded,
+                              thumbnailPath: state.outputPaths.isNotEmpty ? state.outputPaths.first : null,
                             ),
                           );
                     }

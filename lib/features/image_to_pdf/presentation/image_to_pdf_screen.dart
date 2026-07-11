@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../shared/models/edit_history_item.dart';
+import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/image_to_pdf_state.dart';
 import '../notifiers/image_to_pdf_notifier.dart';
@@ -244,6 +246,15 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     if (!context.mounted) return;
 
     if (pdfPath != null) {
+      final fileName = pdfPath.split('/').last;
+      ref.read(editHistoryProvider.notifier).addEntry(
+        EditHistoryItem(
+          fileName: fileName,
+          toolUsed: 'Image to PDF',
+          editedAt: DateTime.now(),
+          toolIcon: Icons.picture_as_pdf_rounded,
+        ),
+      );
       _showPDFSavedDialog(context, pdfPath);
       InterstitialTracker.instance.trackAction();
     } else {

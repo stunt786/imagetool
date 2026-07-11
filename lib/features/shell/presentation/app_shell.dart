@@ -13,7 +13,6 @@ class AppShell extends StatelessWidget {
     final currentPath = GoRouterState.of(context).uri.path;
     final isMainScreen = currentPath == '/tools' ||
         currentPath == '/camera' ||
-        currentPath == '/images' ||
         currentPath == '/pdfs' ||
         currentPath == '/settings';
     final isCameraScreen = currentPath == '/camera';
@@ -57,11 +56,6 @@ class _BottomNavBar extends StatelessWidget {
         label: 'Camera',
         icon: Icons.camera_alt_outlined,
         selectedIcon: Icons.camera_alt_rounded,
-      ),
-      _NavItemData(
-        label: 'Tools',
-        icon: Icons.grid_view_outlined,
-        selectedIcon: Icons.grid_view_rounded,
       ),
       _NavItemData(
         label: 'Files',

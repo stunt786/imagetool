@@ -9,7 +9,6 @@ import '../../features/camera/presentation/screens/perspective_correction_screen
 import '../../features/collage_builder/presentation/collage_builder_screen.dart';
 import '../../features/format_converter/presentation/format_converter_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
-import '../../features/images_hub/presentation/images_hub_screen.dart';
 import '../../features/image_resize/presentation/image_resize_screen.dart';
 import '../../features/image_to_pdf/presentation/image_to_pdf_screen.dart';
 import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
@@ -17,7 +16,6 @@ import '../../features/files/presentation/files_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
 import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
-import '../../features/all_tools/presentation/all_tools_screen.dart';
 // import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
@@ -71,36 +69,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: <RouteBase>[
               GoRoute(
-                path: '/images',
-                builder: (context, state) => const ImagesHubScreen(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: 'resizer',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: ImageResizeScreen()),
-                  ),
-                  GoRoute(
-                    path: 'collage',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: CollageBuilderScreen()),
-                  ),
-                  GoRoute(
-                    path: 'convert',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: FormatConverterScreen()),
-                  ),
-                  GoRoute(
-                    path: 'to-pdf',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: ImageToPdfScreen()),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
                 path: '/pdfs',
                 builder: (context, state) => const FilesScreen(),
                 routes: <RouteBase>[
@@ -139,11 +107,30 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
 
+      // Tool routes (full-screen pages)
       GoRoute(
-        path: '/all-tools',
+        path: '/images/resizer',
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (context, state) =>
-            const _MaterialPage(child: AllToolsScreen()),
+            const _MaterialPage(child: ImageResizeScreen()),
+      ),
+      GoRoute(
+        path: '/images/collage',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: CollageBuilderScreen()),
+      ),
+      GoRoute(
+        path: '/images/convert',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: FormatConverterScreen()),
+      ),
+      GoRoute(
+        path: '/images/to-pdf',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: ImageToPdfScreen()),
       ),
       // TODO: Re-enable premium route in upcoming version with premium features
       // GoRoute(

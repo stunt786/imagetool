@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../shared/models/edit_history_item.dart';
+import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../notifiers/collage_notifier.dart';
 
@@ -219,9 +221,18 @@ class CollageToolbar extends ConsumerWidget {
       if (bytes == null) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      await saveImageBytes(bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(bytes, fileName: fileName);
 
       if (context.mounted) {
+        ref.read(editHistoryProvider.notifier).addEntry(
+          EditHistoryItem(
+            fileName: saveResult.fileName,
+            toolUsed: 'Collage Builder',
+            editedAt: DateTime.now(),
+            toolIcon: Icons.dashboard_customize_rounded,
+            thumbnailPath: saveResult.path,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Saved'),

@@ -7,46 +7,71 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-// import '../../../shared/widgets/premium_banner.dart'; // TODO: Re-enable in upcoming version with premium features
+import '../../files/presentation/file_preview_screen.dart';
 
-const _featuredTools = <_QuickToolData>[
-  _QuickToolData(
-    title: 'Resize Image',
-    subtitle: 'Resize by pixels, aspect ratio, or ready-made presets.',
+const _imageTools = <_ToolData>[
+  _ToolData(
+    title: 'Resize',
+    subtitle: 'Pixels, ratio, or presets',
     icon: Icons.photo_size_select_large_rounded,
     route: '/images/resizer',
-    gradient: [Color(0xFFEAF3FF), Color(0xFFF7FAFF)],
     accent: Color(0xFF2563EB),
-    glow: Color(0xFFD8E8FF),
   ),
-  _QuickToolData(
-    title: 'Create Collage',
-    subtitle: 'Arrange multiple photos into polished social-ready layouts.',
+  _ToolData(
+    title: 'Collage',
+    subtitle: 'Multi-photo layouts',
     icon: Icons.dashboard_customize_rounded,
     route: '/images/collage',
-    gradient: [Color(0xFFF7EDFF), Color(0xFFFEF7FF)],
     accent: Color(0xFF9333EA),
-    glow: Color(0xFFEDD9FF),
   ),
-  _QuickToolData(
-    title: 'Format Converter',
-    subtitle: 'Switch between JPG, PNG, WEBP, and more in seconds.',
+  _ToolData(
+    title: 'Convert',
+    subtitle: 'JPG, PNG, WEBP & more',
     icon: Icons.autorenew_rounded,
     route: '/images/convert',
-    gradient: [Color(0xFFEAFBF0), Color(0xFFF8FFFB)],
     accent: Color(0xFF15803D),
-    glow: Color(0xFFD8F5E1),
   ),
-  _QuickToolData(
-    title: 'Image to PDF',
-    subtitle: 'Convert images to PDF documents instantly.',
+  _ToolData(
+    title: 'Image→PDF',
+    subtitle: 'Photos to PDF',
     icon: Icons.picture_as_pdf_rounded,
     route: '/images/to-pdf',
-    gradient: [Color(0xFFFFF0ED), Color(0xFFFFF8F7)],
     accent: Color(0xFFE64A19),
-    glow: Color(0xFFFFD8CC),
   ),
 ];
+
+const _pdfTools = <_ToolData>[
+  _ToolData(
+    title: 'Compress',
+    subtitle: 'Reduce PDF size',
+    icon: Icons.compress_rounded,
+    route: '/pdfs/compress',
+    accent: Color(0xFF5B4DFF),
+  ),
+  _ToolData(
+    title: 'Merge',
+    subtitle: 'Combine documents',
+    icon: Icons.merge_type_rounded,
+    route: '/pdfs/merge',
+    accent: Color(0xFF0F9D9A),
+  ),
+  _ToolData(
+    title: 'Split',
+    subtitle: 'Extract pages',
+    icon: Icons.call_split_rounded,
+    route: '/pdfs/split',
+    accent: Color(0xFFEA580C),
+  ),
+  _ToolData(
+    title: 'Extract',
+    subtitle: 'PDF to images or text',
+    icon: Icons.transform_rounded,
+    route: '/pdfs/convert',
+    accent: Color(0xFF15803D),
+  ),
+];
+
+const _allTools = [..._imageTools, ..._pdfTools];
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -65,9 +90,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  List<_QuickToolData> get _filteredTools {
-    if (_searchQuery.isEmpty) return _featuredTools;
-    return _featuredTools
+  List<_ToolData> get _filteredTools {
+    if (_searchQuery.isEmpty) return _allTools;
+    return _allTools
         .where((t) => t.title.toLowerCase().contains(_searchQuery.toLowerCase()))
         .toList();
   }
@@ -88,7 +113,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final history = ref.watch(editHistoryProvider);
     final width = MediaQuery.sizeOf(context).width;
-    final isWide = width >= 900;
     final contentPadding = width >= 1200
         ? 28.0
         : width >= 700
@@ -145,75 +169,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: EdgeInsets.fromLTRB(contentPadding, topPadding, contentPadding, 0),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Container(
-                          height: 46,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(23),
-                            color: scheme.surfaceContainerLowest,
-                            border: Border.all(color: scheme.outlineVariant),
-                          ),
-                          child: TextField(
-                            controller: _searchController,
-                            onChanged: (value) => setState(() => _searchQuery = value),
-                            style: TextStyle(
-                              color: scheme.onSurface,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'Search tools...',
-                              hintStyle: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                size: 20,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                              suffixIcon: isSearching
-                                  ? IconButton(
-                                      icon: Icon(
-                                        Icons.close_rounded,
-                                        size: 20,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() => _searchQuery = '');
-                                      },
-                                    )
-                                  : null,
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                          ),
-                        ),
+                  Text(
+                    'All Tools',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Fast, Simple & Powerful',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(26),
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _searchQuery = value),
+                      style: TextStyle(
+                        color: scheme.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 8),
-                      // TODO: Re-enable premium button in upcoming version
-                      // Container(
-                      //   width: 42,
-                      //   height: 42,
-                      //   decoration: BoxDecoration(
-                      //     shape: BoxShape.circle,
-                      //     color: const Color(0xFFEAB308).withValues(alpha: 0.12),
-                      //   ),
-                      //   child: IconButton(
-                      //     icon: const Icon(Icons.workspace_premium_rounded,
-                      //         size: 20, color: Color(0xFFEAB308)),
-                      //     onPressed: () => context.push('/premium'),
-                      //     style: IconButton.styleFrom(
-                      //       backgroundColor: Colors.transparent,
-                      //     ),
-                      //   ),
-                      // ),
-                    ],
+                      decoration: InputDecoration(
+                        hintText: 'Search tools...',
+                        hintStyle: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          size: 22,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        suffixIcon: isSearching
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  size: 20,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : Icon(
+                                Icons.tune_rounded,
+                                size: 22,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
                   ),
                   if (isSearching && filteredTools.isEmpty && filteredHistory.isEmpty)
                     Padding(
@@ -255,10 +273,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           if (filteredTools.isNotEmpty) const SizedBox(height: 8),
                           _SectionHeader(title: 'Files'),
                           const SizedBox(height: 12),
-                          ...filteredHistory.map(
-                            (item) => Padding(
+                          ...filteredHistory.asMap().entries.map(
+                            (entry) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
-                              child: _HistoryRow(item: item),
+                              child: _HistoryRow(
+                                item: entry.value,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => FilePreviewScreen(
+                                      items: filteredHistory,
+                                      initialIndex: entry.key,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -276,41 +304,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                           sliver: SliverList(
                             delegate: SliverChildListDelegate.fixed([
-                              Text(
-                                'Explore Tools',
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.7,
-                                ),
-                              ),
+                              const SizedBox(height: 4),
+                              const _ToolsGrid(tools: _allTools),
                               const SizedBox(height: 16),
-                              _SectionHeader(
-                                title: 'Featured',
-                                actionLabel: 'View All',
-                                onActionTap: () => context.push('/all-tools'),
-                              ),
-                              const SizedBox(height: 14),
-                              _FeaturedToolsGrid(isWide: isWide),
-                              // TODO: Re-enable PremiumBanner in upcoming version with premium features
-                              // const PremiumBanner(),
-                              const SizedBox(height: 28),
                               _SectionHeader(
                                 title: 'Recent History',
                                 actionLabel: history.isNotEmpty ? 'See All' : null,
                                 onActionTap: history.isNotEmpty
-                                    ? () => context.push('/files')
+                                    ? () => context.push('/pdfs')
                                     : null,
                               ),
                               const SizedBox(height: 14),
                               if (history.isEmpty)
                                 const _EmptyHistoryCard()
                               else
-                                ...history
-                                    .take(10)
-                                    .map(
-                                      (item) => Padding(
+                                ...history.take(10).toList().asMap().entries.map(
+                                      (entry) => Padding(
                                         padding: const EdgeInsets.only(bottom: 14),
-                                        child: _HistoryRow(item: item),
+                                        child: _HistoryRow(
+                                          item: entry.value,
+                                          onTap: () => Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => FilePreviewScreen(
+                                                items: history,
+                                                initialIndex: history.indexOf(entry.value),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                               if (history.isNotEmpty)
@@ -343,10 +364,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-class _FeaturedToolsGrid extends StatelessWidget {
-  const _FeaturedToolsGrid({required this.isWide});
+class _ToolsGrid extends StatelessWidget {
+  const _ToolsGrid({required this.tools});
 
-  final bool isWide;
+  final List<_ToolData> tools;
 
   @override
   Widget build(BuildContext context) {
@@ -354,29 +375,27 @@ class _FeaturedToolsGrid extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 8,
+        crossAxisCount: 3,
+        crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 0.9,
+        childAspectRatio: 0.82,
       ),
-      itemCount: _featuredTools.length,
-      itemBuilder: (context, index) => Center(
-        child: _FeatureIcon(data: _featuredTools[index]),
-      ),
+      itemCount: tools.length,
+      itemBuilder: (context, index) => _ToolCard(data: tools[index]),
     );
   }
 }
 
-class _FeatureIcon extends StatefulWidget {
-  const _FeatureIcon({required this.data});
+class _ToolCard extends StatefulWidget {
+  const _ToolCard({required this.data});
 
-  final _QuickToolData data;
+  final _ToolData data;
 
   @override
-  State<_FeatureIcon> createState() => _FeatureIconState();
+  State<_ToolCard> createState() => _ToolCardState();
 }
 
-class _FeatureIconState extends State<_FeatureIcon> {
+class _ToolCardState extends State<_ToolCard> {
   bool _pressed = false;
 
   @override
@@ -394,38 +413,83 @@ class _FeatureIconState extends State<_FeatureIcon> {
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.88 : 1,
+        scale: _pressed ? 0.94 : 1,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOutCubic,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    data.accent,
-                    Color.lerp(data.accent, Colors.white, 0.3)!,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: scheme.surfaceContainerLow,
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () {
+                InterstitialTracker.instance.trackNavigation();
+                context.push(data.route);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            data.accent,
+                            Color.lerp(data.accent, Colors.white, 0.25)!,
+                          ],
+                        ),
+                      ),
+                      child: Icon(data.icon, size: 22, color: Colors.white),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      data.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      data.subtitle,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              child: Icon(data.icon, size: 22, color: Colors.white),
             ),
-            const SizedBox(height: 6),
-            Text(
-              data.title,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: scheme.onSurface,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -435,7 +499,7 @@ class _FeatureIconState extends State<_FeatureIcon> {
 class _SearchToolRow extends StatelessWidget {
   const _SearchToolRow({required this.data});
 
-  final _QuickToolData data;
+  final _ToolData data;
 
   @override
   Widget build(BuildContext context) {
@@ -509,9 +573,10 @@ class _SearchToolRow extends StatelessWidget {
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.item});
+  const _HistoryRow({required this.item, this.onTap});
 
   final EditHistoryItem item;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -520,96 +585,87 @@ class _HistoryRow extends StatelessWidget {
     final subtitleColor = scheme.onSurfaceVariant;
     final timeParts = _historyTimeParts(item.editedAt);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
-        border: Border.all(color: scheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: scheme.shadow,
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _HistoryThumbnail(item: item),
-          const SizedBox(width: 14),
-          Expanded(
-            flex: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.toolUsed,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: subtitleColor,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
+          border: Border.all(color: scheme.outlineVariant),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.shadow,
+              blurRadius: 18,
+              offset: const Offset(0, 10),
             ),
-          ),
-          const SizedBox(width: 10),
-          if (MediaQuery.sizeOf(context).width >= 560)
+          ],
+        ),
+        child: Row(
+          children: [
+            _HistoryThumbnail(item: item),
+            const SizedBox(width: 14),
             Expanded(
-              flex: 2,
+              flex: 4,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    timeParts.$1,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: subtitleColor,
+                    item.fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    timeParts.$2,
+                    item.toolUsed,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      color: subtitleColor,
                     ),
                   ),
                 ],
               ),
             ),
-          const SizedBox(width: 10),
-          _ActionCircleButton(
-            icon: Icons.open_in_new_rounded,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Opened ${item.fileName} details soon.'),
+            const SizedBox(width: 10),
+            if (MediaQuery.sizeOf(context).width >= 560)
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      timeParts.$1,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: subtitleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeParts.$2,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-          _ActionCircleButton(
-            icon: Icons.more_horiz_rounded,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('More actions for ${item.fileName} soon.'),
-                ),
-              );
-            },
-          ),
-        ],
+              ),
+            const SizedBox(width: 10),
+            _ActionCircleButton(
+              icon: Icons.open_in_new_rounded,
+              onTap: onTap ?? () {},
+            ),
+            const SizedBox(width: 8),
+            _ActionCircleButton(
+              icon: Icons.more_horiz_rounded,
+              onTap: onTap ?? () {},
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -821,24 +877,20 @@ class _AmbientOrb extends StatelessWidget {
   }
 }
 
-class _QuickToolData {
-  const _QuickToolData({
+class _ToolData {
+  const _ToolData({
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.route,
-    required this.gradient,
     required this.accent,
-    required this.glow,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final String route;
-  final List<Color> gradient;
   final Color accent;
-  final Color glow;
 }
 
 (String, String) _historyTimeParts(DateTime editedAt) {

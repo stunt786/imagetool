@@ -414,6 +414,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                               editedAt: DateTime.now(),
                               toolIcon: Icons.compress_rounded,
                               compressionLevel: state.compressionLevel.label,
+                              thumbnailPath: state.outputPath,
                             ),
                           );
                     }

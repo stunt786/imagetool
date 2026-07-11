@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../shared/models/edit_history_item.dart';
+import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
@@ -103,12 +105,23 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         return (bytes: image.convertedBytes!, fileName: outputName);
       }).toList();
 
-      await saveMultipleImages(items);
+      final results = await saveMultipleImages(items);
 
       if (mounted) {
+        for (final result in results) {
+          ref.read(editHistoryProvider.notifier).addEntry(
+            EditHistoryItem(
+              fileName: result.fileName,
+              toolUsed: 'Format Converter',
+              editedAt: DateTime.now(),
+              toolIcon: Icons.transform_rounded,
+              thumbnailPath: result.path,
+            ),
+          );
+        }
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: const Text('Saved'),
+            content: Text('Saved ${results.length} file${results.length > 1 ? 's' : ''}'),
             backgroundColor: Colors.green,
           ),
         );

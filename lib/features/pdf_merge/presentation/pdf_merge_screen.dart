@@ -415,6 +415,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                               toolUsed: 'PDF Merger',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.merge_type_rounded,
+                              thumbnailPath: state.outputPath,
                             ),
                           );
                     }

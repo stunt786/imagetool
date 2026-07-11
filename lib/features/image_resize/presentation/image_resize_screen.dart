@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../shared/models/edit_history_item.dart';
+import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/utils/image_saver.dart';
@@ -500,8 +502,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
 
     try {
-      await saveImageBytes(result.bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(result.bytes, fileName: fileName);
       if (!mounted) return;
+      ref.read(editHistoryProvider.notifier).addEntry(
+        EditHistoryItem(
+          fileName: fileName,
+          toolUsed: 'Image Resizer',
+          editedAt: DateTime.now(),
+          toolIcon: Icons.photo_size_select_large_rounded,
+          thumbnailPath: saveResult.path,
+        ),
+      );
       _showSnack('Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
@@ -626,8 +637,18 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
 
     try {
-      await saveImageBytes(result.bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(result.bytes, fileName: fileName);
       if (!mounted) return;
+      ref.read(editHistoryProvider.notifier).addEntry(
+        EditHistoryItem(
+          fileName: fileName,
+          toolUsed: 'Image Resizer',
+          editedAt: DateTime.now(),
+          toolIcon: Icons.compress_rounded,
+          thumbnailPath: saveResult.path,
+          compressionLevel: 'Smart',
+        ),
+      );
       if (result.fileSize > targetBytes) {
         _showSnack('Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}');
       } else {
@@ -974,8 +995,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
 
     try {
-      await saveImageBytes(bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(bytes, fileName: fileName);
       if (!mounted) return;
+      ref.read(editHistoryProvider.notifier).addEntry(
+        EditHistoryItem(
+          fileName: fileName,
+          toolUsed: 'Image Resizer',
+          editedAt: DateTime.now(),
+          toolIcon: Icons.photo_size_select_large_rounded,
+          thumbnailPath: saveResult.path,
+        ),
+      );
       _showSnack('Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
