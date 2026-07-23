@@ -93,24 +93,6 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
     }
   }
 
-  Future<void> _routeToCorrectPerspective() async {
-    setState(() => _isLoading = true);
-    try {
-      final notifier = ref.read(documentBatchProvider.notifier);
-      if (!ref.read(documentBatchProvider).hasPages) {
-        notifier.startNewBatch();
-      }
-      await notifier.addPageFromPath(widget.imagePath);
-      if (mounted) {
-        final batch = ref.read(documentBatchProvider);
-        final index = batch.pages.length - 1;
-        context.push('/camera/correct-perspective', extra: index);
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -149,14 +131,6 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
               subtitle: 'Magic Color, Binarization, Shadow Removal',
               color: Colors.purple,
               onTap: _isLoading ? null : _routeToFilters,
-            ),
-            const SizedBox(height: 12),
-            _ActionTile(
-              icon: Icons.transform_rounded,
-              title: 'Correct Perspective',
-              subtitle: 'Fix skewed document corners',
-              color: Colors.teal,
-              onTap: _isLoading ? null : _routeToCorrectPerspective,
             ),
             const SizedBox(height: 12),
             _ActionTile(

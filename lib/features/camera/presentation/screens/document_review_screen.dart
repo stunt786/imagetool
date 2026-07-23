@@ -68,6 +68,11 @@ class DocumentReviewScreen extends ConsumerWidget {
       ),
       bottomNavigationBar: _BottomActionBar(
         pageCount: batch.pages.length,
+        onAddNewPage: () {
+          // Pop back to camera to scan new page
+          context.go('/camera');
+        },
+        onFinish: () => _showFinishOptions(context, ref, batch.pages),
         onSaveAsPdf: () => context.push('/images/to-pdf'),
         onSaveAsImages: () => _saveAsImages(context, ref, batch.pages),
         onFilterAll: () => context.push('/camera/filter', extra: -1),
@@ -90,6 +95,8 @@ class DocumentReviewScreen extends ConsumerWidget {
             onPressed: () {
               ref.read(documentBatchProvider.notifier).clearBatch();
               Navigator.pop(ctx);
+              // Navigate back to camera after clearing
+              context.go('/camera');
             },
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
@@ -97,6 +104,23 @@ class DocumentReviewScreen extends ConsumerWidget {
             child: const Text('Clear'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showFinishOptions(BuildContext context, WidgetRef ref, List<ScannedPage> pages) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FinishOptionsSheet(
+        onSaveAsPdf: () {
+          Navigator.pop(context);
+          context.push('/images/to-pdf');
+        },
+        onSaveAsImages: () {
+          Navigator.pop(context);
+          _saveAsImages(context, ref, pages);
+        },
       ),
     );
   }
@@ -152,6 +176,127 @@ class DocumentReviewScreen extends ConsumerWidget {
         ),
       );
     }
+  }
+}
+
+// ─── Finish Options Sheet ───────────────────────────────────────────────
+
+class _FinishOptionsSheet extends StatelessWidget {
+  const _FinishOptionsSheet({
+    required this.onSaveAsPdf,
+    required this.onSaveAsImages,
+  });
+
+  final VoidCallback onSaveAsPdf;
+  final VoidCallback onSaveAsImages;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Save as',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 20),
+          _OptionTile(
+            icon: Icons.picture_as_pdf_rounded,
+            title: 'Save as PDF',
+            subtitle: 'Combine all pages into a PDF document',
+            color: Colors.red,
+            onTap: onSaveAsPdf,
+          ),
+          const SizedBox(height: 12),
+          _OptionTile(
+            icon: Icons.photo_library_outlined,
+            title: 'Save as Images',
+            subtitle: 'Save each page as a separate image',
+            color: Colors.green,
+            onTap: onSaveAsImages,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionTile extends StatelessWidget {
+  const _OptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: color.withValues(alpha: 0.08),
+          border: Border.all(color: color.withValues(alpha: 0.12)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: color.withValues(alpha: 0.9),
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: color.withValues(alpha: 0.5)),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -292,12 +437,16 @@ class _DocumentPageCard extends StatelessWidget {
 class _BottomActionBar extends StatelessWidget {
   const _BottomActionBar({
     required this.pageCount,
+    required this.onAddNewPage,
+    required this.onFinish,
     required this.onSaveAsPdf,
     required this.onSaveAsImages,
     required this.onFilterAll,
   });
 
   final int pageCount;
+  final VoidCallback onAddNewPage;
+  final VoidCallback onFinish;
   final VoidCallback onSaveAsPdf;
   final VoidCallback onSaveAsImages;
   final VoidCallback onFilterAll;
@@ -318,33 +467,27 @@ class _BottomActionBar extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              // Filter All
-              OutlinedButton.icon(
-                onPressed: onFilterAll,
-                icon: const Icon(Icons.filter_list, size: 20),
-                label: const Text('Filter'),
-                style: OutlinedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Save as Images
-              OutlinedButton.icon(
-                onPressed: onSaveAsImages,
-                icon: const Icon(Icons.photo_library_outlined, size: 20),
-                label: const Text('Images'),
-                style: OutlinedButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
+              // Add New Page button
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onAddNewPage,
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('New Page'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              // Save as PDF (primary action)
+              // Finish button (primary action)
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: onSaveAsPdf,
-                  icon: const Icon(Icons.picture_as_pdf, size: 20),
-                  label: Text(
-                    pageCount > 1 ? 'Save as PDF' : 'Save as PDF',
+                  onPressed: onFinish,
+                  icon: const Icon(Icons.check_rounded, size: 20),
+                  label: const Text('Finish'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: Colors.green,
                   ),
                 ),
               ),

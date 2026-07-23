@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../models/document_batch.dart';
@@ -39,9 +40,20 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     final file = File(filePath);
     if (!await file.exists()) return;
 
-    final bytes = await file.readAsBytes();
+    var bytes = await file.readAsBytes();
     final name = p.basename(filePath);
     final sizeBytes = bytes.length;
+
+    // Fix EXIF orientation by decoding and re-encoding
+    try {
+      final decoded = img.decodeImage(bytes);
+      if (decoded != null) {
+        // Re-encode as JPEG with proper orientation (EXIF stripped)
+        bytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
+      }
+    } catch (_) {
+      // If decode fails, use original bytes
+    }
 
     var savedPath = filePath;
     if (state.id.isNotEmpty && state.batchDirectory != null) {
