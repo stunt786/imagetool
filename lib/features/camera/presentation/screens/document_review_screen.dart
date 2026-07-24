@@ -9,11 +9,26 @@ import '../../../../shared/utils/image_saver.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 
-class DocumentReviewScreen extends ConsumerWidget {
+class DocumentReviewScreen extends ConsumerStatefulWidget {
   const DocumentReviewScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DocumentReviewScreen> createState() =>
+      _DocumentReviewScreenState();
+}
+
+class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final batch = ref.watch(documentBatchProvider);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -39,43 +54,151 @@ class DocumentReviewScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: scheme.surfaceContainerHigh,
+      backgroundColor: scheme.brightness == Brightness.dark
+          ? const Color(0xFF101214)
+          : scheme.surfaceContainerHigh,
       appBar: AppBar(
-        title: Text('${batch.pageCount} page${batch.pageCount == 1 ? '' : 's'}'),
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded),
+          tooltip: 'Cancel scan',
+          onPressed: () => _confirmClear(context, ref),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Review pages', style: TextStyle(fontSize: 17)),
+            Text(
+              '${batch.pageCount} page${batch.pageCount == 1 ? '' : 's'} · Drag to reorder',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Clear all',
-            onPressed: () => _confirmClear(context, ref),
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add page',
+            onPressed: () {
+              context.go('/camera');
+            },
+          ),
+          TextButton(
+            onPressed: () => _showFinishOptions(context, ref, batch.pages),
+            child: const Text('Save'),
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-        itemCount: batch.pages.length,
-        itemBuilder: (context, index) {
-          final page = batch.pages[index];
-          return _DocumentPageCard(
-            index: index,
-            page: page,
-            totalPages: batch.pages.length,
-            onTapFilter: () => context.push('/camera/filter', extra: index),
-            onRemove: () {
-              ref.read(documentBatchProvider.notifier).removePage(index);
-            },
-          );
-        },
+      body: Column(
+        children: [
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: batch.pages.length + 1,
+              onPageChanged: (index) {
+                setState(() => _currentPage = index);
+              },
+              itemBuilder: (context, index) {
+                if (index == batch.pages.length) {
+                  return _buildAddPagePlaceholder(scheme);
+                }
+                final page = batch.pages[index];
+                return _DocumentPageCard(
+                  index: index,
+                  page: page,
+                  totalPages: batch.pages.length,
+                  onTapFilter: () =>
+                      context.push('/camera/filter', extra: index),
+                  onRemove: () {
+                    ref.read(documentBatchProvider.notifier).removePage(index);
+                  },
+                );
+              },
+            ),
+          ),
+          if (batch.pages.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(batch.pages.length + 1, (i) {
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: _currentPage == i ? 20 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _currentPage == i
+                          ? scheme.primary
+                          : scheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: _BottomActionBar(
         pageCount: batch.pages.length,
         onAddNewPage: () {
-          // Pop back to camera to scan new page
           context.go('/camera');
         },
         onFinish: () => _showFinishOptions(context, ref, batch.pages),
         onSaveAsPdf: () => context.push('/images/to-pdf'),
         onSaveAsImages: () => _saveAsImages(context, ref, batch.pages),
         onFilterAll: () => context.push('/camera/filter', extra: -1),
+      ),
+    );
+  }
+
+  Widget _buildAddPagePlaceholder(ColorScheme scheme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer.withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.add_rounded,
+                  size: 40, color: scheme.onPrimaryContainer),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Add New Page',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Scan a new document page to add to this batch',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: () => context.go('/camera'),
+              icon: const Icon(Icons.document_scanner_rounded, size: 20),
+              label: const Text('Scan New Page'),
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -95,7 +218,6 @@ class DocumentReviewScreen extends ConsumerWidget {
             onPressed: () {
               ref.read(documentBatchProvider.notifier).clearBatch();
               Navigator.pop(ctx);
-              // Navigate back to camera after clearing
               context.go('/camera');
             },
             style: FilledButton.styleFrom(
@@ -108,7 +230,8 @@ class DocumentReviewScreen extends ConsumerWidget {
     );
   }
 
-  void _showFinishOptions(BuildContext context, WidgetRef ref, List<ScannedPage> pages) {
+  void _showFinishOptions(
+      BuildContext context, WidgetRef ref, List<ScannedPage> pages) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -125,7 +248,8 @@ class DocumentReviewScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveAsImages(BuildContext context, WidgetRef ref, List<ScannedPage> pages) async {
+  Future<void> _saveAsImages(
+      BuildContext context, WidgetRef ref, List<ScannedPage> pages) async {
     final items = <({Uint8List bytes, String fileName})>[];
     for (int i = 0; i < pages.length; i++) {
       final page = pages[i];
@@ -292,7 +416,8 @@ class _OptionTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: color.withValues(alpha: 0.5)),
+            Icon(Icons.chevron_right_rounded,
+                color: color.withValues(alpha: 0.5)),
           ],
         ),
       ),
@@ -322,30 +447,28 @@ class _DocumentPageCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Document page card
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
                 ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: AspectRatio(
-              aspectRatio: 3 / 4,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
               child: page.imageBytes != null
                   ? Image.memory(
                       page.displayBytes,
@@ -356,65 +479,56 @@ class _DocumentPageCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          // Page footer with actions
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              children: [
-                // Page number badge
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${index + 1} / $totalPages',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+              if (page.filterType != FilterType.none) ...[
+                const SizedBox(width: 6),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
+                    color: scheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${index + 1} / $totalPages',
+                    _filterLabel(page.filterType),
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onPrimaryContainer,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: scheme.onTertiaryContainer,
                     ),
                   ),
-                ),
-                if (page.filterType != FilterType.none) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: scheme.tertiaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _filterLabel(page.filterType),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: scheme.onTertiaryContainer,
-                      ),
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                // Filter button
-                IconButton(
-                  onPressed: onTapFilter,
-                  icon: const Icon(Icons.tune, size: 20),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Filter',
-                ),
-                // Delete button
-                IconButton(
-                  onPressed: onRemove,
-                  icon: Icon(Icons.delete_outline, size: 20,
-                      color: scheme.error),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Delete',
                 ),
               ],
-            ),
+              const Spacer(),
+              IconButton(
+                onPressed: onTapFilter,
+                icon: const Icon(Icons.tune, size: 20),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Filter',
+              ),
+              IconButton(
+                onPressed: onRemove,
+                icon: Icon(Icons.delete_outline, size: 20, color: scheme.error),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Delete',
+              ),
+            ],
           ),
         ],
       ),
@@ -467,7 +581,6 @@ class _BottomActionBar extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
-              // Add New Page button
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onAddNewPage,
@@ -479,12 +592,11 @@ class _BottomActionBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Finish button (primary action)
               Expanded(
                 child: FilledButton.icon(
                   onPressed: onFinish,
                   icon: const Icon(Icons.check_rounded, size: 20),
-                  label: const Text('Finish'),
+                  label: const Text('Save document'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     backgroundColor: Colors.green,

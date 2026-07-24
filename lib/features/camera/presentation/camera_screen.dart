@@ -10,7 +10,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/document_batch.dart';
 import '../notifiers/document_batch_notifier.dart';
 import '../services/document_scanner_service.dart';
-import 'widgets/document_scanner_overlay.dart';
 import 'widgets/post_capture_menu.dart';
 
 class CameraScreen extends ConsumerStatefulWidget {
@@ -26,10 +25,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   List<CameraDescription> _cameras = [];
   int _selectedCameraIndex = 0;
   bool _isCameraInitialized = false;
-  bool _isDocumentMode = false;
+  // Document capture is the primary camera experience. Image capture remains
+  // available for users who need a normal photograph.
+  bool _isDocumentMode = true;
   bool _isFlashOn = false;
   String? _capturedImagePath;
   bool _isScanningDocument = false;
+  int? _previewPageIndex;
+  final PageController _previewPageController = PageController();
+  bool _hasAutoLaunchedMlKit = false;
 
   @override
   void initState() {
@@ -88,6 +92,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _cameras = await availableCameras();
         if (_cameras.isNotEmpty) {
           await _initCameraController(_cameras[_selectedCameraIndex]);
+          // Auto-launch MLKit scanner on first camera init in document mode
+          if (mounted && _isDocumentMode && !_hasAutoLaunchedMlKit) {
+            _hasAutoLaunchedMlKit = true;
+            // Use addPostFrameCallback so the camera preview renders first
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && !_isScanningDocument) {
+                _launchMlKitScanner();
+              }
+            });
+          }
         }
       } catch (e) {
         debugPrint('Error initializing camera: $e');
@@ -164,7 +178,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           await notifier.addPageFromPath(file.path);
         }
         if (mounted) {
-          setState(() {});
+          final batch = ref.read(documentBatchProvider);
+          setState(() {
+            _previewPageIndex = batch.pages.length - result.files.length;
+          });
+          _previewPageController.jumpToPage(_previewPageIndex!);
           HapticFeedback.lightImpact();
         }
       }
@@ -205,10 +223,62 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     context.push('/camera/review');
   }
 
+  Future<void> _discardPreviewPage(int index) async {
+    final notifier = ref.read(documentBatchProvider.notifier);
+    await notifier.removePage(index);
+    if (!mounted) return;
+    final batch = ref.read(documentBatchProvider);
+    if (!batch.hasPages) {
+      setState(() {
+        _previewPageIndex = null;
+        _isScanningDocument = false;
+      });
+      _launchMlKitScanner();
+    } else {
+      final newIndex = index.clamp(0, batch.pages.length - 1);
+      setState(
+          () => _previewPageIndex = batch.pages.isNotEmpty ? newIndex : null);
+    }
+  }
+
+  void _cropPreviewPage(int index) {
+    context.push('/camera/crop', extra: index);
+  }
+
+  void _nextFromPreview() {
+    setState(() => _previewPageIndex = null);
+    final batch = ref.read(documentBatchProvider);
+    if (batch.hasPages) {
+      context.push('/camera/review');
+    }
+  }
+
+  void _addBlankPageToPreview() {
+    final batch = ref.read(documentBatchProvider);
+    if (batch.pages.isNotEmpty) {
+      _previewPageController.animateToPage(
+        batch.pages.length,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _scanNewPageFromPreview() {
+    setState(() => _previewPageIndex = null);
+    _launchMlKitScanner();
+  }
+
   Future<void> _removePage(int index) async {
     final notifier = ref.read(documentBatchProvider.notifier);
     await notifier.removePage(index);
-    if (mounted) setState(() {});
+    if (mounted) {
+      final batch = ref.read(documentBatchProvider);
+      if (!batch.hasPages) {
+        _launchMlKitScanner();
+      }
+      setState(() {});
+    }
   }
 
   void _showPostCaptureMenu() {
@@ -230,18 +300,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         setState(() => _capturedImagePath = null);
       }
     });
-  }
-
-  void _onModeChanged(bool isDocumentMode) {
-    setState(() => _isDocumentMode = isDocumentMode);
-
-    if (_isDocumentMode) {
-      _startNewBatchIfNeeded();
-      // Auto-launch ML Kit scanner as the auto scan mode on first entry
-      if (!ref.read(documentBatchProvider).hasPages) {
-        _launchMlKitScanner();
-      }
-    }
   }
 
   // ─── Build ───────────────────────────────────────────────────────────────
@@ -272,19 +330,49 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          if (_capturedImagePath == null)
+          if (_capturedImagePath == null && _previewPageIndex == null)
             CameraPreview(_controller!)
-          else
+          else if (_capturedImagePath != null)
             Image.file(File(_capturedImagePath!), fit: BoxFit.cover),
 
-          // Document mode overlay (only show when no pages scanned yet)
-          if (_capturedImagePath == null && _isDocumentMode && !batch.hasPages)
-            const IgnorePointer(
-              child: DocumentScannerOverlay(),
+          // Preview overlay after scan
+          if (_previewPageIndex != null && batch.hasPages)
+            _buildPreviewOverlay(batch),
+
+          if (_capturedImagePath == null && _previewPageIndex == null)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    _cameraControl(
+                      icon: Icons.close_rounded,
+                      onTap: () => context.go('/tools'),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      'Scan document',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    _cameraControl(
+                      icon: _isFlashOn
+                          ? Icons.flash_on_rounded
+                          : Icons.flash_off_rounded,
+                      color: _isFlashOn ? Colors.amberAccent : Colors.white,
+                      onTap: _toggleFlash,
+                    ),
+                  ],
+                ),
+              ),
             ),
 
-          // Controls
-          if (_capturedImagePath == null)
+          // Controls (hidden during preview)
+          if (_capturedImagePath == null && _previewPageIndex == null)
             Positioned(
               left: 0,
               right: 0,
@@ -308,54 +396,51 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     if (_isDocumentMode && batch.hasPages)
                       _buildThumbnailStrip(batch, context),
 
-                    // Mode Toggle
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 24),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(30),
+                    if (!_isDocumentMode)
+                      _ModeToggle(
+                        title: 'Image capture',
+                        isSelected: true,
+                        onTap: () {},
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ModeToggle(
-                            title: 'Image',
-                            isSelected: !_isDocumentMode,
-                            onTap: () => _onModeChanged(false),
-                          ),
-                          _ModeToggle(
-                            title: 'Document',
-                            isSelected: _isDocumentMode,
-                            onTap: () => _onModeChanged(true),
-                          ),
-                        ],
-                      ),
-                    ),
 
                     // Controls
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         if (_isDocumentMode) ...[
-                          // ML Kit Smart Scan (document mode only)
-                          IconButton(
-                            onPressed: _isScanningDocument
+                          _cameraControl(
+                            icon: Icons.photo_library_outlined,
+                            onTap: () {},
+                          ),
+                          GestureDetector(
+                            onTap: _isScanningDocument
                                 ? null
                                 : _launchMlKitScanner,
-                            icon: _isScanningDocument
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white70,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.document_scanner_rounded,
-                                    color: Colors.white,
-                                    size: 28,
-                                  ),
+                            child: Container(
+                              width: 76,
+                              height: 76,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: Colors.white, width: 4),
+                              ),
+                              child: Container(
+                                margin: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: _isScanningDocument
+                                      ? Colors.white54
+                                      : Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _isScanningDocument
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(22),
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2),
+                                      )
+                                    : null,
+                              ),
+                            ),
                           ),
                         ] else ...[
                           IconButton(
@@ -372,8 +457,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                               height: 72,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: Colors.white, width: 4),
+                                border:
+                                    Border.all(color: Colors.white, width: 4),
                               ),
                               child: Container(
                                 margin: const EdgeInsets.all(4),
@@ -397,22 +482,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                             ),
                           ),
                         ],
-                        IconButton(
-                          onPressed: _toggleFlash,
-                          icon: Icon(
-                            _isFlashOn
-                                ? Icons.flash_on_rounded
-                                : Icons.flash_off_rounded,
-                            color: _isFlashOn
-                                ? Colors.amberAccent
-                                : Colors.white,
-                            size: 28,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _switchCamera,
-                          icon: const Icon(Icons.flip_camera_ios_rounded,
-                              color: Colors.white, size: 28),
+                        _cameraControl(
+                          icon: Icons.flip_camera_ios_rounded,
+                          onTap: _switchCamera,
                         ),
                       ],
                     ),
@@ -422,8 +494,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
                           batch.hasPages
-                              ? 'Tap thumbnail to finish · Tap scanner to add more'
-                              : 'Tap scanner to capture document pages',
+                              ? 'Capture another page or tap Done to review'
+                              : 'Place the document inside the frame',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.6),
                             fontSize: 12,
@@ -435,6 +507,229 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _cameraControl({
+    required IconData icon,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+  }) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.35),
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, color: color, size: 23),
+        ),
+      ),
+    );
+  }
+
+  // ─── Preview Overlay ──────────────────────────────────────────────────
+
+  Widget _buildPreviewOverlay(DocumentBatch batch) {
+    return Container(
+      color: Colors.black,
+      child: SafeArea(
+        child: Column(
+          children: [
+            _buildPreviewTopBar(batch),
+            Expanded(
+              child: PageView.builder(
+                controller: _previewPageController,
+                itemCount: batch.pages.length + 1,
+                onPageChanged: (index) {
+                  if (index < batch.pages.length) {
+                    setState(() => _previewPageIndex = index);
+                  }
+                },
+                itemBuilder: (context, index) {
+                  if (index == batch.pages.length) {
+                    return _buildBlankAddPage();
+                  }
+                  return _buildPreviewPage(index, batch);
+                },
+              ),
+            ),
+            _buildPreviewBottomBar(batch),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewTopBar(DocumentBatch batch) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _nextFromPreview,
+            icon: const Icon(Icons.close, color: Colors.white, size: 24),
+          ),
+          const Spacer(),
+          Text(
+            'Page ${(_previewPageIndex ?? 0) + 1} of ${batch.pageCount}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            onPressed: _addBlankPageToPreview,
+            icon: const Icon(Icons.add_circle_outline,
+                color: Colors.white70, size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewPage(int index, DocumentBatch batch) {
+    final page = batch.pages[index];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: page.imageBytes != null
+            ? Image.memory(
+                page.displayBytes,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => _previewPlaceholder(),
+              )
+            : _previewPlaceholder(),
+      ),
+    );
+  }
+
+  Widget _buildBlankAddPage() {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child:
+                const Icon(Icons.add_rounded, color: Colors.white70, size: 40),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Add New Page',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Scan a new document page or import from gallery',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 32),
+          FilledButton.icon(
+            onPressed: _scanNewPageFromPreview,
+            icon: const Icon(Icons.document_scanner_rounded, size: 20),
+            label: const Text('Scan New Page'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+              backgroundColor: scheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewBottomBar(DocumentBatch batch) {
+    final currentIndex = _previewPageIndex ?? 0;
+    return Container(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: 16 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [
+            Colors.black.withValues(alpha: 0.9),
+            Colors.transparent,
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          // Discard
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _discardPreviewPage(currentIndex),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('Discard'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade300,
+                side: BorderSide(
+                    color: Colors.red.shade300.withValues(alpha: 0.5)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Crop
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _cropPreviewPage(currentIndex),
+              icon: const Icon(Icons.crop, size: 18),
+              label: const Text('Crop'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Next
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _nextFromPreview,
+              icon: const Icon(Icons.arrow_forward, size: 18),
+              label: const Text('Next'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                backgroundColor: Colors.green,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewPlaceholder() {
+    return Container(
+      color: Colors.grey.shade800,
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Colors.white38, size: 48),
       ),
     );
   }

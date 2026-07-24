@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/camera/presentation/camera_screen.dart';
 import '../../features/camera/presentation/screens/document_review_screen.dart';
 import '../../features/camera/presentation/screens/document_filter_screen.dart';
+import '../../features/camera/presentation/screens/perspective_correction_screen.dart';
 import '../../features/collage_builder/presentation/collage_builder_screen.dart';
 import '../../features/format_converter/presentation/format_converter_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -54,6 +55,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'filter',
                     pageBuilder: (context, state) =>
                         const _MaterialPage(child: DocumentFilterScreen()),
+                  ),
+                  GoRoute(
+                    path: 'crop',
+                    pageBuilder: (context, state) =>
+                        _MaterialPage(child: PerspectiveCorrectionScreen()),
                   ),
                 ],
               ),

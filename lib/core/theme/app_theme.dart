@@ -4,7 +4,7 @@ abstract final class AppTheme {
   static ThemeData light() {
     const scheme = ColorScheme(
       brightness: Brightness.light,
-      primary: Color(0xFF5B4DFF),
+      primary: Color(0xFF1A73E8),
       onPrimary: Colors.white,
       secondary: Color(0xFF00A7A0),
       onSecondary: Colors.white,
@@ -12,8 +12,8 @@ abstract final class AppTheme {
       onError: Colors.white,
       surface: Color(0xFFF8F7FC),
       onSurface: Color(0xFF171B2E),
-      primaryContainer: Color(0xFFE7E3FF),
-      onPrimaryContainer: Color(0xFF221A72),
+      primaryContainer: Color(0xFFD8E8FF),
+      onPrimaryContainer: Color(0xFF0B3D82),
       secondaryContainer: Color(0xFFD5F6F2),
       onSecondaryContainer: Color(0xFF083A39),
       tertiary: Color(0xFFEC5D92),
@@ -32,7 +32,7 @@ abstract final class AppTheme {
       scrim: Color(0x80000000),
       inverseSurface: Color(0xFF21253A),
       onInverseSurface: Color(0xFFF5F6FB),
-      inversePrimary: Color(0xFFC4BCFF),
+      inversePrimary: Color(0xFFA8C7FA),
     );
 
     return ThemeData(
@@ -63,16 +63,16 @@ abstract final class AppTheme {
   static ThemeData dark() {
     const scheme = ColorScheme(
       brightness: Brightness.dark,
-      primary: Color(0xFFC4BCFF),
-      onPrimary: Color(0xFF2E2588),
+      primary: Color(0xFFA8C7FA),
+      onPrimary: Color(0xFF00315F),
       secondary: Color(0xFF5DD9D2),
       onSecondary: Color(0xFF003735),
       error: Color(0xFFFFB4AB),
       onError: Color(0xFF690005),
       surface: Color(0xFF12141C),
       onSurface: Color(0xFFE6E6EE),
-      primaryContainer: Color(0xFF3A309A),
-      onPrimaryContainer: Color(0xFFE7E3FF),
+      primaryContainer: Color(0xFF084985),
+      onPrimaryContainer: Color(0xFFD8E8FF),
       secondaryContainer: Color(0xFF00504D),
       onSecondaryContainer: Color(0xFFD5F6F2),
       tertiary: Color(0xFFFFB1C8),
@@ -91,7 +91,7 @@ abstract final class AppTheme {
       scrim: Color(0x80000000),
       inverseSurface: Color(0xFFE6E6EE),
       onInverseSurface: Color(0xFF12141C),
-      inversePrimary: Color(0xFF5B4DFF),
+      inversePrimary: Color(0xFF1A73E8),
     );
 
     return ThemeData(
