@@ -24,7 +24,7 @@ class ImageResizeScreen extends ConsumerStatefulWidget {
 
 enum _ResizeMode { dimensions, percentage, preset, bestFit, smartCompress }
 
-enum _EditorPanel { resize, crop, rotate, watermark }
+enum _EditorPanel { resize, crop, rotate }
 
 enum _PresetCategory { profile, banner }
 
@@ -76,16 +76,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   );
   final TextEditingController _cropWidthController = TextEditingController();
   final TextEditingController _cropHeightController = TextEditingController();
-  final TextEditingController _watermarkTextController =
-      TextEditingController(text: '© PixelTools');
-
   List<Uint8List> _undoStack = <Uint8List>[];
   int _undoIndex = -1;
-
-  Color _watermarkColor = Colors.white;
-  double _watermarkOpacity = 0.8;
-  WatermarkTextSize _watermarkSize = WatermarkTextSize.medium;
-  WatermarkPosition _watermarkPosition = WatermarkPosition.bottomRight;
 
   _EditorPanel _activePanel = _EditorPanel.resize;
   _ResizeMode _mode = _ResizeMode.dimensions;
@@ -146,7 +138,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _cropYController.dispose();
     _cropWidthController.dispose();
     _cropHeightController.dispose();
-    _watermarkTextController.dispose();
     super.dispose();
   }
 
@@ -1320,64 +1311,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
   }
 
-  Future<void> _applyWatermark() async {
-    final state = ref.read(imageEditProvider);
-    if (!state.hasImage) {
-      _showSnack('Pick an image first.');
-      return;
-    }
-
-    final text = _watermarkTextController.text.trim();
-    if (text.isEmpty) {
-      _showSnack('Enter watermark text.');
-      return;
-    }
-
-    ref.read(imageEditProvider.notifier).setLoading(true);
-
-    final result = await ref
-        .read(imageEditProvider.notifier)
-        .generateWatermark(
-          text: text,
-          color: _watermarkColor,
-          textSize: _watermarkSize,
-          opacity: _watermarkOpacity,
-          position: _watermarkPosition,
-          format: _outputFormat,
-          quality: _quality.value,
-        );
-
-    if (!mounted) return;
-
-    if (result == null) {
-      ref.read(imageEditProvider.notifier).setLoading(false);
-      _showSnack(
-        ref.read(imageEditProvider).errorMessage ?? 'Watermark failed.',
-      );
-      return;
-    }
-
-    final fileName = _buildOutputFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-    );
-
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(result: result, fileName: fileName);
-
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
-    _showSnack('Watermark applied.');
-    InterstitialTracker.instance.trackAction();
-  }
-
   Future<void> _applyActiveTool() {
     return switch (_activePanel) {
       _EditorPanel.resize => _resizeImage(),
       _EditorPanel.crop => _applyCrop(),
       _EditorPanel.rotate => _rotateImage(),
-      _EditorPanel.watermark => _applyWatermark(),
     };
   }
 
@@ -1405,7 +1343,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _EditorPanel.resize => 'Apply Resize',
       _EditorPanel.crop => 'Apply Crop',
       _EditorPanel.rotate => 'Apply Rotation',
-      _EditorPanel.watermark => 'Apply Watermark',
     };
   }
 
@@ -1721,11 +1658,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 flipH: _flipPreviewH,
                 flipV: _flipPreviewV,
                 onCropUpdate: _updateCropFromDrag,
-                watermarkText: _watermarkTextController.text,
-                watermarkColor: _watermarkColor,
-                watermarkOpacity: _watermarkOpacity,
-                watermarkSize: _watermarkSize,
-                watermarkPosition: _watermarkPosition,
               ),
               const SizedBox(height: 10),
               _buildPrimaryToolStrip(),
@@ -1781,7 +1713,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         _EditorPanel.resize => _buildResizeEditor(state, target),
         _EditorPanel.crop => _buildCropEditor(state),
         _EditorPanel.rotate => _buildRotateEditor(),
-        _EditorPanel.watermark => _buildWatermarkEditor(),
       },
     );
   }
@@ -2236,189 +2167,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
   }
 
-  Widget _buildWatermarkEditor() {
-    final scheme = Theme.of(context).colorScheme;
-
-    final watermarkColorOptions = <Map<String, dynamic>>[
-      {'label': 'White', 'color': Colors.white, 'opacity': _watermarkOpacity},
-      {'label': 'Black', 'color': Colors.black, 'opacity': _watermarkOpacity},
-      {'label': 'Red', 'color': Colors.red, 'opacity': _watermarkOpacity},
-      {'label': 'Blue', 'color': Colors.blue, 'opacity': _watermarkOpacity},
-      {'label': 'Semi-transparent White', 'color': Colors.white, 'opacity': 0.5},
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Watermark Text',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _watermarkTextController,
-          onChanged: (_) => setState(() {}),
-          decoration: _fieldDecoration('Enter Watermark Text').copyWith(
-            suffixIcon: _watermarkTextController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear_rounded, size: 18),
-                    onPressed: () {
-                      _watermarkTextController.clear();
-                      setState(() {});
-                    },
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final suggestion in <String>[
-              '© PixelTools',
-              'CONFIDENTIAL',
-              'SAMPLE',
-              'DRAFT',
-              'DO NOT COPY',
-            ])
-              ActionChip(
-                label: Text(
-                  suggestion,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onPressed: () {
-                  _watermarkTextController.text = suggestion;
-                  setState(() {});
-                },
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Color',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: watermarkColorOptions.map((opt) {
-            final String label = opt['label'] as String;
-            final Color color = opt['color'] as Color;
-            final double opacity = opt['opacity'] as double;
-            final bool isSelected = label == 'Semi-transparent White'
-                ? (_watermarkColor.toARGB32() == Colors.white.toARGB32() && _watermarkOpacity == 0.5)
-                : (_watermarkColor.toARGB32() == color.toARGB32() && _watermarkOpacity != 0.5);
-
-            return ChoiceChip(
-              avatar: CircleAvatar(
-                backgroundColor: color.withValues(alpha: opacity),
-                radius: 8,
-              ),
-              label: Text(label),
-              selected: isSelected,
-              onSelected: (_) {
-                setState(() {
-                  _watermarkColor = color;
-                  _watermarkOpacity = opacity;
-                });
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Text Size',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: WatermarkTextSize.values.map((size) {
-            return ChoiceChip(
-              label: Text(size.label),
-              selected: _watermarkSize == size,
-              onSelected: (_) {
-                setState(() => _watermarkSize = size);
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Opacity',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-                color: scheme.onSurface,
-              ),
-            ),
-            Text(
-              '${(_watermarkOpacity * 100).round()}%',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: scheme.primary,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          min: 0.1,
-          max: 1.0,
-          divisions: 18,
-          value: _watermarkOpacity.clamp(0.1, 1.0),
-          activeColor: scheme.primary,
-          onChanged: (val) {
-            setState(() => _watermarkOpacity = val);
-          },
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Position',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: WatermarkPosition.values.map((pos) {
-            return ChoiceChip(
-              label: Text(pos.label),
-              selected: _watermarkPosition == pos,
-              onSelected: (_) {
-                setState(() => _watermarkPosition = pos);
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
   Widget _buildImageMeta(ImageEditState state) {
     return Row(
       children: [
@@ -2507,7 +2255,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 _EditorPanel.resize => Icons.auto_awesome_rounded,
                 _EditorPanel.crop => Icons.crop_rounded,
                 _EditorPanel.rotate => Icons.rotate_right_rounded,
-                _EditorPanel.watermark => Icons.branding_watermark_rounded,
               }, size: 18),
               label: Text(
                 _applyButtonLabel,
@@ -2545,13 +2292,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             icon: Icons.rotate_right_rounded,
             selected: _activePanel == _EditorPanel.rotate,
             onTap: () => _setActivePanel(_EditorPanel.rotate),
-          ),
-          const SizedBox(width: 6),
-          _PreviewToolButton(
-            label: 'Watermark',
-            icon: Icons.branding_watermark_rounded,
-            selected: _activePanel == _EditorPanel.watermark,
-            onTap: () => _setActivePanel(_EditorPanel.watermark),
           ),
         ],
       ),
@@ -3400,11 +3140,6 @@ class _InteractiveImagePreview extends StatefulWidget {
     required this.onCropUpdate,
     this.flipH = false,
     this.flipV = false,
-    this.watermarkText,
-    this.watermarkColor,
-    this.watermarkOpacity,
-    this.watermarkSize,
-    this.watermarkPosition,
   });
 
   final Uint8List imageBytes;
@@ -3419,11 +3154,6 @@ class _InteractiveImagePreview extends StatefulWidget {
   final double rotationDegrees;
   final bool flipH;
   final bool flipV;
-  final String? watermarkText;
-  final Color? watermarkColor;
-  final double? watermarkOpacity;
-  final WatermarkTextSize? watermarkSize;
-  final WatermarkPosition? watermarkPosition;
   final void Function({
     required int x,
     required int y,
@@ -3574,54 +3304,6 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (widget.activePanel == _EditorPanel.watermark &&
-                        widget.watermarkText != null &&
-                        widget.watermarkText!.trim().isNotEmpty)
-                      Positioned.fill(
-                        child: Align(
-                          alignment: switch (widget.watermarkPosition ??
-                              WatermarkPosition.bottomRight) {
-                            WatermarkPosition.topLeft => Alignment.topLeft,
-                            WatermarkPosition.topRight => Alignment.topRight,
-                            WatermarkPosition.bottomLeft => Alignment.bottomLeft,
-                            WatermarkPosition.bottomRight =>
-                              Alignment.bottomRight,
-                            WatermarkPosition.center => Alignment.center,
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(
-                              widget.watermarkText!,
-                              style: TextStyle(
-                                color: (widget.watermarkColor ?? Colors.white)
-                                    .withValues(
-                                  alpha: (widget.watermarkOpacity ?? 0.8)
-                                      .clamp(0.1, 1.0),
-                                ),
-                                fontSize: switch (widget.watermarkSize ??
-                                    WatermarkTextSize.medium) {
-                                  WatermarkTextSize.small => 12,
-                                  WatermarkTextSize.medium => 18,
-                                  WatermarkTextSize.large => 24,
-                                  WatermarkTextSize.extraLarge => 32,
-                                },
-                                fontWeight: FontWeight.bold,
-                                shadows: [
-                                  Shadow(
-                                    blurRadius: 4.0,
-                                    color: Colors.black.withValues(
-                                      alpha: ((widget.watermarkOpacity ?? 0.8) *
-                                              0.6)
-                                          .clamp(0.0, 1.0),
-                                    ),
-                                    offset: const Offset(1, 1),
-                                  ),
-                                ],
                               ),
                             ),
                           ),

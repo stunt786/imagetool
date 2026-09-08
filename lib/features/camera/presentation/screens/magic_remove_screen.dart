@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
@@ -12,8 +13,8 @@ class Stroke {
   final double radius;
 }
 
-/// Screen allowing users to highlight unwanted objects/text with a red brush
-/// and erase them using boundary-propagation auto-heal inpainting.
+/// Professional magic remove screen with edge-aware inpainting,
+/// real-time brush cursor, and before/after comparison.
 class MagicRemoveScreen extends StatefulWidget {
   const MagicRemoveScreen({
     super.key,
@@ -26,7 +27,8 @@ class MagicRemoveScreen extends StatefulWidget {
   State<MagicRemoveScreen> createState() => _MagicRemoveScreenState();
 }
 
-class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
+class _MagicRemoveScreenState extends State<MagicRemoveScreen>
+    with SingleTickerProviderStateMixin {
   late Uint8List _currentBytes;
   late Uint8List _originalBytes;
   final List<Uint8List> _history = [];
@@ -36,7 +38,8 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
 
   double _brushRadius = 20.0;
   bool _isBusy = false;
-  bool _showOriginal = false;
+  bool _showComparison = false;
+  double _comparisonPosition = 0.5;
 
   int? _imgWidth;
   int? _imgHeight;
@@ -44,12 +47,30 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
   double _lastCanvasWidth = 300;
   double _lastCanvasHeight = 400;
 
+  Offset? _pointerPosition;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
     _currentBytes = widget.imageBytes;
     _originalBytes = widget.imageBytes;
     _decodeDimensions();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 
   void _decodeDimensions() {
@@ -108,10 +129,11 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
           _decodeDimensions();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Object erased successfully'),
+          SnackBar(
+            content: const Text('Object erased'),
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -119,7 +141,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Inpainting error: $error'),
+            content: Text('Error: $error'),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -135,44 +157,68 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
     final canUndo = _strokes.isNotEmpty || _history.isNotEmpty;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF111214),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1B1C1F),
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Magic Remove',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          IconButton(
-            onPressed: canUndo && !_isBusy ? _undoStroke : null,
-            icon: const Icon(Icons.undo),
-            tooltip: 'Undo',
-          ),
-          IconButton(
-            onPressed: _strokes.isNotEmpty && !_isBusy ? _resetMask : null,
-            icon: const Icon(Icons.cleaning_services_outlined),
-            tooltip: 'Reset mask',
-          ),
-          IconButton(
-            onPressed: !_isBusy ? _saveAndExit : null,
-            icon: const Icon(Icons.check, color: Color(0xFF2F80ED)),
-            tooltip: 'Done',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFF0D0D0F),
       body: SafeArea(
         child: Column(
           children: [
+            _buildTopBar(canUndo),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: _buildCanvas(context),
               ),
             ),
             _buildBottomControls(context),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar(bool canUndo) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: const BoxDecoration(
+        color: Color(0xFF16171A),
+        border: Border(bottom: BorderSide(color: Colors.white10)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close, color: Colors.white70, size: 22),
+            tooltip: 'Cancel',
+          ),
+          const Expanded(
+            child: Text(
+              'Magic Remove',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          IconButton(
+            onPressed: canUndo && !_isBusy ? _undoStroke : null,
+            icon: Icon(
+              Icons.undo,
+              color: canUndo ? Colors.white70 : Colors.white24,
+              size: 22,
+            ),
+            tooltip: 'Undo',
+          ),
+          IconButton(
+            onPressed: !_isBusy ? _saveAndExit : null,
+            icon: Icon(
+              Icons.check_circle,
+              color: !_isBusy ? const Color(0xFF34C759) : Colors.white24,
+              size: 26,
+            ),
+            tooltip: 'Done',
+          ),
+        ],
       ),
     );
   }
@@ -192,80 +238,218 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
             _lastCanvasWidth = constraints.maxWidth;
             _lastCanvasHeight = constraints.maxHeight;
 
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.memory(
-                  _showOriginal ? _originalBytes : _currentBytes,
-                  fit: BoxFit.fill,
-                ),
-                if (!_showOriginal)
-                  CustomPaint(
-                    painter: _MaskPainter(
-                      strokes: _strokes,
-                      activeStroke: _activeStroke,
-                    ),
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Main image
+                  Image.memory(
+                    _currentBytes,
+                    fit: BoxFit.fill,
                   ),
-                if (!_isBusy && !_showOriginal)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onPanStart: (details) {
-                      final pos = details.localPosition;
-                      if (pos.dx >= 0 &&
-                          pos.dx <= constraints.maxWidth &&
-                          pos.dy >= 0 &&
-                          pos.dy <= constraints.maxHeight) {
-                        setState(() {
-                          _activeStroke = Stroke(
-                            points: [pos],
-                            radius: _brushRadius,
-                          );
-                        });
-                      }
-                    },
-                    onPanUpdate: (details) {
-                      final pos = details.localPosition;
-                      if (pos.dx >= 0 &&
-                          pos.dx <= constraints.maxWidth &&
-                          pos.dy >= 0 &&
-                          pos.dy <= constraints.maxHeight) {
-                        setState(() {
-                          _activeStroke?.points.add(pos);
-                        });
-                      }
-                    },
-                    onPanEnd: (details) {
-                      if (_activeStroke != null &&
-                          _activeStroke!.points.isNotEmpty) {
-                        setState(() {
-                          _strokes.add(_activeStroke!);
-                          _activeStroke = null;
-                        });
-                      }
-                    },
-                  ),
-                if (_isBusy)
-                  Container(
-                    color: Colors.black45,
-                    child: const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(color: Colors.white),
-                          SizedBox(height: 12),
-                          Text(
-                            'Erasing object...',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+
+                  // Comparison: original image with clip
+                  if (_showComparison)
+                    ClipRect(
+                      clipper: _ComparisonClipper(_comparisonPosition),
+                      child: Image.memory(
+                        _originalBytes,
+                        fit: BoxFit.fill,
                       ),
                     ),
-                  ),
-              ],
+
+                  // Comparison divider line
+                  if (_showComparison)
+                    Positioned(
+                      left: _comparisonPosition * constraints.maxWidth - 1,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 2,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.0),
+                              Colors.white,
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Comparison handle
+                  if (_showComparison)
+                    Positioned(
+                      left: _comparisonPosition * constraints.maxWidth - 16,
+                      top: constraints.maxHeight / 2 - 16,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.swap_horiz,
+                          size: 18,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+
+                  // Stroke overlay
+                  if (!_showComparison && !_isBusy)
+                    CustomPaint(
+                      painter: _MaskPainter(
+                        strokes: _strokes,
+                        activeStroke: _activeStroke,
+                      ),
+                      size: Size.infinite,
+                    ),
+
+                  // Brush cursor follower
+                  if (!_showComparison && !_isBusy && _pointerPosition != null)
+                    Positioned(
+                      left: _pointerPosition!.dx - _brushRadius,
+                      top: _pointerPosition!.dy - _brushRadius,
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _pulseAnimation,
+                          builder: (context, child) {
+                            return Container(
+                              width: _brushRadius * 2,
+                              height: _brushRadius * 2,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white.withValues(
+                                    alpha: _pulseAnimation.value * 0.7,
+                                  ),
+                                  width: 1.5,
+                                ),
+                                color: const Color(0x22FF3B30),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                  // Gesture detector
+                  if (!_showComparison && !_isBusy)
+                    GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onPanStart: (details) {
+                        final pos = details.localPosition;
+                        if (pos.dx >= 0 &&
+                            pos.dx <= constraints.maxWidth &&
+                            pos.dy >= 0 &&
+                            pos.dy <= constraints.maxHeight) {
+                          setState(() {
+                            _pointerPosition = pos;
+                            _activeStroke = Stroke(
+                              points: [pos],
+                              radius: _brushRadius,
+                            );
+                          });
+                        }
+                      },
+                      onPanUpdate: (details) {
+                        final pos = details.localPosition;
+                        if (pos.dx >= 0 &&
+                            pos.dx <= constraints.maxWidth &&
+                            pos.dy >= 0 &&
+                            pos.dy <= constraints.maxHeight) {
+                          setState(() {
+                            _pointerPosition = pos;
+                            _activeStroke?.points.add(pos);
+                          });
+                        }
+                      },
+                      onPanEnd: (details) {
+                        if (_activeStroke != null &&
+                            _activeStroke!.points.isNotEmpty) {
+                          setState(() {
+                            _strokes.add(_activeStroke!);
+                            _activeStroke = null;
+                            _pointerPosition = null;
+                          });
+                        }
+                      },
+                      onPanCancel: () {
+                        setState(() {
+                          _pointerPosition = null;
+                        });
+                      },
+                    ),
+
+                  // Processing overlay
+                  if (_isBusy)
+                    Container(
+                      color: Colors.black54,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const _ProcessingIndicator(),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Analyzing and removing...',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.9),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Using edge-aware inpainting',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // Stroke count badge
+                  if (_strokes.isNotEmpty && !_isBusy && !_showComparison)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_strokes.length} stroke${_strokes.length > 1 ? 's' : ''}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           },
         ),
@@ -277,100 +461,160 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: const BoxDecoration(
-        color: Color(0xFF1B1C1F),
+        color: Color(0xFF16171A),
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(top: BorderSide(color: Colors.white10)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Preset brush sizes & Slider
+          // Comparison toggle
+          Row(
+            children: [
+              Icon(
+                _showComparison ? Icons.compare : Icons.visibility_off_outlined,
+                color: Colors.white54,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _showComparison ? 'Drag to compare' : 'Hold to compare with original',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTapDown: (_) => setState(() => _showComparison = true),
+                onTapUp: (_) => setState(() => _showComparison = false),
+                onTapCancel: () => setState(() => _showComparison = false),
+                onHorizontalDragUpdate: (details) {
+                  setState(() {
+                    _comparisonPosition = (details.localPosition.dx /
+                            context.size!.width)
+                        .clamp(0.05, 0.95);
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _showComparison
+                        ? const Color(0xFF2F80ED)
+                        : Colors.white10,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _showComparison ? 'Comparing' : 'Compare',
+                    style: TextStyle(
+                      color: _showComparison ? Colors.white : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Brush size
           Row(
             children: [
               const Text(
-                'Brush Size',
+                'Brush',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Container(
-                width: _brushRadius * 0.8,
-                height: _brushRadius * 0.8,
+                width: math.max(_brushRadius * 0.7, 8),
+                height: math.max(_brushRadius * 0.7, 8),
                 decoration: const BoxDecoration(
                   color: Color(0xCCFF3B30),
                   shape: BoxShape.circle,
                 ),
               ),
               Expanded(
-                child: Slider(
-                  value: _brushRadius,
-                  min: 5.0,
-                  max: 60.0,
-                  activeColor: const Color(0xFFFF3B30),
-                  inactiveColor: Colors.white24,
-                  onChanged: (val) => setState(() => _brushRadius = val),
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(0xFFFF3B30),
+                    inactiveTrackColor: Colors.white12,
+                    thumbColor: const Color(0xFFFF3B30),
+                    overlayColor: const Color(0x22FF3B30),
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                  ),
+                  child: Slider(
+                    value: _brushRadius,
+                    min: 5.0,
+                    max: 60.0,
+                    onChanged: (val) => setState(() => _brushRadius = val),
+                  ),
                 ),
               ),
             ],
           ),
-          // Brush size presets: Small, Medium, Large, Extra Large
+
+          // Preset sizes
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildPresetChip('Small', 10.0),
-              _buildPresetChip('Medium', 20.0),
-              _buildPresetChip('Large', 35.0),
-              _buildPresetChip('X-Large', 50.0),
+              _buildPresetChip('S', 10.0),
+              _buildPresetChip('M', 20.0),
+              _buildPresetChip('L', 35.0),
+              _buildPresetChip('XL', 50.0),
             ],
           ),
           const SizedBox(height: 14),
-          // Action Buttons: Before/After toggle & Erase Object
+
+          // Action row
           Row(
             children: [
-              // Before/After Toggle Button
-              GestureDetector(
-                onTapDown: (_) => setState(() => _showOriginal = true),
-                onTapUp: (_) => setState(() => _showOriginal = false),
-                onTapCancel: () => setState(() => _showOriginal = false),
-                child: OutlinedButton.icon(
-                  onPressed: null, // Gesture handler handles press-and-hold
-                  icon: Icon(
-                    _showOriginal
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                  label: Text(
-                    _showOriginal ? 'Showing Original' : 'Hold Before',
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.white38),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
+              if (_strokes.isNotEmpty && !_isBusy)
+                GestureDetector(
+                  onTap: _resetMask,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cleaning_services_outlined, color: Colors.white70, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Clear',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // Erase Object Action Button
+              if (_strokes.isNotEmpty && !_isBusy) const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
                   onPressed: _strokes.isNotEmpty && !_isBusy ? _eraseObject : null,
                   icon: const Icon(Icons.auto_fix_high_rounded, size: 20),
-                  label: const Text(
-                    'Erase Object',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                  label: Text(
+                    _strokes.isEmpty ? 'Draw to select' : 'Erase (${_strokes.length})',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFFF3B30),
                     disabledBackgroundColor: Colors.white12,
+                    disabledForegroundColor: Colors.white30,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
@@ -383,20 +627,126 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen> {
 
   Widget _buildPresetChip(String label, double value) {
     final isSelected = (_brushRadius - value).abs() < 4.0;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      selectedColor: const Color(0xFFFF3B30),
-      backgroundColor: Colors.white10,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.white70,
-        fontSize: 11,
-        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+    return GestureDetector(
+      onTap: () => setState(() => _brushRadius = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF3B30) : Colors.white10,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFFF3B30) : Colors.white12,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white60,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
       ),
-      onSelected: (_) => setState(() => _brushRadius = value),
-      visualDensity: VisualDensity.compact,
     );
   }
+}
+
+/// Clipper that reveals the original image up to a horizontal position.
+class _ComparisonClipper extends CustomClipper<Rect> {
+  _ComparisonClipper(this.position);
+
+  final double position;
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTWH(0, 0, size.width * position, size.height);
+  }
+
+  @override
+  bool shouldReclip(covariant _ComparisonClipper oldClipper) {
+    return oldClipper.position != position;
+  }
+}
+
+/// Animated pulsing processing indicator.
+class _ProcessingIndicator extends StatefulWidget {
+  const _ProcessingIndicator();
+
+  @override
+  State<_ProcessingIndicator> createState() => _ProcessingIndicatorState();
+}
+
+class _ProcessingIndicatorState extends State<_ProcessingIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return CustomPaint(
+          size: const Size(48, 48),
+          painter: _ProcessingPainter(_controller.value),
+        );
+      },
+    );
+  }
+}
+
+class _ProcessingPainter extends CustomPainter {
+  _ProcessingPainter(this.progress);
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4;
+
+    // Background circle
+    final bgPaint = Paint()
+      ..color = Colors.white12
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Animated arc
+    final arcPaint = Paint()
+      ..color = const Color(0xFFFF3B30)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    final startAngle = 2 * math.pi * progress - math.pi / 2;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      math.pi * 1.2,
+      false,
+      arcPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProcessingPainter oldDelegate) => true;
 }
 
 class _MaskPainter extends CustomPainter {
@@ -413,8 +763,18 @@ class _MaskPainter extends CustomPainter {
     for (final stroke in allStrokes) {
       if (stroke.points.isEmpty) continue;
 
+      // Glow effect
+      final glowPaint = Paint()
+        ..color = const Color(0x33FF3B30)
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke.radius * 2.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+
+      // Main stroke
       final paint = Paint()
-        ..color = const Color(0x99FF3B30)
+        ..color = const Color(0x88FF3B30)
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke
@@ -422,15 +782,17 @@ class _MaskPainter extends CustomPainter {
 
       if (stroke.points.length == 1) {
         final fillPaint = Paint()
-          ..color = const Color(0x99FF3B30)
+          ..color = const Color(0x44FF3B30)
           ..style = PaintingStyle.fill;
         canvas.drawCircle(stroke.points.first, stroke.radius, fillPaint);
+        canvas.drawCircle(stroke.points.first, stroke.radius, paint);
       } else {
         final path = Path();
         path.moveTo(stroke.points.first.dx, stroke.points.first.dy);
         for (int i = 1; i < stroke.points.length; i++) {
           path.lineTo(stroke.points[i].dx, stroke.points[i].dy);
         }
+        canvas.drawPath(path, glowPaint);
         canvas.drawPath(path, paint);
       }
     }

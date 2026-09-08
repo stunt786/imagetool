@@ -27,17 +27,29 @@ import '../settings/app_settings.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final rootNavigatorKey = GlobalKey<NavigatorState>();
-  final settings = ref.watch(appSettingsProvider);
+  final refreshNotifier = ValueNotifier<int>(0);
+
+  // Re-evaluate GoRouter redirects when settings finish loading
+  ref.listen(appSettingsProvider, (previous, next) {
+    refreshNotifier.value++;
+  });
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: settings.hasCompletedOnboarding ? '/tools' : '/onboarding',
+    initialLocation: ref.read(appSettingsProvider).hasCompletedOnboarding
+        ? '/tools'
+        : '/onboarding',
+    refreshListenable: refreshNotifier,
     redirect: (context, state) {
+      final settings = ref.read(appSettingsProvider);
       if (settings.isLoading) return null;
       final onboardingDone = settings.hasCompletedOnboarding;
       final isOnboardingRoute = state.matchedLocation == '/onboarding';
       if (!onboardingDone && !isOnboardingRoute) {
         return '/onboarding';
+      }
+      if (onboardingDone && isOnboardingRoute) {
+        return '/tools';
       }
       return null;
     },

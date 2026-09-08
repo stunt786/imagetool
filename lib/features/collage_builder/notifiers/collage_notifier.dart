@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -405,33 +406,120 @@ class CollageNotifier extends Notifier<CollageState> {
         final text = state.captionText!.trim();
         final effectiveFontSize = state.captionSize * state.captionScale;
         final canvasFontSize = effectiveFontSize * (state.canvasWidth / 360.0);
-        final font = canvasFontSize >= 36
-            ? img.arial48
-            : (canvasFontSize >= 20 ? img.arial24 : img.arial14);
+        final fontFamily = state.captionFontFamily == 'Roboto'
+            ? null
+            : state.captionFontFamily;
+        final fontWeight =
+            state.captionFontFamily == 'Impact' || state.captionFontFamily == 'sans-serif'
+                ? FontWeight.w900
+                : FontWeight.bold;
 
-        final charWidth = font == img.arial48 ? 28 : (font == img.arial24 ? 14 : 8);
-        final textWidth = text.length * charWidth;
-        final textHeight = font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
+        final uiTextAlign = TextAlign.center;
+        final uiFontWeight = fontWeight;
+        final uiFontFamily = fontFamily;
 
-        int textX = (state.captionNormalizedOffset.dx * state.canvasWidth - textWidth / 2).toInt();
-        int textY = (state.captionNormalizedOffset.dy * state.canvasHeight - textHeight / 2).toInt();
+        // Build paragraph to measure text dimensions
+        final measureBuilder = ui.ParagraphBuilder(
+          ui.ParagraphStyle(
+            fontSize: canvasFontSize,
+            fontWeight: uiFontWeight,
+            fontFamily: uiFontFamily,
+            textAlign: uiTextAlign,
+          ),
+        )..pushStyle(ui.TextStyle(
+            color: ui.Color(0xFFFFFFFF),
+            fontSize: canvasFontSize,
+            fontWeight: uiFontWeight,
+            fontFamily: uiFontFamily,
+          ))
+          ..addText(text);
 
-        textX = textX.clamp(10, (state.canvasWidth - textWidth - 10).clamp(10, state.canvasWidth));
-        textY = textY.clamp(10, (state.canvasHeight - textHeight - 10).clamp(10, state.canvasHeight));
+        final measureParagraph = measureBuilder.build();
+        measureParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
 
-        final shadowColor = img.ColorRgb8(0, 0, 0);
-        final mainColor = img.ColorRgb8(
+        final textWidth = measureParagraph.width;
+        final textHeight = measureParagraph.height;
+
+        double textX = state.captionNormalizedOffset.dx * state.canvasWidth - textWidth / 2;
+        double textY = state.captionNormalizedOffset.dy * state.canvasHeight - textHeight / 2;
+
+        textX = textX.clamp(10.0, (state.canvasWidth - textWidth - 10).clamp(10.0, state.canvasWidth.toDouble()));
+        textY = textY.clamp(10.0, (state.canvasHeight - textHeight - 10).clamp(10.0, state.canvasHeight.toDouble()));
+
+        final mainColor = ui.Color.fromARGB(
+          255,
           (state.captionColor.r * 255).round().clamp(0, 255),
           (state.captionColor.g * 255).round().clamp(0, 255),
           (state.captionColor.b * 255).round().clamp(0, 255),
         );
 
-        // Draw shadow offset for contrast
-        img.drawString(canvas, text, font: font, x: textX - 2, y: textY - 2, color: shadowColor);
-        img.drawString(canvas, text, font: font, x: textX + 2, y: textY - 2, color: shadowColor);
-        img.drawString(canvas, text, font: font, x: textX - 2, y: textY + 2, color: shadowColor);
-        img.drawString(canvas, text, font: font, x: textX + 2, y: textY + 2, color: shadowColor);
-        img.drawString(canvas, text, font: font, x: textX, y: textY, color: mainColor);
+        // Render text with shadows using dart:ui
+        final shadowOffsets = [
+          const Offset(1, 1),
+          const Offset(-1, -1),
+          const Offset(1, -1),
+          const Offset(-1, 1),
+        ];
+
+        final pictureRecorder = ui.PictureRecorder();
+        final drawCanvas = Canvas(pictureRecorder);
+
+        // Draw shadow copies
+        for (final offset in shadowOffsets) {
+          final shadowBuilder = ui.ParagraphBuilder(
+            ui.ParagraphStyle(
+              fontSize: canvasFontSize,
+              fontWeight: uiFontWeight,
+              fontFamily: uiFontFamily,
+              textAlign: uiTextAlign,
+            ),
+          )..pushStyle(ui.TextStyle(
+              color: const ui.Color(0xCC000000),
+              fontSize: canvasFontSize,
+              fontWeight: uiFontWeight,
+              fontFamily: uiFontFamily,
+            ))
+            ..addText(text);
+
+          final shadowParagraph = shadowBuilder.build();
+          shadowParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
+          drawCanvas.drawParagraph(shadowParagraph, Offset(textX + offset.dx * 2, textY + offset.dy * 2));
+        }
+
+        // Draw main text
+        final mainBuilder = ui.ParagraphBuilder(
+          ui.ParagraphStyle(
+            fontSize: canvasFontSize,
+            fontWeight: uiFontWeight,
+            fontFamily: uiFontFamily,
+            textAlign: uiTextAlign,
+          ),
+        )..pushStyle(ui.TextStyle(
+            color: mainColor,
+            fontSize: canvasFontSize,
+            fontWeight: uiFontWeight,
+            fontFamily: uiFontFamily,
+          ))
+          ..addText(text);
+
+        final mainParagraph = mainBuilder.build();
+        mainParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
+        drawCanvas.drawParagraph(mainParagraph, Offset(textX, textY));
+
+        final picture = pictureRecorder.endRecording();
+        final textImage = await picture.toImage(state.canvasWidth, state.canvasHeight);
+
+        // Convert dart:ui Image to byte buffer
+        final byteData = await textImage.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          final textBytes = byteData.buffer.asUint8List();
+          final decodedText = img.decodeImage(textBytes);
+          if (decodedText != null) {
+            img.compositeImage(canvas, decodedText);
+          }
+        }
+
+        textImage.dispose();
       }
 
       final encoded = img.encodeJpg(canvas, quality: 95);
