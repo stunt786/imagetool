@@ -1,16 +1,21 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'dart:ui' as ui;
+
+import 'core/services/storage_service.dart';
+import 'features/image_resize/models/social_presets.dart';
 
 /// ImageEditorScreen provides a unified interface for Resize, Crop, and Rotate.
 /// This implementation fixes the handlebar stuck issue by using a dedicated
 /// transformation layer and robust boundary clamping.
 class ImageEditorScreen extends ConsumerStatefulWidget {
-  final File imageFile;
-  const ImageEditorScreen({super.key, required this.imageFile});
+  final Uint8List imageBytes;
+  final String fileName;
+  const ImageEditorScreen({
+    super.key,
+    required this.imageBytes,
+    this.fileName = 'edited.png',
+  });
 
   @override
   ConsumerState<ImageEditorScreen> createState() => _ImageEditorScreenState();
@@ -22,12 +27,9 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
   // For Custom Cropping Logic (if not using native UI)
   Rect _cropRect = const Rect.fromLTWH(50, 50, 200, 200);
-  double _aspectRatio = 1.0;
-  bool _isFixedAspectRatio = false;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -63,7 +65,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
                     panEnabled: _currentTab !=
                         0, // Disable pan when cropping to avoid conflicts
                     scaleEnabled: _currentTab != 0,
-                    child: Image.file(widget.imageFile, fit: BoxFit.contain),
+                    child: Image.memory(widget.imageBytes, fit: BoxFit.contain),
                   ),
 
                   // Crop Overlay Layer
@@ -108,7 +110,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
         // The darkened background outside the crop area
         ColorFiltered(
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(0.5),
+            Colors.black.withValues(alpha: 0.5),
             BlendMode.srcOut,
           ),
           child: Stack(
@@ -270,14 +272,26 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
   Future<void> _saveImage() async {
     setState(() => _isProcessing = true);
-    // Simulate processing
-    await Future.delayed(const Duration(seconds: 1));
-    if (mounted) {
-      setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Image saved successfully!")),
+    try {
+      final result = await StorageService.saveImage(
+        bytes: widget.imageBytes,
+        extension: OutputImageFormat.png.extension,
+        customFileName: widget.fileName,
       );
-      Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Saved: ${result.fileName}")),
+        );
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Save failed: $error")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 }
@@ -286,7 +300,7 @@ class GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.5)
+      ..color = Colors.white.withValues(alpha: 0.5)
       ..strokeWidth = 1;
 
     // Draw vertical lines

@@ -29,6 +29,17 @@ class CollageNotifier extends Notifier<CollageState> {
   }
 
   Future<void> pickImages(BuildContext context) async {
+    // Guard: enforce 6-image maximum
+    if (state.imageCount >= 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maximum 6 photos allowed in a collage.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
       context: context,
@@ -49,6 +60,22 @@ class CollageNotifier extends Notifier<CollageState> {
     }
 
     if (bytesList.isEmpty) return;
+
+    // Cap total images to 6
+    final maxNew = 6 - state.imageCount;
+    if (bytesList.length > maxNew) {
+      final overflow = bytesList.length - maxNew;
+      bytesList.removeRange(maxNew, bytesList.length);
+      names.removeRange(maxNew, names.length);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Only $maxNew image(s) added (6 max). $overflow photo(s) skipped.'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
 
     final emptySlots = <int>[];
     for (int i = 0; i < state.images.length; i++) {
@@ -251,6 +278,34 @@ class CollageNotifier extends Notifier<CollageState> {
     state = state.copyWith(backgroundColor: color);
   }
 
+  void setCaptionText(String text) {
+    state = state.copyWith(captionText: text);
+  }
+
+  void setCaptionColor(Color color) {
+    state = state.copyWith(captionColor: color);
+  }
+
+  void setCaptionSize(double size) {
+    state = state.copyWith(captionSize: size);
+  }
+
+  void setCaptionAlignment(Alignment alignment) {
+    state = state.copyWith(captionAlignment: alignment);
+  }
+
+  void setCaptionNormalizedOffset(Offset offset) {
+    state = state.copyWith(captionNormalizedOffset: offset);
+  }
+
+  void setCaptionScale(double scale) {
+    state = state.copyWith(captionScale: scale);
+  }
+
+  void setCaptionFontFamily(String fontFamily) {
+    state = state.copyWith(captionFontFamily: fontFamily);
+  }
+
   Future<Uint8List?> exportCollage() async {
     state = state.copyWith(isExporting: true, exportProgress: 0.0);
 
@@ -343,6 +398,40 @@ class CollageNotifier extends Notifier<CollageState> {
         img.compositeImage(canvas, slotImage, dstX: x, dstY: y);
 
         state = state.copyWith(exportProgress: (i + 1) / state.layout.slotCount);
+      }
+
+      // Render Caption Text if present
+      if (state.captionText != null && state.captionText!.trim().isNotEmpty) {
+        final text = state.captionText!.trim();
+        final effectiveFontSize = state.captionSize * state.captionScale;
+        final canvasFontSize = effectiveFontSize * (state.canvasWidth / 360.0);
+        final font = canvasFontSize >= 36
+            ? img.arial48
+            : (canvasFontSize >= 20 ? img.arial24 : img.arial14);
+
+        final charWidth = font == img.arial48 ? 28 : (font == img.arial24 ? 14 : 8);
+        final textWidth = text.length * charWidth;
+        final textHeight = font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
+
+        int textX = (state.captionNormalizedOffset.dx * state.canvasWidth - textWidth / 2).toInt();
+        int textY = (state.captionNormalizedOffset.dy * state.canvasHeight - textHeight / 2).toInt();
+
+        textX = textX.clamp(10, (state.canvasWidth - textWidth - 10).clamp(10, state.canvasWidth));
+        textY = textY.clamp(10, (state.canvasHeight - textHeight - 10).clamp(10, state.canvasHeight));
+
+        final shadowColor = img.ColorRgb8(0, 0, 0);
+        final mainColor = img.ColorRgb8(
+          (state.captionColor.r * 255).round().clamp(0, 255),
+          (state.captionColor.g * 255).round().clamp(0, 255),
+          (state.captionColor.b * 255).round().clamp(0, 255),
+        );
+
+        // Draw shadow offset for contrast
+        img.drawString(canvas, text, font: font, x: textX - 2, y: textY - 2, color: shadowColor);
+        img.drawString(canvas, text, font: font, x: textX + 2, y: textY - 2, color: shadowColor);
+        img.drawString(canvas, text, font: font, x: textX - 2, y: textY + 2, color: shadowColor);
+        img.drawString(canvas, text, font: font, x: textX + 2, y: textY + 2, color: shadowColor);
+        img.drawString(canvas, text, font: font, x: textX, y: textY, color: mainColor);
       }
 
       final encoded = img.encodeJpg(canvas, quality: 95);

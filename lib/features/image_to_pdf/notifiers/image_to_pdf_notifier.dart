@@ -9,7 +9,9 @@ import 'package:pdf/pdf.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/image_to_pdf_state.dart';
 
 final imageToPdfProvider = NotifierProvider<ImageToPdfNotifier, ImageToPdfState>(
@@ -172,6 +174,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     try {
       final pdf = pw.Document();
       final settings = state.pageSettings;
+      final appSettings = ref.read(appSettingsProvider);
 
       for (int i = 0; i < state.images.length; i++) {
         final item = state.images[i];
@@ -194,6 +197,10 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
         }
 
         if (decodedImage == null) continue;
+
+        if (appSettings.enableGlobalWatermark) {
+          decodedImage = WatermarkHelper.applyToImage(decodedImage, appSettings);
+        }
 
         final imageWidth = decodedImage.width;
         final imageHeight = decodedImage.height;

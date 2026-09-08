@@ -186,6 +186,13 @@ class CollageState {
     required this.backgroundColor,
     required this.canvasWidth,
     required this.canvasHeight,
+    this.captionText,
+    this.captionColor = Colors.white,
+    this.captionSize = 18.0,
+    this.captionAlignment = Alignment.bottomCenter,
+    this.captionNormalizedOffset = const Offset(0.5, 0.85),
+    this.captionScale = 1.0,
+    this.captionFontFamily = 'Roboto',
     this.isExporting = false,
     this.exportProgress = 0.0,
   });
@@ -197,6 +204,13 @@ class CollageState {
   final Color backgroundColor;
   final int canvasWidth;
   final int canvasHeight;
+  final String? captionText;
+  final Color captionColor;
+  final double captionSize;
+  final Alignment captionAlignment;
+  final Offset captionNormalizedOffset;
+  final double captionScale;
+  final String captionFontFamily;
   final bool isExporting;
   final double exportProgress;
 
@@ -210,6 +224,14 @@ class CollageState {
     Color? backgroundColor,
     int? canvasWidth,
     int? canvasHeight,
+    String? captionText,
+    bool clearCaptionText = false,
+    Color? captionColor,
+    double? captionSize,
+    Alignment? captionAlignment,
+    Offset? captionNormalizedOffset,
+    double? captionScale,
+    String? captionFontFamily,
     bool? isExporting,
     double? exportProgress,
   }) {
@@ -221,6 +243,13 @@ class CollageState {
       backgroundColor: backgroundColor ?? this.backgroundColor,
       canvasWidth: canvasWidth ?? this.canvasWidth,
       canvasHeight: canvasHeight ?? this.canvasHeight,
+      captionText: clearCaptionText ? null : (captionText ?? this.captionText),
+      captionColor: captionColor ?? this.captionColor,
+      captionSize: captionSize ?? this.captionSize,
+      captionAlignment: captionAlignment ?? this.captionAlignment,
+      captionNormalizedOffset: captionNormalizedOffset ?? this.captionNormalizedOffset,
+      captionScale: captionScale ?? this.captionScale,
+      captionFontFamily: captionFontFamily ?? this.captionFontFamily,
       isExporting: isExporting ?? this.isExporting,
       exportProgress: exportProgress ?? this.exportProgress,
     );

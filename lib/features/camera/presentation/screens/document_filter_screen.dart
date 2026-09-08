@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
+import '../../services/image_filter_service.dart';
 
 class DocumentFilterScreen extends ConsumerStatefulWidget {
   const DocumentFilterScreen({super.key});
@@ -18,12 +19,20 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
   FilterType _selectedFilter = FilterType.none;
   bool _isProcessing = false;
   bool _applyToAll = false;
+  int _previewRequest = 0;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _selectedPageIndex = GoRouterState.of(context).extra as int?;
     _applyToAll = _selectedPageIndex == -1;
+    final batch = ref.read(documentBatchProvider);
+    if (_selectedFilter == FilterType.none && batch.hasPages) {
+      final index = _applyToAll ? 0 : (_selectedPageIndex ?? 0);
+      if (index >= 0 && index < batch.pages.length) {
+        _selectedFilter = batch.pages[index].filterType;
+      }
+    }
   }
 
   @override
@@ -40,7 +49,8 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.filter_hdr_outlined,
-                  size: 64, color: scheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                  size: 64,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.4)),
               const SizedBox(height: 16),
               Text('No pages to filter',
                   style: theme.textTheme.titleMedium
@@ -57,10 +67,17 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
 
     final filterOptions = [
       _FilterOption(FilterType.none, Icons.auto_fix_high, 'Original'),
-      _FilterOption(FilterType.magicColor, Icons.auto_awesome, 'Magic Color'),
-      _FilterOption(FilterType.binarization, Icons.text_fields, 'Binarization'),
-      _FilterOption(
-          FilterType.shadowRemoval, Icons.light_mode, 'Shadow Removal'),
+      _FilterOption(FilterType.lighten, Icons.wb_sunny_outlined, 'Lighten'),
+      _FilterOption(FilterType.enhance, Icons.auto_awesome, 'Enhance'),
+      _FilterOption(FilterType.noShadow, Icons.wb_cloudy_outlined, 'No shadow'),
+      _FilterOption(FilterType.blackWhite, Icons.contrast, 'B&W'),
+      _FilterOption(FilterType.eco, Icons.eco_outlined, 'Eco'),
+      _FilterOption(FilterType.grayscale, Icons.gradient, 'Grayscale'),
+      _FilterOption(FilterType.invert, Icons.invert_colors_outlined, 'Invert'),
+      // Keep the original modes available for existing scan workflows.
+      _FilterOption(FilterType.magicColor, Icons.palette_outlined, 'Magic color'),
+      _FilterOption(FilterType.binarization, Icons.text_fields, 'Binarize'),
+      _FilterOption(FilterType.shadowRemoval, Icons.light_mode, 'Shadow removal'),
     ];
 
     return Scaffold(
@@ -86,10 +103,11 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
             child: Container(
               width: double.infinity,
               color: scheme.surfaceContainerHighest,
-              child: _isProcessing
-                  ? const Center(child: CircularProgressIndicator())
-                  : (currentPage.imageBytes != null
-                      ? Padding(
+              child: currentPage.imageBytes != null
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Padding(
                           padding: const EdgeInsets.all(16),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
@@ -103,8 +121,30 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
                                   const Icon(Icons.broken_image, size: 48),
                             ),
                           ),
-                        )
-                      : const Center(child: Icon(Icons.image, size: 48))),
+                        ),
+                        if (_isProcessing)
+                          const Positioned(
+                            right: 16,
+                            bottom: 16,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(6),
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  : const Center(child: Icon(Icons.image, size: 48)),
             ),
           ),
 
@@ -114,7 +154,8 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
             child: Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Text(
                     'Select Filter',
                     style: theme.textTheme.titleSmall?.copyWith(
@@ -122,21 +163,20 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
                     ),
                   ),
                 ),
-                Expanded(
+                SizedBox(
+                  height: 104,
                   child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: filterOptions.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
                       final option = filterOptions[index];
-                      final isSelected = _selectedFilter == option.type;
                       return _FilterTile(
                         icon: option.icon,
                         title: option.label,
-                        isSelected: isSelected,
-                        onTap: () {
-                          setState(() => _selectedFilter = option.type);
-                        },
+                        isSelected: _selectedFilter == option.type,
+                        onTap: () => _previewFilter(option.type),
                       );
                     },
                   ),
@@ -158,8 +198,7 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.check),
-            label:
-                Text(_isProcessing ? 'Applying...' : 'Apply Filter'),
+            label: Text(_isProcessing ? 'Applying...' : 'Apply Filter'),
           ),
         ),
       ),
@@ -182,6 +221,49 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _previewFilter(FilterType filterType) async {
+    final request = ++_previewRequest;
+    final batch = ref.read(documentBatchProvider);
+    final previewIndex = _applyToAll ? 0 : _selectedPageIndex;
+    if (previewIndex == null ||
+        previewIndex < 0 ||
+        previewIndex >= batch.pages.length) {
+      return;
+    }
+
+    setState(() {
+      _selectedFilter = filterType;
+      _isProcessing = filterType != FilterType.none;
+    });
+
+    try {
+      final notifier = ref.read(documentBatchProvider.notifier);
+      if (filterType == FilterType.none) {
+        await notifier.applyFilterToPage(previewIndex, filterType);
+      } else {
+        final result = await ImageFilterService.applyPreview(
+          batch.pages[previewIndex].imageBytes!,
+          filterType,
+        );
+        if (!mounted || request != _previewRequest || result == null) return;
+        final current = ref.read(documentBatchProvider).pages[previewIndex];
+        notifier.updatePage(
+          previewIndex,
+          current.copyWith(
+            filteredBytes: result.bytes,
+            filterType: filterType,
+            width: result.width,
+            height: result.height,
+          ),
+        );
+      }
+    } finally {
+      if (mounted && request == _previewRequest) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 }
@@ -215,7 +297,8 @@ class _FilterTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        width: 108,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           color: isSelected
@@ -227,24 +310,25 @@ class _FilterTile extends StatelessWidget {
                 : Colors.transparent,
           ),
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
-              size: 24,
+              size: 28,
             ),
-            const SizedBox(width: 16),
+            const SizedBox(height: 7),
             Text(
               title,
+              maxLines: 2,
+              textAlign: TextAlign.center,
               style: TextStyle(
+                fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                 color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
               ),
             ),
-            const Spacer(),
-            if (isSelected)
-              Icon(Icons.check_circle, color: scheme.primary, size: 20),
           ],
         ),
       ),

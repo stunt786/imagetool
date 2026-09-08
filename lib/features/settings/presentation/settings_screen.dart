@@ -7,7 +7,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/settings/app_settings.dart';
-// import '../../../shared/widgets/premium_banner.dart'; // TODO: Re-enable in upcoming version with premium features
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -17,6 +16,7 @@ class SettingsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final topPadding = MediaQuery.of(context).padding.top + 72;
+    final settings = ref.watch(appSettingsProvider);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -44,10 +44,8 @@ class SettingsScreen extends ConsumerWidget {
                     letterSpacing: -0.7,
                   ),
                 ),
-                const SizedBox(height: 16),
-                // TODO: Re-enable PremiumBanner in upcoming version with premium features
-                // const PremiumBanner(),
                 const SizedBox(height: 24),
+                // ── Storage ──────────────────────────────────────────────
                 _buildSection(
                   context,
                   title: 'Storage',
@@ -76,6 +74,58 @@ class SettingsScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // ── Appearance ───────────────────────────────────────────
+                _buildSection(
+                  context,
+                  title: 'Appearance',
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.brightness_6_outlined, size: 20),
+                              const SizedBox(width: 12),
+                              Text('Theme', style: theme.textTheme.bodyLarge),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SegmentedButton<ThemeMode>(
+                            segments: const [
+                              ButtonSegment(
+                                value: ThemeMode.system,
+                                icon: Icon(Icons.brightness_auto_rounded),
+                                label: Text('System'),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.light,
+                                icon: Icon(Icons.wb_sunny_rounded),
+                                label: Text('Light'),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.dark,
+                                icon: Icon(Icons.nightlight_round),
+                                label: Text('Dark'),
+                              ),
+                            ],
+                            selected: {settings.themeMode},
+                            onSelectionChanged: (modes) {
+                              if (modes.isNotEmpty) {
+                                ref
+                                    .read(appSettingsProvider.notifier)
+                                    .setThemeMode(modes.first);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // ── General ──────────────────────────────────────────────
                 _buildSection(
                   context,
                   title: 'General',
@@ -86,10 +136,27 @@ class SettingsScreen extends ConsumerWidget {
                         return SwitchListTile(
                           secondary: const Icon(Icons.touch_app_outlined),
                           title: const Text('One Click Open'),
-                          subtitle: const Text('Skip tool home screens and directly open gallery or file picker'),
+                          subtitle: const Text('Open picker directly on tool launch'),
                           value: oneClick,
                           onChanged: (value) {
                             ref.read(appSettingsProvider.notifier).setOneClickOpen(value);
+                          },
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    StatefulBuilder(
+                      builder: (context, setLocalState) {
+                        final stripExif = ref.watch(appSettingsProvider).stripExif;
+                        return SwitchListTile(
+                          secondary: const Icon(Icons.no_photography_outlined),
+                          title: const Text('Strip EXIF Data'),
+                          subtitle: const Text(
+                            'Remove camera metadata & location when saving images',
+                          ),
+                          value: stripExif,
+                          onChanged: (value) {
+                            ref.read(appSettingsProvider.notifier).setStripExif(value);
                           },
                         );
                       },
@@ -131,6 +198,163 @@ class SettingsScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // ── Watermark ────────────────────────────────────────────
+                _buildSection(
+                  context,
+                  title: 'Watermark',
+                  children: [
+                    SwitchListTile(
+                      secondary: const Icon(Icons.subtitles_outlined),
+                      title: const Text('Global Watermark'),
+                      subtitle: const Text(
+                        'Apply watermark automatically to all saved images & PDFs',
+                      ),
+                      value: settings.enableGlobalWatermark,
+                      onChanged: (value) {
+                        ref
+                            .read(appSettingsProvider.notifier)
+                            .setEnableGlobalWatermark(value);
+                      },
+                    ),
+                    if (settings.enableGlobalWatermark) ...[
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _WatermarkTextField(
+                              initialValue: settings.watermarkText,
+                              onChanged: (val) {
+                                ref
+                                    .read(appSettingsProvider.notifier)
+                                    .setWatermarkText(val);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Color',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                for (final c in const [
+                                  (hex: 0xFFFFFFFF, name: 'White', color: Colors.white),
+                                  (hex: 0xFF000000, name: 'Black', color: Colors.black),
+                                  (hex: 0xFFF44336, name: 'Red', color: Colors.red),
+                                  (hex: 0xFFFFEB3B, name: 'Yellow', color: Colors.yellow),
+                                  (hex: 0xFF2196F3, name: 'Blue', color: Colors.blue),
+                                  (hex: 0xFF4CAF50, name: 'Green', color: Colors.green),
+                                ])
+                                  GestureDetector(
+                                    onTap: () {
+                                      ref
+                                          .read(appSettingsProvider.notifier)
+                                          .setWatermarkColorHex(c.hex);
+                                    },
+                                    child: Tooltip(
+                                      message: c.name,
+                                      child: Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: c.color,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: settings.watermarkColorHex == c.hex
+                                                ? scheme.primary
+                                                : scheme.outlineVariant,
+                                            width: settings.watermarkColorHex == c.hex ? 3 : 1,
+                                          ),
+                                        ),
+                                        child: settings.watermarkColorHex == c.hex
+                                            ? Icon(
+                                                Icons.check,
+                                                size: 20,
+                                                color: c.hex == 0xFFFFFFFF || c.hex == 0xFFFFEB3B
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                              )
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Opacity',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  '${(settings.watermarkOpacity * 100).round()}%',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Slider(
+                              value: settings.watermarkOpacity,
+                              min: 0.1,
+                              max: 1.0,
+                              divisions: 18,
+                              label: '${(settings.watermarkOpacity * 100).round()}%',
+                              onChanged: (val) {
+                                ref
+                                    .read(appSettingsProvider.notifier)
+                                    .setWatermarkOpacity(val);
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Position',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final pos in const [
+                                  (index: 0, label: 'Top-Left'),
+                                  (index: 1, label: 'Top-Right'),
+                                  (index: 2, label: 'Center'),
+                                  (index: 3, label: 'Bottom-Left'),
+                                  (index: 4, label: 'Bottom-Right'),
+                                ])
+                                  ChoiceChip(
+                                    label: Text(pos.label),
+                                    selected: settings.watermarkPositionIndex == pos.index,
+                                    onSelected: (selected) {
+                                      if (selected) {
+                                        ref
+                                            .read(appSettingsProvider.notifier)
+                                            .setWatermarkPositionIndex(pos.index);
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // ── About ────────────────────────────────────────────────
                 _buildSection(
                   context,
                   title: 'About',
@@ -198,7 +422,7 @@ class SettingsScreen extends ConsumerWidget {
       await ref.read(appSettingsProvider.notifier).setSavePath(result);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save location changed to $result')),
+          const SnackBar(content: Text('Save location updated')),
         );
       }
     }
@@ -228,7 +452,7 @@ class SettingsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         title: const Text('Help'),
         content: const Text(
-          'Use Quick Tools for fast actions, the Images tab for visual workflows, and Recent History to reopen your latest work.',
+          'Use the tools grid for quick actions. My Files tab shows your saved work. Tap any history item to preview it again.',
         ),
         actions: [
           TextButton(
@@ -237,6 +461,60 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _WatermarkTextField extends StatefulWidget {
+  const _WatermarkTextField({
+    required this.initialValue,
+    required this.onChanged,
+  });
+
+  final String initialValue;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_WatermarkTextField> createState() => _WatermarkTextFieldState();
+}
+
+class _WatermarkTextFieldState extends State<_WatermarkTextField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WatermarkTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialValue != _controller.text) {
+      _controller.text = widget.initialValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      decoration: InputDecoration(
+        labelText: 'Watermark Text',
+        hintText: '© PixelTools',
+        prefixIcon: const Icon(Icons.title),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        isDense: true,
+      ),
+      onChanged: widget.onChanged,
     );
   }
 }

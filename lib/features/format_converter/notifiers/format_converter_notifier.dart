@@ -3,10 +3,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
+import '../../../core/settings/app_settings.dart';
+import '../../../shared/models/picked_file.dart';
+import '../../../shared/services/watermark_helper.dart';
 
 enum ConvertFormat {
   jpg('JPG', 'jpg', 'image/jpeg'),
   png('PNG', 'png', 'image/png'),
+  webp('WEBP', 'webp', 'image/webp'),
+  pdf('PDF', 'pdf', 'application/pdf'),
   bmp('BMP', 'bmp', 'image/bmp'),
   tiff('TIFF', 'tiff', 'image/tiff');
 
@@ -79,21 +87,29 @@ enum ConvertStatus { pending, loading, converting, success, failed, removed }
 @immutable
 class FormatConverterState {
   const FormatConverterState({
+    this.files = const <PickedFile>[],
     this.images = const <ConvertibleImage>[],
     this.selectedFormat = ConvertFormat.jpg,
     this.quality = 90,
     this.isConverting = false,
     this.progress = 0,
     this.totalConverted = 0,
+    this.currentConvertingIndex = 0,
+    this.totalToConvert = 0,
+    this.convertingStatusText,
     this.errorMessage,
   });
 
+  final List<PickedFile> files;
   final List<ConvertibleImage> images;
   final ConvertFormat selectedFormat;
   final int quality;
   final bool isConverting;
   final double progress;
   final int totalConverted;
+  final int currentConvertingIndex;
+  final int totalToConvert;
+  final String? convertingStatusText;
   final String? errorMessage;
 
   int get totalImages => images.length;
@@ -104,22 +120,30 @@ class FormatConverterState {
   int get totalConvertedSize => images.fold(0, (sum, i) => sum + i.convertedSizeBytes);
 
   FormatConverterState copyWith({
+    List<PickedFile>? files,
     List<ConvertibleImage>? images,
     ConvertFormat? selectedFormat,
     int? quality,
     bool? isConverting,
     double? progress,
     int? totalConverted,
+    int? currentConvertingIndex,
+    int? totalToConvert,
+    String? convertingStatusText,
     String? errorMessage,
     bool clearError = false,
   }) {
     return FormatConverterState(
+      files: files ?? this.files,
       images: images ?? this.images,
       selectedFormat: selectedFormat ?? this.selectedFormat,
       quality: quality ?? this.quality,
       isConverting: isConverting ?? this.isConverting,
       progress: progress ?? this.progress,
       totalConverted: totalConverted ?? this.totalConverted,
+      currentConvertingIndex: currentConvertingIndex ?? this.currentConvertingIndex,
+      totalToConvert: totalToConvert ?? this.totalToConvert,
+      convertingStatusText: convertingStatusText ?? this.convertingStatusText,
       errorMessage: clearError ? null : errorMessage,
     );
   }
@@ -127,11 +151,13 @@ class FormatConverterState {
 
 final formatConverterProvider =
     StateNotifierProvider<FormatConverterNotifier, FormatConverterState>(
-  (ref) => FormatConverterNotifier(),
+  (ref) => FormatConverterNotifier(ref),
 );
 
 class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
-  FormatConverterNotifier() : super(const FormatConverterState());
+  FormatConverterNotifier([this._ref]) : super(const FormatConverterState());
+
+  final Ref? _ref;
 
   void setFormat(ConvertFormat format) {
     state = state.copyWith(selectedFormat: format, clearError: true);
@@ -139,6 +165,25 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
   void setQuality(int quality) {
     state = state.copyWith(quality: quality);
+  }
+
+  void addPickedFiles(List<PickedFile> pickedFiles) {
+    final updatedFiles = [...state.files, ...pickedFiles];
+    state = state.copyWith(files: updatedFiles);
+
+    final imageFiles = pickedFiles
+        .where((f) => f.bytes != null)
+        .map((f) => <String, dynamic>{
+              'name': f.name,
+              'path': f.path ?? '',
+              'sizeBytes': f.sizeBytes,
+              'bytes': f.bytes,
+            })
+        .toList();
+
+    if (imageFiles.isNotEmpty) {
+      addImages(imageFiles);
+    }
   }
 
   Future<void> addImages(List<Map<String, dynamic>> imageFiles) async {
@@ -256,10 +301,15 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       return;
     }
 
+    final total = pendingImages.length;
+
     state = state.copyWith(
       isConverting: true,
       progress: 0,
       totalConverted: 0,
+      currentConvertingIndex: 1,
+      totalToConvert: total,
+      convertingStatusText: 'Converting file 1 of $total...',
       clearError: true,
     );
 
@@ -270,11 +320,20 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       final image = updated[i];
       if (image.status != ConvertStatus.pending || image.bytes == null) continue;
 
+      final currentIndex = converted + 1;
+      final statusMsg = 'Converting file $currentIndex of $total...';
+
       updated[i] = image.copyWith(status: ConvertStatus.converting);
-      state = state.copyWith(images: updated);
+      state = state.copyWith(
+        images: updated,
+        currentConvertingIndex: currentIndex,
+        totalToConvert: total,
+        convertingStatusText: statusMsg,
+        progress: (converted / total) * 100,
+      );
 
       try {
-        final decoded = img.decodeImage(image.bytes!);
+        var decoded = img.decodeImage(image.bytes!);
         if (decoded == null) {
           updated[i] = image.copyWith(
             status: ConvertStatus.failed,
@@ -283,14 +342,19 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
           continue;
         }
 
+        final settings = _ref?.read(appSettingsProvider);
+        if (settings != null && settings.enableGlobalWatermark) {
+          decoded = WatermarkHelper.applyToImage(decoded, settings);
+        }
+
         Uint8List convertedBytes;
 
         if (state.selectedFormat == ConvertFormat.jpg ||
             state.selectedFormat == ConvertFormat.bmp) {
           final flattened = _flattenAlpha(decoded);
-          convertedBytes = _encodeImage(flattened, state.selectedFormat);
+          convertedBytes = await _encodeImageAsync(flattened, image.bytes!, state.selectedFormat);
         } else {
-          convertedBytes = _encodeImage(decoded, state.selectedFormat);
+          convertedBytes = await _encodeImageAsync(decoded, image.bytes!, state.selectedFormat);
         }
 
         updated[i] = image.copyWith(
@@ -308,25 +372,65 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
       state = state.copyWith(
         images: updated,
-        progress: (converted / pendingImages.length) * 100,
+        progress: (converted / total) * 100,
         totalConverted: converted,
+        convertingStatusText: converted == total
+            ? 'Completed'
+            : 'Converting file ${converted + 1} of $total...',
       );
     }
 
     state = state.copyWith(
       isConverting: false,
       progress: 100,
+      convertingStatusText: 'Converted $converted of $total files',
     );
   }
 
-  Uint8List _encodeImage(img.Image image, ConvertFormat format) {
-    return switch (format) {
-      ConvertFormat.jpg =>
-        img.encodeJpg(image, quality: state.quality.clamp(1, 100)),
-      ConvertFormat.png => img.encodePng(image),
-      ConvertFormat.bmp => img.encodeBmp(image),
-      ConvertFormat.tiff => img.encodeTiff(image),
-    };
+  Future<Uint8List> _encodeImageAsync(
+    img.Image image,
+    Uint8List originalBytes,
+    ConvertFormat format, {
+    bool stripExif = true,
+  }) async {
+    if (stripExif) {
+      image.exif.clear();
+    }
+    switch (format) {
+      case ConvertFormat.jpg:
+        return img.encodeJpg(image, quality: state.quality.clamp(1, 100));
+      case ConvertFormat.png:
+        return img.encodePng(image);
+      case ConvertFormat.webp:
+        return img.encodePng(image);
+      case ConvertFormat.pdf:
+        return _convertToPdf(originalBytes, image);
+      case ConvertFormat.bmp:
+        return img.encodeBmp(image);
+      case ConvertFormat.tiff:
+        return img.encodeTiff(image);
+    }
+  }
+
+  Future<Uint8List> _convertToPdf(Uint8List imageBytes, img.Image decoded) async {
+    final pdf = pw.Document();
+    final pdfImage = pw.MemoryImage(imageBytes);
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat(
+          decoded.width.toDouble(),
+          decoded.height.toDouble(),
+        ),
+        margin: pw.EdgeInsets.zero,
+        build: (pw.Context context) {
+          return pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Image(pdfImage, fit: pw.BoxFit.fill),
+          );
+        },
+      ),
+    );
+    return await pdf.save();
   }
 
   img.Image _flattenAlpha(img.Image image) {

@@ -54,32 +54,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
       if (pickedFiles.isEmpty) return;
 
-      final imageFiles = pickedFiles
-          .where((f) => f.bytes != null)
-          .map((f) => <String, dynamic>{
-                'name': f.name,
-                'path': f.path ?? '',
-                'sizeBytes': f.sizeBytes,
-                'bytes': f.bytes,
-              })
-          .toList();
-
-      if (imageFiles.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('No valid image files selected'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
-
       if (mounted) {
-        await ref
-            .read(formatConverterProvider.notifier)
-            .addImages(imageFiles);
+        ref.read(formatConverterProvider.notifier).addPickedFiles(pickedFiles);
         InterstitialTracker.instance.trackAction();
       }
     } finally {
@@ -108,17 +84,26 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       final results = await saveMultipleImages(items);
 
       if (mounted) {
-        for (final result in results) {
+        if (results.length > 1) {
+          ref.read(editHistoryProvider.notifier).addGroup(
+            toolName: 'Format Converter',
+            toolIcon: Icons.swap_horiz_rounded,
+            count: results.length,
+            thumbnailPath: results.first.path,
+            filePath: results.first.path,
+          );
+        } else if (results.length == 1) {
           ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
-              fileName: result.fileName,
+              fileName: results.first.fileName,
               toolUsed: 'Format Converter',
               editedAt: DateTime.now(),
-              toolIcon: Icons.transform_rounded,
-              thumbnailPath: result.path,
+              toolIcon: Icons.swap_horiz_rounded,
+              thumbnailPath: results.first.path,
             ),
           );
         }
+
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Saved ${results.length} file${results.length > 1 ? 's' : ''}'),
@@ -579,10 +564,31 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (state.isConverting) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    state.convertingStatusText ??
+                        'Converting file ${state.currentConvertingIndex} of ${state.totalToConvert}...',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  Text(
+                    '${state.progress.toInt()}%',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
               LinearProgressIndicator(
                 value: state.progress / 100,
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(2),
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
                 backgroundColor: theme.colorScheme.surfaceContainerHighest,
               ),
               const SizedBox(height: 8),

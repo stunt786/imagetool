@@ -1,7 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-enum FilterType { none, magicColor, binarization, shadowRemoval }
+enum FilterType {
+  none,
+  magicColor,
+  binarization,
+  shadowRemoval,
+  lighten,
+  enhance,
+  noShadow,
+  blackWhite,
+  eco,
+  grayscale,
+  invert,
+}
 
 @immutable
 class ScannedPage {

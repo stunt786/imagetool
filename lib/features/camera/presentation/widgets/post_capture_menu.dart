@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,6 +94,25 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
     }
   }
 
+  Future<void> _routeToMagicRemove() async {
+    setState(() => _isLoading = true);
+    try {
+      final file = File(widget.imagePath);
+      final bytes = await file.readAsBytes();
+      if (mounted) {
+        final resultBytes = await context.push<Uint8List?>(
+          '/camera/magic-remove',
+          extra: bytes,
+        );
+        if (resultBytes != null) {
+          await file.writeAsBytes(resultBytes);
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -127,6 +147,14 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
           if (widget.isDocumentMode) ...[
             _ActionTile(
               icon: Icons.auto_fix_high_rounded,
+              title: 'Magic Remove',
+              subtitle: 'Erase unwanted objects & text',
+              color: Colors.orange,
+              onTap: _isLoading ? null : _routeToMagicRemove,
+            ),
+            const SizedBox(height: 12),
+            _ActionTile(
+              icon: Icons.auto_awesome,
               title: 'Apply Filters',
               subtitle: 'Magic Color, Binarization, Shadow Removal',
               color: Colors.purple,
@@ -149,6 +177,14 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
               onTap: _isLoading ? null : _routeToResize,
             ),
           ] else ...[
+            _ActionTile(
+              icon: Icons.auto_fix_high_rounded,
+              title: 'Magic Remove',
+              subtitle: 'Erase unwanted objects & text',
+              color: Colors.orange,
+              onTap: _isLoading ? null : _routeToMagicRemove,
+            ),
+            const SizedBox(height: 12),
             _ActionTile(
               icon: Icons.transform_rounded,
               title: 'Resize & Edit',

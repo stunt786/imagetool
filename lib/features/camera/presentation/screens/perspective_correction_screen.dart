@@ -36,20 +36,12 @@ class _PerspectiveCorrectionScreenState
   void _initCorners() {
     final batch = ref.read(documentBatchProvider);
     if (_pageIndex == null || _pageIndex! >= batch.pages.length) return;
-
-    final page = batch.pages[_pageIndex!];
-    if (!page.isLoaded) return;
-
-    final decoded = _getImageDimensions(page.imageBytes!);
-    if (decoded == null) return;
-    final w = decoded.width.toDouble();
-    final h = decoded.height.toDouble();
-
+    if (_corners.isNotEmpty) return;
     _corners = [
-      Offset(w * 0.05, h * 0.05),
-      Offset(w * 0.95, h * 0.05),
-      Offset(w * 0.95, h * 0.95),
-      Offset(w * 0.05, h * 0.95),
+      const Offset(0.05, 0.05),
+      const Offset(0.95, 0.05),
+      const Offset(0.95, 0.95),
+      const Offset(0.05, 0.95),
     ];
   }
 
@@ -103,45 +95,61 @@ class _PerspectiveCorrectionScreenState
                 ],
               ),
             )
-          : InteractiveViewer(
-              minScale: 1.0,
-              maxScale: 4.0,
-              child: GestureDetector(
-                onPanStart: _onPanStart,
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: (_) => _draggingCornerIndex = null,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: MediaQuery.of(context).size.width,
-                    child: AspectRatio(
-                      aspectRatio: page.width != null && page.width! > 0
-                          ? page.width! / page.height!
-                          : 1,
-                      child: Stack(
-                        children: [
-                          Image.memory(
-                            displayBytes,
-                            fit: BoxFit.contain,
-                            width: double.infinity,
-                            height: double.infinity,
-                          ),
-                          CustomPaint(
-                            painter: DocumentCornersPainter(
-                              corners: _corners,
-                              cornerRadius: 12,
-                              strokeWidth: 3,
-                              showOverlay: false,
-                              cornerColor: Colors.cyanAccent,
-                            ),
-                            size: Size.infinite,
-                          ),
-                        ],
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final image = _getImageDimensions(displayBytes);
+                final imageSize = Size(
+                  (image?.width ?? page.width ?? 1).toDouble(),
+                  (image?.height ?? page.height ?? 1).toDouble(),
+                );
+                final fitted = applyBoxFit(
+                  BoxFit.contain,
+                  imageSize,
+                  constraints.biggest,
+                );
+                final imageRect = Alignment.center.inscribe(
+                  fitted.destination,
+                  Offset.zero & constraints.biggest,
+                );
+                final displayCorners = _corners
+                    .map((corner) => Offset(
+                          imageRect.left + corner.dx * imageRect.width,
+                          imageRect.top + corner.dy * imageRect.height,
+                        ))
+                    .toList();
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (details) =>
+                      _onPanStart(details, imageRect, displayCorners),
+                  onPanUpdate: (details) => _onPanUpdate(details, imageRect),
+                  onPanEnd: (_) => _draggingCornerIndex = null,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Positioned.fromRect(
+                        rect: imageRect,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child:
+                              Image.memory(displayBytes, fit: BoxFit.contain),
+                        ),
                       ),
-                    ),
+                      CustomPaint(
+                        painter: DocumentCornersPainter(
+                          corners: displayCorners,
+                          cornerRadius: 18,
+                          strokeWidth: 3,
+                          showOverlay: true,
+                          cornerColor: Colors.cyanAccent,
+                          overlayColor: Colors.black,
+                        ),
+                        size: Size.infinite,
+                      ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              },
             ),
       bottomNavigationBar: SafeArea(
         child: Padding(
@@ -156,25 +164,41 @@ class _PerspectiveCorrectionScreenState
     );
   }
 
-  void _onPanStart(DragStartDetails details) {
+  void _onPanStart(
+      DragStartDetails details, Rect imageRect, List<Offset> displayCorners) {
     final touchPos = details.localPosition;
-    for (var i = 0; i < _corners.length; i++) {
-      if ((touchPos - _corners[i]).distance < 30) {
+    var closestDistance = 48.0;
+    for (var i = 0; i < displayCorners.length; i++) {
+      final distance = (touchPos - displayCorners[i]).distance;
+      if (distance < closestDistance) {
+        closestDistance = distance;
         _draggingCornerIndex = i;
-        return;
       }
     }
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
+  void _onPanUpdate(DragUpdateDetails details, Rect imageRect) {
     if (_draggingCornerIndex == null) return;
+    final point = details.localPosition;
+    final normalized = Offset(
+      ((point.dx - imageRect.left) / imageRect.width).clamp(0.02, 0.98),
+      ((point.dy - imageRect.top) / imageRect.height).clamp(0.02, 0.98),
+    );
     setState(() {
-      _corners[_draggingCornerIndex!] = details.localPosition;
+      _corners[_draggingCornerIndex!] = normalized;
     });
   }
 
   void _resetCorners() {
-    setState(_initCorners);
+    setState(() {
+      _corners = [
+        const Offset(0.05, 0.05),
+        const Offset(0.95, 0.05),
+        const Offset(0.95, 0.95),
+        const Offset(0.05, 0.95),
+      ];
+      _draggingCornerIndex = null;
+    });
   }
 
   Future<void> _applyCorrection() async {
@@ -184,12 +208,21 @@ class _PerspectiveCorrectionScreenState
     final page = batchState.pages[_pageIndex!];
     if (!page.isLoaded) return;
 
+    final decoded = img.decodeImage(page.imageBytes!);
+    if (decoded == null || _corners.length != 4) return;
+    final sourceCorners = _corners
+        .map((corner) => Offset(
+              corner.dx * decoded.width,
+              corner.dy * decoded.height,
+            ))
+        .toList();
+
     setState(() => _isProcessing = true);
 
     try {
       final result = await PerspectiveCorrectionService.correct(
         bytes: page.imageBytes!,
-        srcPoints: _corners,
+        srcPoints: sourceCorners,
         targetWidth: page.width,
         targetHeight: page.height,
       );
@@ -201,12 +234,12 @@ class _PerspectiveCorrectionScreenState
           filterType: FilterType.none,
           width: result.width,
           height: result.height,
-          correctionCorners: List.from(_corners),
+          correctionCorners: List.from(sourceCorners),
           isCorrectionApplied: true,
           clearFilter: true,
         );
 
-        ref.read(documentBatchProvider.notifier).updatePage(
+        await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
               _pageIndex!,
               correctedPage,
             );

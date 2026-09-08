@@ -25,6 +25,8 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
   Offset _panPixelDelta = Offset.zero;
   bool _isPanning = false;
   static const double _panThreshold = 8.0;
+  double _initialCaptionScale = 1.0;
+  bool _isInteractingCaption = false;
 
   @override
   Widget build(BuildContext context) {
@@ -68,15 +70,16 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                children: [
-                  ...List.generate(state.layout.slotCount, (index) {
-                    return _buildSlot(context, state, index, width, height);
-                  }),
-                  if (_dragStartIndex != null && _dragOffset != null)
-                    _buildDragIndicator(context, state, width, height),
-                ],
-              ),
+                child: Stack(
+                  children: [
+                    ...List.generate(state.layout.slotCount, (index) {
+                      return _buildSlot(context, state, index, width, height);
+                    }),
+                    _buildCaptionOverlay(context, state, width, height),
+                    if (_dragStartIndex != null && _dragOffset != null)
+                      _buildDragIndicator(context, state, width, height),
+                  ],
+                ),
               ),
             ),
           ),
@@ -432,6 +435,139 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       _dragHoverIndex = null;
       _dragOffset = null;
     });
+  }
+
+  Widget _buildCaptionOverlay(
+    BuildContext context,
+    CollageState state,
+    double width,
+    double height,
+  ) {
+    if (state.captionText == null || state.captionText!.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final text = state.captionText!.trim();
+    final offset = state.captionNormalizedOffset;
+    final scale = state.captionScale;
+    final fontFamily = state.captionFontFamily;
+
+    final centerX = offset.dx * width;
+    final centerY = offset.dy * height;
+
+    final textStyle = TextStyle(
+      color: state.captionColor,
+      fontSize: state.captionSize * scale,
+      fontFamily: fontFamily == 'Roboto' ? null : fontFamily,
+      fontWeight: fontFamily == 'Impact' || fontFamily == 'sans-serif'
+          ? FontWeight.w900
+          : FontWeight.bold,
+      shadows: [
+        Shadow(
+          offset: const Offset(1, 1),
+          blurRadius: 4,
+          color: Colors.black.withValues(alpha: 0.8),
+        ),
+        Shadow(
+          offset: const Offset(-1, -1),
+          blurRadius: 4,
+          color: Colors.black.withValues(alpha: 0.8),
+        ),
+      ],
+    );
+
+    return Positioned(
+      left: centerX,
+      top: centerY,
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, -0.5),
+        child: GestureDetector(
+          onScaleStart: (details) {
+            _initialCaptionScale = state.captionScale;
+            setState(() {
+              _isInteractingCaption = true;
+            });
+          },
+          onScaleUpdate: (details) {
+            final deltaDx = details.focalPointDelta.dx / width;
+            final deltaDy = details.focalPointDelta.dy / height;
+            final newDx = (state.captionNormalizedOffset.dx + deltaDx).clamp(0.02, 0.98);
+            final newDy = (state.captionNormalizedOffset.dy + deltaDy).clamp(0.02, 0.98);
+            ref.read(collageProvider.notifier).setCaptionNormalizedOffset(Offset(newDx, newDy));
+
+            if (details.pointerCount > 1 || details.scale != 1.0) {
+              final newScale = (_initialCaptionScale * details.scale).clamp(0.4, 4.0);
+              ref.read(collageProvider.notifier).setCaptionScale(newScale);
+            }
+          },
+          onScaleEnd: (_) {
+            setState(() {
+              _isInteractingCaption = false;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: _isInteractingCaption
+                    ? Colors.blueAccent
+                    : Colors.white.withValues(alpha: 0.3),
+                width: _isInteractingCaption ? 1.5 : 1.0,
+              ),
+              borderRadius: BorderRadius.circular(6),
+              color: _isInteractingCaption
+                  ? Colors.blue.withValues(alpha: 0.1)
+                  : Colors.transparent,
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  style: textStyle,
+                ),
+                if (_isInteractingCaption) ...[
+                  Positioned(
+                    left: -8,
+                    top: -8,
+                    child: _buildHandleDot(),
+                  ),
+                  Positioned(
+                    right: -8,
+                    top: -8,
+                    child: _buildHandleDot(),
+                  ),
+                  Positioned(
+                    left: -8,
+                    bottom: -8,
+                    child: _buildHandleDot(),
+                  ),
+                  Positioned(
+                    right: -8,
+                    bottom: -8,
+                    child: _buildHandleDot(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandleDot() {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: Colors.blueAccent,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.5),
+      ),
+    );
   }
 }
 

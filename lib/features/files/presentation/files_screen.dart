@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import 'file_preview_screen.dart';
+import 'package:share_plus/share_plus.dart';
 
 class FilesScreen extends ConsumerWidget {
   const FilesScreen({super.key});
@@ -243,18 +244,69 @@ class _FileTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: scheme.primary.withValues(alpha: 0.1),
+              // Share button (visible only if filePath is set)
+              if (item.filePath != null) ...[
+                _FileActionButton(
+                  icon: Icons.share_rounded,
+                  color: scheme.secondary,
+                  onTap: () => _shareFile(context, item),
                 ),
-                child: Icon(Icons.open_in_new_rounded, size: 18, color: scheme.primary),
+                const SizedBox(width: 6),
+              ],
+              _FileActionButton(
+                icon: Icons.open_in_new_rounded,
+                color: scheme.primary,
+                onTap: onTap ?? () {},
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _shareFile(BuildContext context, EditHistoryItem item) async {
+    final path = item.filePath;
+    if (path == null) return;
+    try {
+      await Share.shareXFiles(
+        [XFile(path)],
+        subject: item.fileName,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not share: $e')),
+        );
+      }
+    }
+  }
+}
+
+class _FileActionButton extends StatelessWidget {
+  const _FileActionButton({
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withValues(alpha: 0.1),
+        ),
+        child: Icon(icon, size: 18, color: color),
       ),
     );
   }

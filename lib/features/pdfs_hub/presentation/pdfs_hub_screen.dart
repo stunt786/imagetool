@@ -216,12 +216,12 @@ class _PdfToolCardState extends State<_PdfToolCard> {
             color: isDark ? Color(0xFF1E293B) : scheme.surface,
             border: Border.all(
               color: isDark
-                  ? Colors.white.withOpacity(0.08)
+                  ? Colors.white.withValues(alpha: 0.08)
                   : scheme.outlineVariant.withValues(alpha: 0.4),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.4 : 0.05),
+                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.05),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -240,8 +240,8 @@ class _PdfToolCardState extends State<_PdfToolCard> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        data.gradient.first.withOpacity(0.15),
-                        data.gradient.first.withOpacity(0.0),
+                        data.gradient.first.withValues(alpha: 0.15),
+                        data.gradient.first.withValues(alpha: 0.0),
                       ],
                     ),
                   ),

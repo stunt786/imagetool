@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+import '../models/scanned_page.dart';
+
 class ImageFilterResult {
   const ImageFilterResult({
     required this.bytes,
@@ -14,6 +16,26 @@ class ImageFilterResult {
   final Uint8List bytes;
   final int width;
   final int height;
+}
+
+Uint8List? _isolateApplyPreview(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as Uint8List;
+  final filterName = params['filter'] as String;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+
+  const maxPreviewDimension = 900;
+  final longest = math.max(decoded.width, decoded.height);
+  final preview = longest > maxPreviewDimension
+      ? img.copyResize(
+          decoded,
+          width: decoded.width >= decoded.height ? maxPreviewDimension : null,
+          height: decoded.height > decoded.width ? maxPreviewDimension : null,
+        )
+      : decoded;
+  final previewBytes = Uint8List.fromList(img.encodeJpg(preview, quality: 82));
+
+  return _isolateApplyFilter({'bytes': previewBytes, 'filter': filterName});
 }
 
 Uint8List? _isolateApplyMagicColor(Map<String, dynamic> params) {
@@ -117,6 +139,47 @@ Uint8List? _isolateApplyShadowRemoval(Map<String, dynamic> params) {
   return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
 }
 
+Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
+  final bytes = params['bytes'] as Uint8List;
+  final filterName = params['filter'] as String;
+  if (filterName == 'magicColor') return _isolateApplyMagicColor(params);
+  if (filterName == 'binarization' || filterName == 'blackWhite') {
+    return _isolateApplyBinarization(params);
+  }
+  if (filterName == 'shadowRemoval' || filterName == 'noShadow') {
+    return _isolateApplyShadowRemoval(params);
+  }
+
+  final image = img.decodeImage(bytes);
+  if (image == null) return null;
+
+  late img.Image processed;
+  switch (filterName) {
+    case 'lighten':
+      processed = img.adjustColor(image, brightness: 0.18);
+    case 'enhance':
+      processed = img.adjustColor(
+        image,
+        contrast: 1.35,
+        saturation: 1.12,
+        brightness: 0.06,
+      );
+    case 'eco':
+      processed = img.adjustColor(
+        img.grayscale(image),
+        contrast: 1.12,
+        brightness: 0.04,
+      );
+    case 'grayscale':
+      processed = img.grayscale(image);
+    case 'invert':
+      processed = img.invert(image);
+    default:
+      processed = image;
+  }
+  return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
+}
+
 Uint8List? _isolateRotate90(Map<String, dynamic> params) {
   final bytes = params['bytes'] as Uint8List;
   final image = img.decodeImage(bytes);
@@ -134,6 +197,50 @@ Uint8List? _isolateRotate270(Map<String, dynamic> params) {
 }
 
 class ImageFilterService {
+  /// Fast, low-resolution preview used while the user browses enhancements.
+  /// Full-resolution processing remains available through the methods below.
+  static Future<ImageFilterResult?> applyPreview(
+    Uint8List bytes,
+    FilterType filterType,
+  ) async {
+    if (filterType == FilterType.none) return null;
+    final result = await Isolate.run<Uint8List?>(() {
+      return _isolateApplyPreview({
+        'bytes': bytes,
+        'filter': filterType.name,
+      });
+    });
+    if (result == null) return null;
+    final decoded = img.decodeImage(result);
+    if (decoded == null) return null;
+    return ImageFilterResult(
+      bytes: result,
+      width: decoded.width,
+      height: decoded.height,
+    );
+  }
+
+  static Future<ImageFilterResult?> applyFilter(
+    Uint8List bytes,
+    FilterType filterType,
+  ) async {
+    if (filterType == FilterType.none) return null;
+    final result = await Isolate.run<Uint8List?>(() {
+      return _isolateApplyFilter({
+        'bytes': bytes,
+        'filter': filterType.name,
+      });
+    });
+    if (result == null) return null;
+    final decoded = img.decodeImage(result);
+    if (decoded == null) return null;
+    return ImageFilterResult(
+      bytes: result,
+      width: decoded.width,
+      height: decoded.height,
+    );
+  }
+
   static Future<ImageFilterResult?> applyMagicColor(Uint8List bytes) async {
     final result = await Isolate.run<Uint8List?>(() {
       return _isolateApplyMagicColor({'bytes': bytes});

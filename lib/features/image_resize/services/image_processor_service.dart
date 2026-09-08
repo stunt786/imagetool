@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+import '../../../core/settings/app_settings.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/social_presets.dart';
 
 class ImageProcessResult {
@@ -26,6 +29,7 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
   final int height = params['height'] as int;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -44,7 +48,7 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
     );
   }
 
-  final encoded = _encodeImage(processed, format: format, quality: quality);
+  final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -63,6 +67,7 @@ ImageProcessResult? _isolateCrop(Map<String, dynamic> params) {
   final int height = params['height'] as int;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -80,7 +85,7 @@ ImageProcessResult? _isolateCrop(Map<String, dynamic> params) {
     height: safeHeight,
   );
 
-  final encoded = _encodeImage(cropped, format: format, quality: quality);
+  final encoded = _encodeImage(cropped, format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -96,13 +101,14 @@ ImageProcessResult? _isolateRotate(Map<String, dynamic> params) {
   final double angle = params['angle'] as double;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
   final rotated = img.copyRotate(image, angle: angle);
 
-  final encoded = _encodeImage(rotated, format: format, quality: quality);
+  final encoded = _encodeImage(rotated, format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -119,6 +125,7 @@ ImageProcessResult? _isolateFlip(Map<String, dynamic> params) {
   final bool vertical = params['vertical'] as bool;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -131,7 +138,7 @@ ImageProcessResult? _isolateFlip(Map<String, dynamic> params) {
     flipped = img.flipVertical(flipped);
   }
 
-  final encoded = _encodeImage(flipped, format: format, quality: quality);
+  final encoded = _encodeImage(flipped, format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -148,6 +155,7 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
   final int targetHeight = params['targetHeight'] as int;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -193,7 +201,7 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
     );
   }
 
-  final encoded = _encodeImage(processed, format: format, quality: quality);
+  final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -208,6 +216,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final Uint8List bytes = params['bytes'] as Uint8List;
   final int targetBytes = params['targetBytes'] as int;
   final OutputImageFormat format = params['format'] as OutputImageFormat;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
+  final AppSettingsState? settings = params['settings'] as AppSettingsState?;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -224,7 +234,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       height: h,
       interpolation: img.Interpolation.average,
     );
-    final encoded = _encodeImage(processed, format: format, quality: quality);
+    final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
     return ImageProcessResult(
       bytes: Uint8List.fromList(encoded),
       width: processed.width,
@@ -244,17 +254,26 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     }
   }
 
+  void reportProgress(double progress) {
+    sendPort?.send(progress);
+  }
+
   // ––– Step 1: probe at full dimensions, medium quality –––
+  reportProgress(0.05);
   final probe = encodeAt(image.width, image.height, 50);
   consider(probe);
+  reportProgress(0.15);
   if (probe.fileSize <= targetBytes) {
     int low = 1;
     int high = 100;
     ImageProcessResult? best;
+    double searchProgress = 0.15;
     while (low <= high) {
-      final mid = ((low + high) / 2).round();
+      final mid = (low + high) ~/ 2;
       final result = encodeAt(image.width, image.height, mid);
       consider(result);
+      searchProgress += 0.05;
+      reportProgress(searchProgress.clamp(0.15, 0.45));
       if (result.fileSize <= targetBytes) {
         best = result;
         low = mid + 1;
@@ -262,6 +281,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
         high = mid - 1;
       }
     }
+    reportProgress(1.0);
+    sendPort?.send('done');
     return best ?? probe;
   }
 
@@ -275,13 +296,14 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
 
     final result = encodeAt(w, h, quality);
     consider(result);
+    reportProgress(0.45 + (i + 1) * 0.065);
 
     if (result.fileSize <= targetBytes) {
       int qLow = quality;
       int qHigh = 100;
       ImageProcessResult? best;
       while (qLow <= qHigh) {
-        final mid = ((qLow + qHigh) / 2).round();
+        final mid = (qLow + qHigh) ~/ 2;
         final r = encodeAt(w, h, mid);
         consider(r);
         if (r.fileSize <= targetBytes) {
@@ -291,6 +313,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
           qHigh = mid - 1;
         }
       }
+      reportProgress(1.0);
+      sendPort?.send('done');
       return best ?? result;
     }
 
@@ -299,6 +323,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   }
 
   // ––– Step 3: return the best that fits, or a final reasonable attempt –––
+  reportProgress(1.0);
+  sendPort?.send('done');
   if (bestUnderTarget != null) return bestUnderTarget;
 
   return encodeAt(
@@ -326,12 +352,21 @@ List<int> _encodeImage(
   img.Image image, {
   required OutputImageFormat format,
   required int quality,
+  bool stripExif = true,
+  AppSettingsState? settings,
 }) {
+  var processed = image;
+  if (settings != null && settings.enableGlobalWatermark) {
+    processed = WatermarkHelper.applyToImage(processed, settings);
+  }
+  if (stripExif) {
+    processed.exif.clear();
+  }
   final clampedQuality = quality.clamp(1, 100);
   return switch (format) {
-    OutputImageFormat.jpg => img.JpegEncoder(quality: clampedQuality).encode(image),
-    OutputImageFormat.png => img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9)).encode(image),
-    OutputImageFormat.webp => img.JpegEncoder(quality: clampedQuality).encode(image),
+    OutputImageFormat.jpg => img.JpegEncoder(quality: clampedQuality).encode(processed),
+    OutputImageFormat.png => img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9)).encode(processed),
+    OutputImageFormat.webp => img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9)).encode(processed),
   };
 }
 
@@ -342,6 +377,7 @@ class ImageProcessorService {
     required int height,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateResize(<String, dynamic>{
@@ -350,6 +386,7 @@ class ImageProcessorService {
         'height': height,
         'format': format,
         'quality': quality,
+        'settings': settings,
       }),
     );
   }
@@ -362,6 +399,7 @@ class ImageProcessorService {
     required int height,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateCrop(<String, dynamic>{
@@ -372,6 +410,7 @@ class ImageProcessorService {
         'height': height,
         'format': format,
         'quality': quality,
+        'settings': settings,
       }),
     );
   }
@@ -381,6 +420,7 @@ class ImageProcessorService {
     required double angle,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateRotate(<String, dynamic>{
@@ -388,6 +428,7 @@ class ImageProcessorService {
         'angle': angle,
         'format': format,
         'quality': quality,
+        'settings': settings,
       }),
     );
   }
@@ -398,6 +439,7 @@ class ImageProcessorService {
     required bool vertical,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateFlip(<String, dynamic>{
@@ -406,6 +448,7 @@ class ImageProcessorService {
         'vertical': vertical,
         'format': format,
         'quality': quality,
+        'settings': settings,
       }),
     );
   }
@@ -415,14 +458,47 @@ class ImageProcessorService {
     required int targetBytes,
     required OutputImageFormat format,
     void Function(double progress)? onProgress,
+    AppSettingsState? settings,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateCompressToTargetSize(<String, dynamic>{
-        'bytes': bytes,
-        'targetBytes': targetBytes,
-        'format': format,
-      }),
-    );
+    if (onProgress == null) {
+      return Isolate.run<ImageProcessResult?>(
+        () => _isolateCompressToTargetSize(<String, dynamic>{
+          'bytes': bytes,
+          'targetBytes': targetBytes,
+          'format': format,
+          'settings': settings,
+        }),
+      );
+    }
+    final receivePort = ReceivePort();
+    final sendPort = receivePort.sendPort;
+    final progressCompleter = Completer<void>();
+    final progressSub = receivePort.listen((message) {
+      if (message is double) {
+        onProgress(message);
+      } else if (message == 'done') {
+        progressCompleter.complete();
+      }
+    });
+    try {
+      final result = await Isolate.run<ImageProcessResult?>(
+        () => _isolateCompressToTargetSize(<String, dynamic>{
+          'bytes': bytes,
+          'targetBytes': targetBytes,
+          'format': format,
+          'sendPort': sendPort,
+          'settings': settings,
+        }),
+      );
+      return result;
+    } finally {
+      await progressCompleter.future.timeout(
+        const Duration(milliseconds: 50),
+        onTimeout: () {},
+      );
+      await progressSub.cancel();
+      receivePort.close();
+    }
   }
 
   static Future<ImageProcessResult?> resizeToPreset({
@@ -430,6 +506,7 @@ class ImageProcessorService {
     required SocialPreset preset,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateResizeToPreset(<String, dynamic>{
@@ -438,6 +515,7 @@ class ImageProcessorService {
         'targetHeight': preset.height,
         'format': format,
         'quality': quality,
+        'settings': settings,
       }),
     );
   }

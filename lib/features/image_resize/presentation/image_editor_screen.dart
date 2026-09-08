@@ -41,6 +41,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
   bool _flipHorizontal = false;
   bool _flipVertical = false;
   int _quality = 80;
+  OutputImageFormat _outputFormat = OutputImageFormat.jpg;
   int _targetSizeKB = 500;
   _PresetCategory _presetCategory = _PresetCategory.profile;
   SocialPreset? _selectedPreset;
@@ -195,7 +196,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
           y: y,
           width: width,
           height: height,
-          format: OutputImageFormat.jpg,
+          format: _outputFormat,
           quality: 95,
         );
 
@@ -225,7 +226,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     await ref.read(imageEditorProvider.notifier).resize(
           width: width,
           height: height,
-          format: OutputImageFormat.jpg,
+          format: _outputFormat,
           quality: _quality,
         );
 
@@ -247,7 +248,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
     await ref.read(imageEditorProvider.notifier).rotate(
           angle: _rotationAngle,
-          format: OutputImageFormat.jpg,
+          format: _outputFormat,
           quality: _quality,
         );
 
@@ -264,7 +265,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     await ref.read(imageEditorProvider.notifier).flip(
           horizontal: _flipHorizontal,
           vertical: _flipVertical,
-          format: OutputImageFormat.jpg,
+          format: _outputFormat,
           quality: _quality,
         );
 
@@ -282,7 +283,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
     await ref.read(imageEditorProvider.notifier).resizeToPreset(
           preset: preset,
-          format: OutputImageFormat.jpg,
+          format: _outputFormat,
           quality: _quality,
         );
 
@@ -305,7 +306,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     try {
       final result = await StorageService.saveImage(
         bytes: state.currentBytes!,
-        extension: OutputImageFormat.jpg.extension,
+        extension: _outputFormat.extension,
       );
 
       if (!mounted) return;

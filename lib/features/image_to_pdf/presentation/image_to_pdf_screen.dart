@@ -273,63 +273,45 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
   void _showPDFSavedDialog(BuildContext context, String pdfPath) {
     final fileName = pdfPath.split('/').last;
-    final directory = pdfPath.split('/').sublist(0, pdfPath.split('/').length - 1).join('/');
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('PDF Saved'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary,
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Theme.of(context).colorScheme.primaryContainer,
+              ),
+              child: Icon(
+                Icons.check_rounded,
+                size: 36,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
-              'PDF saved successfully!',
-              textAlign: TextAlign.center,
+              'PDF Saved',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: 8),
+            Text(
+              fileName,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'File:',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Text(
-                    fileName,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Location:',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  Text(
-                    directory,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -343,7 +325,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               Navigator.of(context).pop();
               await Share.shareXFiles([XFile(pdfPath)]);
             },
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share, size: 18),
             label: const Text('Share'),
           ),
         ],

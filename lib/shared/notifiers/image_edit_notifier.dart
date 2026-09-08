@@ -1,12 +1,36 @@
 import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 
 import '../../features/image_resize/models/social_presets.dart';
 import '../../features/image_resize/services/image_processor_service.dart';
+
+enum WatermarkPosition {
+  bottomRight('Bottom-Right'),
+  center('Center'),
+  topLeft('Top-Left'),
+  bottomLeft('Bottom-Left'),
+  topRight('Top-Right');
+
+  const WatermarkPosition(this.label);
+  final String label;
+}
+
+enum WatermarkTextSize {
+  small('Small', 0.03),
+  medium('Medium', 0.05),
+  large('Large', 0.08),
+  extraLarge('Extra Large', 0.12);
+
+  const WatermarkTextSize(this.label, this.scaleFactor);
+  final String label;
+  final double scaleFactor;
+}
 
 img.Image? _decodeNormalizedImage(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
@@ -238,7 +262,7 @@ ResizeResult? _isolateResizeToPreset(Map<String, dynamic> params) {
     );
   } else {
     final scaledWidth = targetWidth;
-    final scaledHeight = (scaledWidth / sourceAspect).round();
+    final scaledHeight = (scaledWidth * image.height / image.width).round();
     resized = img.copyResize(
       image,
       width: scaledWidth,
@@ -280,8 +304,8 @@ List<int> _encodeImage(
     OutputImageFormat.png => img.PngEncoder(
       level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
     ).encode(image),
-    OutputImageFormat.webp => img.JpegEncoder(
-      quality: clampedQuality,
+    OutputImageFormat.webp => img.PngEncoder(
+      level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
     ).encode(image),
   };
 }
@@ -549,6 +573,159 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
 
   void clear() {
     state = const ImageEditState();
+  }
+
+  Future<void> restoreImageBytes(Uint8List bytes) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final dimensions = await Isolate.run<Map<String, int>?>(
+        () => _isolateDecodeDimensions(bytes),
+      );
+
+      if (dimensions == null) {
+        state = state.copyWith(
+          isLoading: false,
+          errorMessage: 'Failed to decode image bytes.',
+        );
+        return;
+      }
+
+      state = state.copyWith(
+        currentBytes: bytes,
+        width: dimensions['width']!,
+        height: dimensions['height']!,
+        fileSize: bytes.length,
+        isLoading: false,
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(isLoading: false, errorMessage: error.toString());
+    }
+  }
+
+  Future<ResizeResult?> generateWatermark({
+    required String text,
+    required Color color,
+    required WatermarkTextSize textSize,
+    required double opacity,
+    required WatermarkPosition position,
+    OutputImageFormat format = OutputImageFormat.jpg,
+    int quality = 95,
+  }) async {
+    final sourceBytes = state.currentBytes;
+    if (sourceBytes == null || text.trim().isEmpty) return null;
+
+    try {
+      ui.Codec codec;
+      try {
+        codec = await ui.instantiateImageCodec(sourceBytes);
+      } catch (_) {
+        final decoded = img.decodeImage(sourceBytes);
+        if (decoded == null) return null;
+        final pngBytes = Uint8List.fromList(img.encodePng(decoded));
+        codec = await ui.instantiateImageCodec(pngBytes);
+      }
+
+      final frame = await codec.getNextFrame();
+      final uiImage = frame.image;
+      final imgWidth = uiImage.width;
+      final imgHeight = uiImage.height;
+
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+
+      canvas.drawImage(uiImage, ui.Offset.zero, Paint());
+
+      final minDim = math.min(imgWidth, imgHeight);
+      final calculatedFontSize = math.max(12.0, minDim * textSize.scaleFactor);
+
+      final finalColor = color.withValues(alpha: opacity.clamp(0.1, 1.0));
+
+      final textStyle = TextStyle(
+        color: finalColor,
+        fontSize: calculatedFontSize,
+        fontWeight: FontWeight.bold,
+        shadows: [
+          Shadow(
+            blurRadius: 4.0,
+            color: Colors.black.withValues(
+              alpha: (opacity * 0.6).clamp(0.0, 1.0),
+            ),
+            offset: const Offset(1.5, 1.5),
+          ),
+        ],
+      );
+
+      final textSpan = TextSpan(text: text, style: textStyle);
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+
+      final textWidth = textPainter.width;
+      final textHeight = textPainter.height;
+
+      final margin = math.max(12.0, minDim * 0.03);
+
+      double dx;
+      double dy;
+
+      switch (position) {
+        case WatermarkPosition.topLeft:
+          dx = margin;
+          dy = margin;
+          break;
+        case WatermarkPosition.topRight:
+          dx = imgWidth - textWidth - margin;
+          dy = margin;
+          break;
+        case WatermarkPosition.bottomLeft:
+          dx = margin;
+          dy = imgHeight - textHeight - margin;
+          break;
+        case WatermarkPosition.bottomRight:
+          dx = imgWidth - textWidth - margin;
+          dy = imgHeight - textHeight - margin;
+          break;
+        case WatermarkPosition.center:
+          dx = (imgWidth - textWidth) / 2;
+          dy = (imgHeight - textHeight) / 2;
+          break;
+      }
+
+      dx = dx.clamp(0.0, math.max(0.0, imgWidth - textWidth));
+      dy = dy.clamp(0.0, math.max(0.0, imgHeight - textHeight));
+
+      textPainter.paint(canvas, ui.Offset(dx, dy));
+
+      final picture = recorder.endRecording();
+      final imgRendered = await picture.toImage(imgWidth, imgHeight);
+      final byteData = await imgRendered.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+
+      if (byteData == null) return null;
+      var resultBytes = byteData.buffer.asUint8List();
+
+      if (format != OutputImageFormat.png || quality < 100) {
+        final decoded = img.decodeImage(resultBytes);
+        if (decoded != null) {
+          final encoded = _encodeImage(decoded, format: format, quality: quality);
+          resultBytes = Uint8List.fromList(encoded);
+        }
+      }
+
+      return ResizeResult(
+        bytes: resultBytes,
+        width: imgWidth,
+        height: imgHeight,
+        fileSize: resultBytes.length,
+      );
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+      return null;
+    }
   }
 
   void resetToOriginal() {

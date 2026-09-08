@@ -86,17 +86,9 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Create Your Collage',
+              'Collage Builder',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Select 1 to 6 photos from your gallery to get started',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
               textAlign: TextAlign.center,
             ),
@@ -107,19 +99,10 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
                 InterstitialTracker.instance.trackAction();
               },
               icon: const Icon(Icons.add_photo_alternate),
-              label: const Text('Select Photos'),
+              label: const Text('Select Photos (up to 6)'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Layout will be automatically selected based on photo count',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
-                  ),
-              textAlign: TextAlign.center,
             ),
           ],
         ),

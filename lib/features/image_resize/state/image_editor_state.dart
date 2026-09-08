@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 
 import '../models/social_presets.dart';
 import '../services/image_processor_service.dart';
@@ -446,13 +447,13 @@ class ImageEditorNotifier extends AsyncNotifier<ImageEditorState> {
     }
   }
 
-  void resetToOriginal() {
+  Future<void> resetToOriginal() async {
     final currentState = state.value;
     final originalBytes = currentState?.originalBytes;
     if (originalBytes == null) return;
 
-    final image = ImageProcessorService.decodeImageInfo(originalBytes);
-    image.then((info) {
+    try {
+      final info = await ImageProcessorService.decodeImageInfo(originalBytes);
       if (info != null) {
         state = AsyncValue.data(
           currentState!.copyWith(
@@ -465,7 +466,20 @@ class ImageEditorNotifier extends AsyncNotifier<ImageEditorState> {
           ),
         );
       }
-    });
+    } catch (_) {
+      final image = img.decodeImage(originalBytes);
+      if (image == null) return;
+      state = AsyncValue.data(
+        currentState!.copyWith(
+          currentBytes: originalBytes,
+          width: image.width,
+          height: image.height,
+          fileSize: originalBytes.length,
+          clearError: true,
+          clearWarning: true,
+        ),
+      );
+    }
   }
 
   void clear() {

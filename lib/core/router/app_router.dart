@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,12 +7,14 @@ import 'package:go_router/go_router.dart';
 import '../../features/camera/presentation/camera_screen.dart';
 import '../../features/camera/presentation/screens/document_review_screen.dart';
 import '../../features/camera/presentation/screens/document_filter_screen.dart';
+import '../../features/camera/presentation/screens/magic_remove_screen.dart';
 import '../../features/camera/presentation/screens/perspective_correction_screen.dart';
 import '../../features/collage_builder/presentation/collage_builder_screen.dart';
 import '../../features/format_converter/presentation/format_converter_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/image_resize/presentation/image_resize_screen.dart';
 import '../../features/image_to_pdf/presentation/image_to_pdf_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
 import '../../features/files/presentation/files_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
@@ -19,14 +23,31 @@ import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 // import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
+import '../settings/app_settings.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final rootNavigatorKey = GlobalKey<NavigatorState>();
+  final settings = ref.watch(appSettingsProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/tools',
+    initialLocation: settings.hasCompletedOnboarding ? '/tools' : '/onboarding',
+    redirect: (context, state) {
+      if (settings.isLoading) return null;
+      final onboardingDone = settings.hasCompletedOnboarding;
+      final isOnboardingRoute = state.matchedLocation == '/onboarding';
+      if (!onboardingDone && !isOnboardingRoute) {
+        return '/onboarding';
+      }
+      return null;
+    },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/onboarding',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: OnboardingScreen()),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return AppShell(navigationShell: navigationShell);
@@ -60,6 +81,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'crop',
                     pageBuilder: (context, state) =>
                         _MaterialPage(child: PerspectiveCorrectionScreen()),
+                  ),
+                  GoRoute(
+                    path: 'magic-remove',
+                    pageBuilder: (context, state) => _MaterialPage(
+                      child: MagicRemoveScreen(
+                        imageBytes: (state.extra as Uint8List?) ?? Uint8List(0),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -141,6 +170,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // Backwards-compatible deep links from the earlier scaffold.
       GoRoute(path: '/', redirect: (context, state) => '/tools'),
+      GoRoute(path: '/home', redirect: (context, state) => '/tools'),
       GoRoute(
         path: '/image-resizer',
         redirect: (context, state) => '/images/resizer',
