@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/image_to_pdf_state.dart';
 
-class PdfSettingsPanel extends StatelessWidget {
+class PdfSettingsPanel extends StatefulWidget {
   const PdfSettingsPanel({
     super.key,
     required this.settings,
@@ -13,9 +13,60 @@ class PdfSettingsPanel extends StatelessWidget {
   final ValueChanged<PdfPageSettings> onSettingsChanged;
 
   @override
+  State<PdfSettingsPanel> createState() => _PdfSettingsPanelState();
+}
+
+class _PdfSettingsPanelState extends State<PdfSettingsPanel> {
+  late final Map<String, TextEditingController> _controllers = {
+    'Top': TextEditingController(
+        text: widget.settings.marginTop.toStringAsFixed(2)),
+    'Bottom': TextEditingController(
+        text: widget.settings.marginBottom.toStringAsFixed(2)),
+    'Left': TextEditingController(
+        text: widget.settings.marginLeft.toStringAsFixed(2)),
+    'Right': TextEditingController(
+        text: widget.settings.marginRight.toStringAsFixed(2)),
+  };
+  late final Map<String, FocusNode> _focusNodes = {
+    'Top': FocusNode(),
+    'Bottom': FocusNode(),
+    'Left': FocusNode(),
+    'Right': FocusNode(),
+  };
+
+  @override
+  void didUpdateWidget(covariant PdfSettingsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final values = <String, double>{
+      'Top': widget.settings.marginTop,
+      'Bottom': widget.settings.marginBottom,
+      'Left': widget.settings.marginLeft,
+      'Right': widget.settings.marginRight,
+    };
+    for (final entry in values.entries) {
+      final controller = _controllers[entry.key]!;
+      if (!_focusNodes[entry.key]!.hasFocus &&
+          controller.text != entry.value.toStringAsFixed(2)) {
+        controller.text = entry.value.toStringAsFixed(2);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    for (final focusNode in _focusNodes.values) {
+      focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLowest,
@@ -37,7 +88,7 @@ class PdfSettingsPanel extends StatelessWidget {
             context,
             label: 'Page Size',
             child: _buildDropdown<PdfPageSize>(
-              value: settings.pageSize,
+              value: widget.settings.pageSize,
               items: const [
                 (PdfPageSize.a4, 'A4'),
                 (PdfPageSize.a3, 'A3'),
@@ -47,7 +98,8 @@ class PdfSettingsPanel extends StatelessWidget {
               ],
               onChanged: (value) {
                 if (value != null) {
-                  onSettingsChanged(settings.copyWith(pageSize: value));
+                  widget.onSettingsChanged(
+                      widget.settings.copyWith(pageSize: value));
                 }
               },
             ),
@@ -57,7 +109,7 @@ class PdfSettingsPanel extends StatelessWidget {
             context,
             label: 'Orientation',
             child: _buildDropdown<PdfOrientation>(
-              value: settings.orientation,
+              value: widget.settings.orientation,
               items: const [
                 (PdfOrientation.portrait, 'Portrait'),
                 (PdfOrientation.landscape, 'Landscape'),
@@ -65,7 +117,8 @@ class PdfSettingsPanel extends StatelessWidget {
               ],
               onChanged: (value) {
                 if (value != null) {
-                  onSettingsChanged(settings.copyWith(orientation: value));
+                  widget.onSettingsChanged(
+                      widget.settings.copyWith(orientation: value));
                 }
               },
             ),
@@ -75,7 +128,7 @@ class PdfSettingsPanel extends StatelessWidget {
             context,
             label: 'Fit Mode',
             child: _buildDropdown<ImageFitMode>(
-              value: settings.fitMode,
+              value: widget.settings.fitMode,
               items: const [
                 (ImageFitMode.fit, 'Fit'),
                 (ImageFitMode.fill, 'Fill'),
@@ -84,7 +137,8 @@ class PdfSettingsPanel extends StatelessWidget {
               ],
               onChanged: (value) {
                 if (value != null) {
-                  onSettingsChanged(settings.copyWith(fitMode: value));
+                  widget.onSettingsChanged(
+                      widget.settings.copyWith(fitMode: value));
                 }
               },
             ),
@@ -94,14 +148,15 @@ class PdfSettingsPanel extends StatelessWidget {
             context,
             label: 'Quality',
             child: _buildDropdown<PdfQuality>(
-              value: settings.quality,
+              value: widget.settings.quality,
               items: const [
                 (PdfQuality.optimized, 'Optimized'),
                 (PdfQuality.highQuality, 'High Quality'),
               ],
               onChanged: (value) {
                 if (value != null) {
-                  onSettingsChanged(settings.copyWith(quality: value));
+                  widget.onSettingsChanged(
+                      widget.settings.copyWith(quality: value));
                 }
               },
             ),
@@ -116,17 +171,41 @@ class PdfSettingsPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _buildMarginField(context, 'Top', settings.marginTop, (v) => onSettingsChanged(settings.copyWith(marginTop: v)))),
+              Expanded(
+                  child: _buildMarginField(
+                      context,
+                      'Top',
+                      widget.settings.marginTop,
+                      (v) => widget.onSettingsChanged(
+                          widget.settings.copyWith(marginTop: v)))),
               const SizedBox(width: 8),
-              Expanded(child: _buildMarginField(context, 'Bottom', settings.marginBottom, (v) => onSettingsChanged(settings.copyWith(marginBottom: v)))),
+              Expanded(
+                  child: _buildMarginField(
+                      context,
+                      'Bottom',
+                      widget.settings.marginBottom,
+                      (v) => widget.onSettingsChanged(
+                          widget.settings.copyWith(marginBottom: v)))),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _buildMarginField(context, 'Left', settings.marginLeft, (v) => onSettingsChanged(settings.copyWith(marginLeft: v)))),
+              Expanded(
+                  child: _buildMarginField(
+                      context,
+                      'Left',
+                      widget.settings.marginLeft,
+                      (v) => widget.onSettingsChanged(
+                          widget.settings.copyWith(marginLeft: v)))),
               const SizedBox(width: 8),
-              Expanded(child: _buildMarginField(context, 'Right', settings.marginRight, (v) => onSettingsChanged(settings.copyWith(marginRight: v)))),
+              Expanded(
+                  child: _buildMarginField(
+                      context,
+                      'Right',
+                      widget.settings.marginRight,
+                      (v) => widget.onSettingsChanged(
+                          widget.settings.copyWith(marginRight: v)))),
             ],
           ),
         ],
@@ -134,9 +213,10 @@ class PdfSettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingRow(BuildContext context, {required String label, required Widget child}) {
+  Widget _buildSettingRow(BuildContext context,
+      {required String label, required Widget child}) {
     final theme = Theme.of(context);
-    
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -151,7 +231,8 @@ class PdfSettingsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildMarginField(BuildContext context, String label, double value, ValueChanged<double> onChanged) {
+  Widget _buildMarginField(BuildContext context, String label, double value,
+      ValueChanged<double> onChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -162,12 +243,14 @@ class PdfSettingsPanel extends StatelessWidget {
           decoration: InputDecoration(
             isDense: true,
             suffixText: 'in',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          controller: TextEditingController(text: value.toStringAsFixed(2)),
+          controller: _controllers[label]!,
+          focusNode: _focusNodes[label],
           onChanged: (v) {
             final parsed = double.tryParse(v);
             if (parsed != null && parsed >= 0 && parsed <= 10) {

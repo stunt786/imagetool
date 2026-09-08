@@ -1,32 +1,26 @@
 MAke following changes to the app
-Improve UI/Design of all the modules and remove description text for different elements with minimilist texts. 
-Image resize: Onclick load image without confirm
-Add batch resize feature
-Fix crop handlebar with smooth and smooth navigation.
-Fix Rotate-> flip horizontal and Flip Vertical with live preview
-Fix image resize output not maintaining image aspect ratio & sizes
+1.Image Resize: Add option to replace original or save as New option while saving images
+2.Image crop-> while image crop make it full screen preview for easier crop.
+3.Fix resize Output image, output images are saved like widen with larger width and lower heights that seem like stratched images, make images properly maintain ratio while resizing and saving.
+4.Image Resize-> Add bordered color for current selected option for (smart, Dimensions, percent, presets, Best Fit). Also fix scroll screen properly render within screen headers and footers section and shouldnot go beyond app screen
 
-In Collage Builder:
-Don't allow image select more than 6 
-Fix buttons properly fit within screen for any device sizes, mobile or tablets with landscape and portrait orientation
-Also fix share button and make functional
+5.Collage Builder: text drag and reposition is not smooth make it easily dragabble, resizable and also add rotation feature for text, and allow multiple text to add. Remove test Position Presets from menu and make them manually positionable by gragging text
+
+6. Image to PDF: PDF Settings-> on change margins, the text gets lost from the input field every time something is changed or deleted, the field is not focused while entry of margins. Also fix bottom overflow by 132 pixels when clicked on margins innput fields.
+image to PDF load images taking time
+
+7.PDF Compress: Improve PDF compress technology and make professional level compression methods that works best of the market.
+Currently size are getting larger than original after compression find any bugs in it
+
+8.Split PDF: Split Mode change is taking too long time, improve code for fastest switch and easier load and preview of it. 
+
+9. Convert PDF: Add option to select number of pages to convert 
 
 
-My Files
-Save all the operations in My Files section with all files saved with preview and save to gallary/device options further
-Make folder style for multiple images or pdf operation done via single time like batch image resize, image to pdf, etc
-In Home display last 10 history items with preview not just icons or names so that we can click them and preview again
+10.My Files & Recent History
+My files & Recent History should show real files images instead of just thumbnails.
+Also fix  Right Overflow for My Files page.
 
-image to PDF
-Make margins editable in settings for PDF
-Properly show Saved Message without location
-Improve image->pdf conversion to look professional output pdf and not like pasted images on paper.
+11.Settings: Watermark should display app icon logo+Text by default and location to Bottom-Right. Watermark should be applied to all Modules (resize, collage,convert,image->pdf,compress, merge,split, extract)outputs images and PDFs
 
-Scan
-Add feature smart remove like fingers while scanning or shadows
-Make filters functional 
-
-Settings
-Fix and update Storage and save location work with all the modules in the application. Apply similir saving functionality across the application
-
-Note: Overaall make professional application with advanced features as you are software engineer over 20 years of experience
+12.Camera: Camera Scan should improve filters, magic ereser and save in My Files if not saved or exported to PDF at the meantime

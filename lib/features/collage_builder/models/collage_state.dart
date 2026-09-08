@@ -4,6 +4,52 @@ import 'package:flutter/material.dart';
 enum ImageFitMode { cover, contain, fill }
 
 @immutable
+class CollageTextLayer {
+  const CollageTextLayer({
+    required this.id,
+    this.text = '',
+    this.color = Colors.white,
+    this.fontSize = 18.0,
+    this.fontFamily = 'Roboto',
+    this.normalizedOffset = const Offset(0.5, 0.85),
+    this.scale = 1.0,
+    this.rotation = 0.0,
+  });
+
+  final String id;
+  final String text;
+  final Color color;
+  final double fontSize;
+  final String fontFamily;
+  final Offset normalizedOffset;
+  final double scale;
+  final double rotation;
+
+  bool get isEmpty => text.trim().isEmpty;
+
+  CollageTextLayer copyWith({
+    String? text,
+    Color? color,
+    double? fontSize,
+    String? fontFamily,
+    Offset? normalizedOffset,
+    double? scale,
+    double? rotation,
+  }) {
+    return CollageTextLayer(
+      id: id,
+      text: text ?? this.text,
+      color: color ?? this.color,
+      fontSize: fontSize ?? this.fontSize,
+      fontFamily: fontFamily ?? this.fontFamily,
+      normalizedOffset: normalizedOffset ?? this.normalizedOffset,
+      scale: scale ?? this.scale,
+      rotation: rotation ?? this.rotation,
+    );
+  }
+}
+
+@immutable
 class CollageImageSlot {
   const CollageImageSlot({
     required this.index,
@@ -186,6 +232,7 @@ class CollageState {
     required this.backgroundColor,
     required this.canvasWidth,
     required this.canvasHeight,
+    this.textLayers = const [],
     this.captionText,
     this.captionColor = Colors.white,
     this.captionSize = 18.0,
@@ -204,6 +251,7 @@ class CollageState {
   final Color backgroundColor;
   final int canvasWidth;
   final int canvasHeight;
+  final List<CollageTextLayer> textLayers;
   final String? captionText;
   final Color captionColor;
   final double captionSize;
@@ -224,6 +272,7 @@ class CollageState {
     Color? backgroundColor,
     int? canvasWidth,
     int? canvasHeight,
+    List<CollageTextLayer>? textLayers,
     String? captionText,
     bool clearCaptionText = false,
     Color? captionColor,
@@ -243,6 +292,7 @@ class CollageState {
       backgroundColor: backgroundColor ?? this.backgroundColor,
       canvasWidth: canvasWidth ?? this.canvasWidth,
       canvasHeight: canvasHeight ?? this.canvasHeight,
+      textLayers: textLayers ?? this.textLayers,
       captionText: clearCaptionText ? null : (captionText ?? this.captionText),
       captionColor: captionColor ?? this.captionColor,
       captionSize: captionSize ?? this.captionSize,

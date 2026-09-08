@@ -15,8 +15,8 @@ class AppSettingsState {
     this.themeMode = ThemeMode.system,
     this.stripExif = true,
     this.hasCompletedOnboarding = false,
-    this.enableGlobalWatermark = false,
-    this.watermarkText = '© PixelTools',
+    this.enableGlobalWatermark = true,
+    this.watermarkText = '◈ PixelTools',
     this.watermarkColorHex = 0xFFFFFFFF,
     this.watermarkOpacity = 0.7,
     this.watermarkPositionIndex = 4,
@@ -140,7 +140,7 @@ class AppSettingsState {
 
   static Future<bool> loadEnableGlobalWatermark() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_enableGlobalWatermarkKey) ?? false;
+    return prefs.getBool(_enableGlobalWatermarkKey) ?? true;
   }
 
   static Future<void> persistEnableGlobalWatermark(bool value) async {
@@ -150,7 +150,7 @@ class AppSettingsState {
 
   static Future<String> loadWatermarkText() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_watermarkTextKey) ?? '© PixelTools';
+    return prefs.getString(_watermarkTextKey) ?? '◈ PixelTools';
   }
 
   static Future<void> persistWatermarkText(String value) async {
@@ -205,7 +205,8 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     final oneClick = await AppSettingsState.loadOneClick();
     final themeMode = await AppSettingsState.loadThemeMode();
     final stripExif = await AppSettingsState.loadStripExif();
-    final completedOnboarding = await AppSettingsState.loadCompletedOnboarding();
+    final completedOnboarding =
+        await AppSettingsState.loadCompletedOnboarding();
     final enableGlobalWatermark =
         await AppSettingsState.loadEnableGlobalWatermark();
     final watermarkText = await AppSettingsState.loadWatermarkText();

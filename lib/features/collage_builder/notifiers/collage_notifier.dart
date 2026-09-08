@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/collage_state.dart';
 
 final collageProvider = NotifierProvider<CollageNotifier, CollageState>(
@@ -307,6 +309,71 @@ class CollageNotifier extends Notifier<CollageState> {
     state = state.copyWith(captionFontFamily: fontFamily);
   }
 
+  void addTextLayer() {
+    final id = 'layer_${DateTime.now().millisecondsSinceEpoch}';
+    final layers = List<CollageTextLayer>.from(state.textLayers);
+    layers.add(CollageTextLayer(id: id));
+    state = state.copyWith(textLayers: layers);
+  }
+
+  void removeTextLayer(String id) {
+    final layers = state.textLayers.where((l) => l.id != id).toList();
+    state = state.copyWith(textLayers: layers);
+  }
+
+  void updateTextLayer(String id, {String? text, Color? color, double? fontSize, String? fontFamily}) {
+    final layers = <CollageTextLayer>[];
+    for (final layer in state.textLayers) {
+      if (layer.id == id) {
+        layers.add(layer.copyWith(
+          text: text,
+          color: color,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+        ));
+      } else {
+        layers.add(layer);
+      }
+    }
+    state = state.copyWith(textLayers: layers);
+  }
+
+  void setTextLayerOffset(String id, Offset offset) {
+    final layers = <CollageTextLayer>[];
+    for (final layer in state.textLayers) {
+      if (layer.id == id) {
+        layers.add(layer.copyWith(normalizedOffset: offset));
+      } else {
+        layers.add(layer);
+      }
+    }
+    state = state.copyWith(textLayers: layers);
+  }
+
+  void setTextLayerScale(String id, double scale) {
+    final layers = <CollageTextLayer>[];
+    for (final layer in state.textLayers) {
+      if (layer.id == id) {
+        layers.add(layer.copyWith(scale: scale));
+      } else {
+        layers.add(layer);
+      }
+    }
+    state = state.copyWith(textLayers: layers);
+  }
+
+  void setTextLayerRotation(String id, double rotation) {
+    final layers = <CollageTextLayer>[];
+    for (final layer in state.textLayers) {
+      if (layer.id == id) {
+        layers.add(layer.copyWith(rotation: rotation));
+      } else {
+        layers.add(layer);
+      }
+    }
+    state = state.copyWith(textLayers: layers);
+  }
+
   Future<Uint8List?> exportCollage() async {
     state = state.copyWith(isExporting: true, exportProgress: 0.0);
 
@@ -401,16 +468,15 @@ class CollageNotifier extends Notifier<CollageState> {
         state = state.copyWith(exportProgress: (i + 1) / state.layout.slotCount);
       }
 
-      // Render Caption Text if present
-      if (state.captionText != null && state.captionText!.trim().isNotEmpty) {
-        final text = state.captionText!.trim();
-        final effectiveFontSize = state.captionSize * state.captionScale;
+      for (final layer in state.textLayers) {
+        if (layer.isEmpty) continue;
+
+        final text = layer.text.trim();
+        final effectiveFontSize = layer.fontSize * layer.scale;
         final canvasFontSize = effectiveFontSize * (state.canvasWidth / 360.0);
-        final fontFamily = state.captionFontFamily == 'Roboto'
-            ? null
-            : state.captionFontFamily;
+        final fontFamily = layer.fontFamily == 'Roboto' ? null : layer.fontFamily;
         final fontWeight =
-            state.captionFontFamily == 'Impact' || state.captionFontFamily == 'sans-serif'
+            layer.fontFamily == 'Impact' || layer.fontFamily == 'sans-serif'
                 ? FontWeight.w900
                 : FontWeight.bold;
 
@@ -418,7 +484,6 @@ class CollageNotifier extends Notifier<CollageState> {
         final uiFontWeight = fontWeight;
         final uiFontFamily = fontFamily;
 
-        // Build paragraph to measure text dimensions
         final measureBuilder = ui.ParagraphBuilder(
           ui.ParagraphStyle(
             fontSize: canvasFontSize,
@@ -440,20 +505,19 @@ class CollageNotifier extends Notifier<CollageState> {
         final textWidth = measureParagraph.width;
         final textHeight = measureParagraph.height;
 
-        double textX = state.captionNormalizedOffset.dx * state.canvasWidth - textWidth / 2;
-        double textY = state.captionNormalizedOffset.dy * state.canvasHeight - textHeight / 2;
+        double textX = layer.normalizedOffset.dx * state.canvasWidth - textWidth / 2;
+        double textY = layer.normalizedOffset.dy * state.canvasHeight - textHeight / 2;
 
         textX = textX.clamp(10.0, (state.canvasWidth - textWidth - 10).clamp(10.0, state.canvasWidth.toDouble()));
         textY = textY.clamp(10.0, (state.canvasHeight - textHeight - 10).clamp(10.0, state.canvasHeight.toDouble()));
 
         final mainColor = ui.Color.fromARGB(
           255,
-          (state.captionColor.r * 255).round().clamp(0, 255),
-          (state.captionColor.g * 255).round().clamp(0, 255),
-          (state.captionColor.b * 255).round().clamp(0, 255),
+          (layer.color.r * 255).round().clamp(0, 255),
+          (layer.color.g * 255).round().clamp(0, 255),
+          (layer.color.b * 255).round().clamp(0, 255),
         );
 
-        // Render text with shadows using dart:ui
         final shadowOffsets = [
           const Offset(1, 1),
           const Offset(-1, -1),
@@ -464,7 +528,13 @@ class CollageNotifier extends Notifier<CollageState> {
         final pictureRecorder = ui.PictureRecorder();
         final drawCanvas = Canvas(pictureRecorder);
 
-        // Draw shadow copies
+        if (layer.rotation != 0.0) {
+          final center = Offset(state.canvasWidth / 2, state.canvasHeight / 2);
+          drawCanvas.translate(center.dx, center.dy);
+          drawCanvas.rotate(layer.rotation);
+          drawCanvas.translate(-center.dx, -center.dy);
+        }
+
         for (final offset in shadowOffsets) {
           final shadowBuilder = ui.ParagraphBuilder(
             ui.ParagraphStyle(
@@ -486,7 +556,6 @@ class CollageNotifier extends Notifier<CollageState> {
           drawCanvas.drawParagraph(shadowParagraph, Offset(textX + offset.dx * 2, textY + offset.dy * 2));
         }
 
-        // Draw main text
         final mainBuilder = ui.ParagraphBuilder(
           ui.ParagraphStyle(
             fontSize: canvasFontSize,
@@ -509,7 +578,6 @@ class CollageNotifier extends Notifier<CollageState> {
         final picture = pictureRecorder.endRecording();
         final textImage = await picture.toImage(state.canvasWidth, state.canvasHeight);
 
-        // Convert dart:ui Image to byte buffer
         final byteData = await textImage.toByteData(format: ui.ImageByteFormat.png);
         if (byteData != null) {
           final textBytes = byteData.buffer.asUint8List();
@@ -522,7 +590,8 @@ class CollageNotifier extends Notifier<CollageState> {
         textImage.dispose();
       }
 
-      final encoded = img.encodeJpg(canvas, quality: 95);
+      final watermarked = WatermarkHelper.applyToImage(canvas, ref.read(appSettingsProvider));
+      final encoded = img.encodeJpg(watermarked, quality: 95);
       state = state.copyWith(isExporting: false, exportProgress: 1.0);
       return Uint8List.fromList(encoded);
     } catch (e) {

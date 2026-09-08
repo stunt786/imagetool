@@ -24,9 +24,10 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
   Offset _panPixelStart = Offset.zero;
   Offset _panPixelDelta = Offset.zero;
   bool _isPanning = false;
-  static const double _panThreshold = 8.0;
-  double _initialCaptionScale = 1.0;
-  bool _isInteractingCaption = false;
+  static const double _panThreshold = 4.0;
+  String? _activeTextLayerId;
+  double _initialTextRotation = 0.0;
+  double _initialTextScale = 1.0;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +76,9 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
                     ...List.generate(state.layout.slotCount, (index) {
                       return _buildSlot(context, state, index, width, height);
                     }),
-                    _buildCaptionOverlay(context, state, width, height),
+                    ...state.textLayers.where((l) => !l.isEmpty).map(
+                      (layer) => _buildTextLayerOverlay(context, state, layer, width, height),
+                    ),
                     if (_dragStartIndex != null && _dragOffset != null)
                       _buildDragIndicator(context, state, width, height),
                   ],
@@ -437,27 +440,24 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     });
   }
 
-  Widget _buildCaptionOverlay(
+  Widget _buildTextLayerOverlay(
     BuildContext context,
-    CollageState state,
+    CollageState _,
+    CollageTextLayer layer,
     double width,
     double height,
   ) {
-    if (state.captionText == null || state.captionText!.trim().isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final text = state.captionText!.trim();
-    final offset = state.captionNormalizedOffset;
-    final scale = state.captionScale;
-    final fontFamily = state.captionFontFamily;
+    final text = layer.text.trim();
+    final offset = layer.normalizedOffset;
+    final scale = layer.scale;
+    final fontFamily = layer.fontFamily;
 
     final centerX = offset.dx * width;
     final centerY = offset.dy * height;
 
     final textStyle = TextStyle(
-      color: state.captionColor,
-      fontSize: state.captionSize * scale,
+      color: layer.color,
+      fontSize: layer.fontSize * scale,
       fontFamily: fontFamily == 'Roboto' ? null : fontFamily,
       fontWeight: fontFamily == 'Impact' || fontFamily == 'sans-serif'
           ? FontWeight.w900
@@ -476,81 +476,94 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       ],
     );
 
+    final isActive = _activeTextLayerId == layer.id;
+
     return Positioned(
       left: centerX,
       top: centerY,
       child: FractionalTranslation(
         translation: const Offset(-0.5, -0.5),
-        child: GestureDetector(
-          onScaleStart: (details) {
-            _initialCaptionScale = state.captionScale;
-            setState(() {
-              _isInteractingCaption = true;
-            });
-          },
-          onScaleUpdate: (details) {
-            final deltaDx = details.focalPointDelta.dx / width;
-            final deltaDy = details.focalPointDelta.dy / height;
-            final newDx = (state.captionNormalizedOffset.dx + deltaDx).clamp(0.02, 0.98);
-            final newDy = (state.captionNormalizedOffset.dy + deltaDy).clamp(0.02, 0.98);
-            ref.read(collageProvider.notifier).setCaptionNormalizedOffset(Offset(newDx, newDy));
+        child: Transform.rotate(
+          angle: layer.rotation,
+          child: GestureDetector(
+            onScaleStart: (details) {
+              _initialTextRotation = layer.rotation;
+              _initialTextScale = layer.scale;
+              setState(() {
+                _activeTextLayerId = layer.id;
+              });
+            },
+            onScaleUpdate: (details) {
+              final deltaDx = details.focalPointDelta.dx / width;
+              final deltaDy = details.focalPointDelta.dy / height;
+              final newDx = (layer.normalizedOffset.dx + deltaDx).clamp(0.02, 0.98);
+              final newDy = (layer.normalizedOffset.dy + deltaDy).clamp(0.02, 0.98);
+              ref.read(collageProvider.notifier).setTextLayerOffset(layer.id, Offset(newDx, newDy));
 
-            if (details.pointerCount > 1 || details.scale != 1.0) {
-              final newScale = (_initialCaptionScale * details.scale).clamp(0.4, 4.0);
-              ref.read(collageProvider.notifier).setCaptionScale(newScale);
-            }
-          },
-          onScaleEnd: (_) {
-            setState(() {
-              _isInteractingCaption = false;
-            });
-          },
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: _isInteractingCaption
-                    ? Colors.blueAccent
-                    : Colors.white.withValues(alpha: 0.3),
-                width: _isInteractingCaption ? 1.5 : 1.0,
-              ),
-              borderRadius: BorderRadius.circular(6),
-              color: _isInteractingCaption
-                  ? Colors.blue.withValues(alpha: 0.1)
-                  : Colors.transparent,
-            ),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Text(
-                  text,
-                  textAlign: TextAlign.center,
-                  style: textStyle,
+              if (details.pointerCount > 1) {
+                final newScale = (_initialTextScale * details.scale).clamp(0.4, 4.0);
+                ref.read(collageProvider.notifier).setTextLayerScale(layer.id, newScale);
+
+                final rotationDelta = details.rotation;
+                final newRotation = _initialTextRotation + rotationDelta;
+                ref.read(collageProvider.notifier).setTextLayerRotation(layer.id, newRotation);
+              } else if (details.scale != 1.0) {
+                final newScale = (_initialTextScale * details.scale).clamp(0.4, 4.0);
+                ref.read(collageProvider.notifier).setTextLayerScale(layer.id, newScale);
+              }
+            },
+            onScaleEnd: (_) {
+              setState(() {
+                _activeTextLayerId = null;
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isActive
+                      ? Colors.blueAccent
+                      : Colors.white.withValues(alpha: 0.3),
+                  width: isActive ? 1.5 : 1.0,
                 ),
-                if (_isInteractingCaption) ...[
-                  Positioned(
-                    left: -8,
-                    top: -8,
-                    child: _buildHandleDot(),
+                borderRadius: BorderRadius.circular(6),
+                color: isActive
+                    ? Colors.blue.withValues(alpha: 0.1)
+                    : Colors.transparent,
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    style: textStyle,
                   ),
-                  Positioned(
-                    right: -8,
-                    top: -8,
-                    child: _buildHandleDot(),
-                  ),
-                  Positioned(
-                    left: -8,
-                    bottom: -8,
-                    child: _buildHandleDot(),
-                  ),
-                  Positioned(
-                    right: -8,
-                    bottom: -8,
-                    child: _buildHandleDot(),
-                  ),
+                  if (isActive) ...[
+                    Positioned(
+                      left: -8,
+                      top: -8,
+                      child: _buildHandleDot(),
+                    ),
+                    Positioned(
+                      right: -8,
+                      top: -8,
+                      child: _buildHandleDot(),
+                    ),
+                    Positioned(
+                      left: -8,
+                      bottom: -8,
+                      child: _buildHandleDot(),
+                    ),
+                    Positioned(
+                      right: -8,
+                      bottom: -8,
+                      child: _buildHandleDot(),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

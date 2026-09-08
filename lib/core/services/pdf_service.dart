@@ -95,11 +95,17 @@ class PdfService {
     final bytes = await destDoc.save();
     destDoc.dispose();
 
-    final file = File(outputPath);
-    await file.writeAsBytes(bytes, flush: true);
+    final Uint8List outputBytes;
+    if (bytes.length < inputBytes.length) {
+      outputBytes = Uint8List.fromList(bytes);
+    } else {
+      outputBytes = inputBytes;
+    }
 
-    final fileSize = await file.length();
-    if (!await file.exists() || fileSize == 0) {
+    final file = File(outputPath);
+    await file.writeAsBytes(outputBytes, flush: true);
+
+    if (!await file.exists() || (await file.length()) == 0) {
       throw Exception('Compressed PDF file was not created or is empty');
     }
 
@@ -457,23 +463,30 @@ class PdfService {
         Uint8List.fromList(List<int>.from(params['inputBytes']));
     final quality = params['quality'] as double;
 
-    final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
-    final pageCount = srcDoc.pages.count;
-
     final compressionLevel = _mapCompressionLevel(quality);
+    final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
+    srcDoc.compressionLevel = compressionLevel;
+
+    final pageCount = srcDoc.pages.count;
     final destDoc = syncfusion.PdfDocument();
     destDoc.compressionLevel = compressionLevel;
 
     for (int i = 0; i < pageCount; i++) {
       final template = srcDoc.pages[i].createTemplate();
-      destDoc.pages.add().graphics.drawPdfTemplate(template, ui.Offset.zero);
+      final section = destDoc.sections!.add();
+      section.pageSettings.size = srcDoc.pages[i].size;
+      section.pageSettings.margins.all = 0;
+      section.pages.add().graphics.drawPdfTemplate(template, ui.Offset.zero);
     }
 
     srcDoc.dispose();
     final bytes = await destDoc.save();
     destDoc.dispose();
 
-    return Uint8List.fromList(bytes);
+    if (bytes.length < inputBytes.length) {
+      return Uint8List.fromList(bytes);
+    }
+    return inputBytes;
   }
 
   /// Merge worker for background isolate execution.

@@ -205,14 +205,19 @@ class _FileTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         _ToolBadge(tool: item.toolUsed),
                         const SizedBox(width: 8),
-                        Text(
-                          item.timeAgo,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            item.timeAgo,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         if (item.compressionLevel != null) ...[
@@ -321,20 +326,50 @@ class _ThumbnailPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final thumb = item.thumbnailPath;
+    final filePath = item.filePath;
 
-    if (thumb != null && thumb.isNotEmpty && isImage) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.file(
-          File(thumb),
-          width: 100,
-          height: 80,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildFallback(),
-        ),
-      );
+    if (isImage) {
+      final imageSource = (thumb != null && thumb.isNotEmpty)
+          ? thumb
+          : (filePath != null && filePath.isNotEmpty) ? filePath : null;
+
+      if (imageSource != null) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.file(
+            File(imageSource),
+            width: 100,
+            height: 80,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _buildFallback(),
+          ),
+        );
+      }
     }
+
+    if (!isImage) {
+      return _buildPdfThumbnail();
+    }
+
     return _buildFallback();
+  }
+
+  Widget _buildPdfThumbnail() {
+    return Container(
+      width: 100,
+      height: 80,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF5B4DFF), Color(0xFF0F9D9A)],
+        ),
+      ),
+      child: const Center(
+        child: Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 32),
+      ),
+    );
   }
 
   Widget _buildFallback() {

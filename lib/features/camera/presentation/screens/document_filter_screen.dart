@@ -74,7 +74,11 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
       _FilterOption(FilterType.eco, Icons.eco_outlined, 'Eco'),
       _FilterOption(FilterType.grayscale, Icons.gradient, 'Grayscale'),
       _FilterOption(FilterType.invert, Icons.invert_colors_outlined, 'Invert'),
-      // Keep the original modes available for existing scan workflows.
+      _FilterOption(FilterType.sepia, Icons.filter_vintage_outlined, 'Sepia'),
+      _FilterOption(FilterType.warm, Icons.wb_sunny, 'Warm'),
+      _FilterOption(FilterType.cool, Icons.ac_unit, 'Cool'),
+      _FilterOption(FilterType.dramatic, Icons.theater_comedy, 'Dramatic'),
+      _FilterOption(FilterType.bwHighContrast, Icons.contrast_outlined, 'B&W High'),
       _FilterOption(FilterType.magicColor, Icons.palette_outlined, 'Magic color'),
       _FilterOption(FilterType.binarization, Icons.text_fields, 'Binarize'),
       _FilterOption(FilterType.shadowRemoval, Icons.light_mode, 'Shadow removal'),

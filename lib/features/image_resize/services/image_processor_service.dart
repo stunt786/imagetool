@@ -40,10 +40,23 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
     final safeWidth = width.clamp(1, 12000);
     final safeHeight = height.clamp(1, 12000);
 
+    final sourceAspect = image.width / image.height;
+    final targetAspect = safeWidth / safeHeight;
+
+    int newWidth;
+    int newHeight;
+    if (sourceAspect > targetAspect) {
+      newWidth = safeWidth;
+      newHeight = (safeWidth / sourceAspect).round().clamp(1, 12000);
+    } else {
+      newHeight = safeHeight;
+      newWidth = (safeHeight * sourceAspect).round().clamp(1, 12000);
+    }
+
     processed = img.copyResize(
       image,
-      width: safeWidth,
-      height: safeHeight,
+      width: newWidth,
+      height: newHeight,
       interpolation: img.Interpolation.average,
     );
   }

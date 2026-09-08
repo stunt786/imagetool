@@ -7,10 +7,13 @@ import 'package:pdfx/pdfx.dart' as pdfx;
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_convert_state.dart';
 
-final pdfConvertProvider = NotifierProvider<PdfConvertNotifier, PdfConvertState>(
+final pdfConvertProvider =
+    NotifierProvider<PdfConvertNotifier, PdfConvertState>(
   PdfConvertNotifier.new,
 );
 
@@ -33,7 +36,8 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
 
     final file = picked.first;
     if (file.path == null && file.bytes == null) {
-      state = state.copyWith(errorMessage: 'Could not access the selected file');
+      state =
+          state.copyWith(errorMessage: 'Could not access the selected file');
       return;
     }
 
@@ -72,6 +76,20 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
     state = state.copyWith(dpi: dpi);
   }
 
+  void setPagesToConvert(int? pages) {
+    state = pages == null
+        ? state.copyWith(clearPagesToConvert: true)
+        : state.copyWith(pagesToConvert: pages);
+  }
+
+  void setPageRange(int? start, int? end) {
+    if (start == null || end == null) {
+      state = state.copyWith(clearPageRange: true);
+    } else {
+      state = state.copyWith(pageRangeStart: start, pageRangeEnd: end);
+    }
+  }
+
   /// Converts the selected PDF to the chosen format.
   /// Results stay in the sandbox until [exportFiles] is called.
   Future<List<String>?> convert() async {
@@ -98,12 +116,18 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           final pdfDoc = await pdfx.PdfDocument.openFile(
             state.selectedFilePath!,
           );
-          final pageCount = pdfDoc.pagesCount;
+          final startPage = state.usePageRange
+              ? state.pageRangeStart!.clamp(1, pdfDoc.pagesCount)
+              : 1;
+          final endPage = state.usePageRange
+              ? state.pageRangeEnd!.clamp(startPage, pdfDoc.pagesCount)
+              : pdfDoc.pagesCount;
+          final pageCount = endPage - startPage + 1;
           final scale = state.dpi.value / 72.0;
           final renderedPages = <Uint8List>[];
           state = state.copyWith(progress: 0.1);
 
-          for (int i = 1; i <= pageCount; i++) {
+          for (int i = startPage; i <= endPage; i++) {
             final page = await pdfDoc.getPage(i);
             final pageImage = await page.render(
               width: page.width * scale,
@@ -114,16 +138,25 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
               renderedPages.add(pageImage.bytes);
             }
             await page.close();
-            state = state.copyWith(progress: 0.1 + (i / pageCount) * 0.4);
+            state = state.copyWith(
+                progress: 0.1 + ((i - startPage + 1) / pageCount) * 0.4);
           }
           await pdfDoc.close();
 
           state = state.copyWith(progress: 0.6);
 
+          final appSettings = ref.read(appSettingsProvider);
+          final watermarkApplied = <Uint8List>[];
+          for (final pageBytes in renderedPages) {
+            watermarkApplied.add(
+              WatermarkHelper.applyGlobalWatermarkIfNeeded(pageBytes, appSettings),
+            );
+          }
+
           final encodedResults = await compute(
             PdfService.isolateEncodeImagesWorker,
             {
-              'renderedPages': renderedPages,
+              'renderedPages': watermarkApplied,
               'format': state.outputFormat.extension,
             },
           );
@@ -133,7 +166,8 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           outputPaths = [];
           for (int i = 0; i < encodedResults.length; i++) {
             final ext = state.outputFormat.extension;
-            final fileName = '${baseName}_page_${i + 1}.$ext';
+            final fileName =
+                '${baseName}_page_${startPage + i}.$ext';
             final sandboxPath = await _manager.writeToSandbox(
               encodedResults[i],
               fileName,
@@ -153,7 +187,9 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
             );
             final sandboxPath = await _manager.copyToSandbox(srcPath);
             // Remove the file written to saveDir; sandbox is now the source
-            try { await File(srcPath).delete(); } catch (_) {}
+            try {
+              await File(srcPath).delete();
+            } catch (_) {}
             outputPaths = [sandboxPath];
           }
           break;
@@ -168,7 +204,9 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
               },
             );
             final sandboxPath = await _manager.copyToSandbox(srcPath);
-            try { await File(srcPath).delete(); } catch (_) {}
+            try {
+              await File(srcPath).delete();
+            } catch (_) {}
             outputPaths = [sandboxPath];
           }
           break;

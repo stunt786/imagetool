@@ -31,6 +31,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
     with SingleTickerProviderStateMixin {
   late Uint8List _currentBytes;
   late Uint8List _originalBytes;
+  static const int _maxHistory = 5;
   final List<Uint8List> _history = [];
 
   final List<Stroke> _strokes = [];
@@ -124,6 +125,9 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
       if (result != null && mounted) {
         setState(() {
           _history.add(_currentBytes);
+          if (_history.length > _maxHistory) {
+            _history.removeAt(0);
+          }
           _currentBytes = result;
           _strokes.clear();
           _decodeDimensions();

@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../../core/settings/app_settings.dart';
+import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/document_batch.dart';
 import '../models/scanned_page.dart';
@@ -208,6 +210,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
             height: result.height,
           ),
         );
+        _saveToEditHistory(filterType: filterType);
       }
     } catch (e) {
       // Filter failed, keep original
@@ -228,6 +231,60 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
       id: '',
       pages: [],
     );
+  }
+
+  void _saveToEditHistory({FilterType? filterType}) {
+    if (state.pages.isEmpty) return;
+    final firstPage = state.pages.first;
+    final filePath = firstPage.path.isNotEmpty ? firstPage.path : null;
+
+    final toolName = filterType != null
+        ? 'Scan (${_filterDisplayName(filterType)})'
+        : 'Document Scan';
+
+    ref.read(editHistoryProvider.notifier).addGroup(
+      toolName: toolName,
+      toolIcon: Icons.document_scanner_outlined,
+      count: state.pages.length,
+      filePath: filePath,
+    );
+  }
+
+  String _filterDisplayName(FilterType type) {
+    switch (type) {
+      case FilterType.magicColor:
+        return 'Magic Color';
+      case FilterType.binarization:
+        return 'Binarize';
+      case FilterType.shadowRemoval:
+        return 'No Shadow';
+      case FilterType.lighten:
+        return 'Lighten';
+      case FilterType.enhance:
+        return 'Enhance';
+      case FilterType.noShadow:
+        return 'No Shadow';
+      case FilterType.blackWhite:
+        return 'B&W';
+      case FilterType.eco:
+        return 'Eco';
+      case FilterType.grayscale:
+        return 'Grayscale';
+      case FilterType.invert:
+        return 'Invert';
+      case FilterType.sepia:
+        return 'Sepia';
+      case FilterType.warm:
+        return 'Warm';
+      case FilterType.cool:
+        return 'Cool';
+      case FilterType.dramatic:
+        return 'Dramatic';
+      case FilterType.bwHighContrast:
+        return 'B&W High Contrast';
+      case FilterType.none:
+        return 'Original';
+    }
   }
 
   /// Silently applies shadow removal filter to the given page index.

@@ -34,12 +34,10 @@ class WatermarkHelper {
     return Uint8List.fromList(img.encodeJpg(watermarked, quality: 95));
   }
 
-  /// Draws watermark text directly onto an [img.Image] instance based on [settings].
   static img.Image applyToImage(img.Image image, AppSettingsState settings) {
     if (!settings.enableGlobalWatermark) return image;
 
-    final text =
-        settings.watermarkText.isEmpty ? '© PixelTools' : settings.watermarkText;
+    final text = settings.watermarkText.isEmpty ? 'PixelTools' : settings.watermarkText;
     final colorHex = settings.watermarkColorHex;
     final opacity = settings.watermarkOpacity.clamp(0.1, 1.0);
     final posIndex = settings.watermarkPositionIndex;
@@ -49,55 +47,105 @@ class WatermarkHelper {
     final b = colorHex & 0xFF;
     final a = (opacity * 255).round().clamp(0, 255);
 
-    // Pick font based on image dimensions
     final font = (image.width > 1600 || image.height > 1600)
         ? img.arial48
-        : ((image.width > 800 || image.height > 800) ? img.arial24 : img.arial14);
+        : ((image.width > 800 || image.height > 800)
+            ? img.arial24
+            : img.arial14);
 
     final charWidth = font == img.arial48 ? 28 : (font == img.arial24 ? 14 : 8);
     final charHeight = font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
 
-    final textWidth = text.length * charWidth;
-    final textHeight = charHeight;
+    final diamondSize = charHeight;
+    final spacing = (charWidth * 0.4).round();
+    final totalWidth = diamondSize + spacing + text.length * charWidth;
 
     const margin = 20;
     int x;
     int y;
 
     switch (posIndex) {
-      case 0: // Top-Left
+      case 0:
         x = margin;
         y = margin;
         break;
-      case 1: // Top-Right
-        x = image.width - textWidth - margin;
+      case 1:
+        x = image.width - totalWidth - margin;
         y = margin;
         break;
-      case 2: // Center
-        x = (image.width - textWidth) ~/ 2;
-        y = (image.height - textHeight) ~/ 2;
+      case 2:
+        x = (image.width - totalWidth) ~/ 2;
+        y = (image.height - charHeight) ~/ 2;
         break;
-      case 3: // Bottom-Left
+      case 3:
         x = margin;
-        y = image.height - textHeight - margin;
+        y = image.height - charHeight - margin;
         break;
-      case 4: // Bottom-Right
+      case 4:
       default:
-        x = image.width - textWidth - margin;
-        y = image.height - textHeight - margin;
+        x = image.width - totalWidth - margin;
+        y = image.height - charHeight - margin;
         break;
     }
 
-    x = x.clamp(0, (image.width - textWidth).clamp(0, image.width));
-    y = y.clamp(0, (image.height - textHeight).clamp(0, image.height));
+    x = x.clamp(0, (image.width - totalWidth).clamp(0, image.width));
+    y = y.clamp(0, (image.height - charHeight).clamp(0, image.height));
+
+    final bgColor = img.ColorRgba8(0, 0, 0, (a * 0.35).round().clamp(0, 255));
+    final bgPadX = (charWidth * 0.6).round();
+    final bgPadY = (charHeight * 0.3).round();
+    final bgLeft = (x - bgPadX).clamp(0, image.width);
+    final bgTop = (y - bgPadY).clamp(0, image.height);
+    final bgRight = (x + totalWidth + bgPadX).clamp(0, image.width);
+    final bgBottom = (y + charHeight + bgPadY).clamp(0, image.height);
+
+    for (int py = bgTop; py < bgBottom; py++) {
+      for (int px = bgLeft; px < bgRight; px++) {
+        final existing = image.getPixel(px, py);
+        final srcA = existing.a / 255.0;
+        final dstA = bgColor.a / 255.0;
+        final outA = dstA + srcA * (1.0 - dstA);
+        if (outA > 0) {
+          final outR = ((bgColor.r * dstA + existing.r * srcA * (1.0 - dstA)) / outA).round();
+          final outG = ((bgColor.g * dstA + existing.g * srcA * (1.0 - dstA)) / outA).round();
+          final outB = ((bgColor.b * dstA + existing.b * srcA * (1.0 - dstA)) / outA).round();
+          image.setPixel(px, py, img.ColorRgba8(outR, outG, outB, (outA * 255).round()));
+        }
+      }
+    }
+
+    final dcx = x + diamondSize ~/ 2;
+    final dcy = y + charHeight ~/ 2;
+    final dr = diamondSize ~/ 2 - 1;
+    final textColor = img.ColorRgba8(r, g, b, a);
+
+    for (int dy = -dr; dy <= dr; dy++) {
+      final rowWidth = dr - dy.abs();
+      for (int dx = -rowWidth; dx <= rowWidth; dx++) {
+        final px = dcx + dx;
+        final py = dcy + dy;
+        if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+          final existing = image.getPixel(px, py);
+          final srcA = textColor.a / 255.0;
+          final dstA = existing.a / 255.0;
+          final outA = srcA + dstA * (1.0 - srcA);
+          if (outA > 0) {
+            final outR = ((textColor.r * srcA + existing.r * dstA * (1.0 - srcA)) / outA).round();
+            final outG = ((textColor.g * srcA + existing.g * dstA * (1.0 - srcA)) / outA).round();
+            final outB = ((textColor.b * srcA + existing.b * dstA * (1.0 - srcA)) / outA).round();
+            image.setPixel(px, py, img.ColorRgba8(outR, outG, outB, (outA * 255).round()));
+          }
+        }
+      }
+    }
 
     img.drawString(
       image,
       text,
       font: font,
-      x: x,
+      x: x + diamondSize + spacing,
       y: y,
-      color: img.ColorRgba8(r, g, b, a),
+      color: textColor,
     );
 
     return image;

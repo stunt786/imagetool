@@ -61,9 +61,9 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
     }
   }
 
-  /// Sets the split mode.
   void setSplitMode(SplitMode mode) {
-    state = state.copyWith(splitMode: mode);
+    if (state.splitMode == mode) return;
+    state = state.copyWith(splitMode: mode, outputPaths: [], publicExportPaths: [], errorMessage: null);
   }
 
   /// Sets the chunk size for by-chunks mode.

@@ -105,6 +105,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _flipPreviewH = false;
   bool _flipPreviewV = false;
 
+  bool _replaceOriginal = false;
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
   List<PickedFile> _batchFiles = <PickedFile>[];
@@ -211,7 +212,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           _syncInputsFromImage(ref.read(imageEditProvider).width, ref.read(imageEditProvider).height);
         }
       }
-      setState(() {});
+      if (mounted) setState(() {});
     } finally {
       if (mounted) {
         setState(() => _isPicking = false);
@@ -219,12 +220,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
   }
 
-  void _removeBatchFileAt(int index) async {
+  Future<void> _removeBatchFileAt(int index) async {
     final removed = _batchFiles.removeAt(index);
     if (_batchFiles.isEmpty) {
       _isBatchMode = false;
       ref.read(imageEditProvider.notifier).clear();
-      setState(() {});
+      if (mounted) setState(() {});
       return;
     }
     if (_batchFiles.length == 1) {
@@ -237,7 +238,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         _syncInputsFromImage(ref.read(imageEditProvider).width, ref.read(imageEditProvider).height);
       }
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _processBatchResize() async {
@@ -686,6 +687,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
+    _replaceOriginal = await _showSaveDialog();
+    if (!mounted) return;
+
     ref.read(imageEditProvider.notifier).setLoading(true);
 
     final result = _selectedSocialPreset != null && _mode == _ResizeMode.preset
@@ -714,9 +718,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
-    final fileName = _buildOutputFileName(
+    final fileName = _buildSaveFileName(
       baseName: state.fileName ?? 'image',
       format: _outputFormat,
+      replaceOriginal: _replaceOriginal,
     );
 
     ref
@@ -742,7 +747,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           thumbnailPath: saveResult.path,
         ),
       );
-      _showSnack('Saved');
+      _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
       _showSnack('Resized image is ready, but saving failed: $error');
@@ -1245,6 +1250,40 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<bool> _showSaveDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save Options'),
+        content: const Text('Would you like to replace the original file or save as a new file?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Save as New'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Replace Original'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  String _buildSaveFileName({
+    required String baseName,
+    required OutputImageFormat format,
+    required bool replaceOriginal,
+  }) {
+    if (replaceOriginal) {
+      final dot = baseName.lastIndexOf('.');
+      final stem = dot > 0 ? baseName.substring(0, dot) : baseName;
+      return '$stem.${format.extension}';
+    }
+    return _buildOutputFileName(baseName: baseName, format: format);
+  }
+
   Future<void> _saveCurrentImage() async {
     final state = ref.read(imageEditProvider);
     final bytes = state.currentBytes;
@@ -1253,9 +1292,13 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
-    final fileName = _buildOutputFileName(
+    _replaceOriginal = await _showSaveDialog();
+    if (!mounted) return;
+
+    final fileName = _buildSaveFileName(
       baseName: state.fileName ?? 'image',
       format: _outputFormat,
+      replaceOriginal: _replaceOriginal,
     );
 
     try {
@@ -1271,7 +1314,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           thumbnailPath: saveResult.path,
         ),
       );
-      _showSnack('Saved');
+      _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
       _showSnack('Saving failed: $error');
@@ -1477,23 +1520,33 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   Widget _buildEditorView(ImageEditState state, _ResizeTarget? target) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (state.errorMessage != null) ...[
-            _ErrorBanner(message: state.errorMessage!),
-            const SizedBox(height: 8),
-          ],
-          if (_isBatchMode || _batchFiles.length > 1) ...[
-            _buildBatchFilmstrip(),
-          ],
-          _buildImageCard(state),
-          const SizedBox(height: 10),
-          _buildEditorCard(state, target),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (state.errorMessage != null) ...[
+                  _ErrorBanner(message: state.errorMessage!),
+                  const SizedBox(height: 8),
+                ],
+                if (_isBatchMode || _batchFiles.length > 1) ...[
+                  _buildBatchFilmstrip(),
+                ],
+                _buildImageCard(state),
+                const SizedBox(height: 10),
+                _buildEditorCard(state, target),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2821,7 +2874,7 @@ class _ModeCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected ? scheme.primary : scheme.outlineVariant,
-            width: selected ? 1.5 : 1,
+            width: selected ? 2.5 : 1,
           ),
         ),
         child: Center(
@@ -3175,7 +3228,8 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth.toDouble();
         final normalizedRotation = widget.rotationDegrees % 360;
-        final maxPreviewHeight = MediaQuery.of(context).size.height * 0.22;
+        final isCropMode = widget.activePanel == _EditorPanel.crop;
+        final maxPreviewHeight = MediaQuery.of(context).size.height * (isCropMode ? 0.45 : 0.22);
         final basePreviewHeight = math
             .min(maxWidth * (widget.imageHeight / widget.imageWidth), maxPreviewHeight)
             .toDouble();

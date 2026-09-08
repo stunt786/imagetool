@@ -98,7 +98,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'magic-remove',
                     pageBuilder: (context, state) => _MaterialPage(
                       child: MagicRemoveScreen(
-                        imageBytes: (state.extra as Uint8List?) ?? Uint8List(0),
+                        imageBytes: (state.extra is Uint8List
+                                ? state.extra as Uint8List
+                                : null) ??
+                            Uint8List(0),
                       ),
                     ),
                   ),

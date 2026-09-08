@@ -13,6 +13,11 @@ enum FilterType {
   eco,
   grayscale,
   invert,
+  sepia,
+  warm,
+  cool,
+  dramatic,
+  bwHighContrast,
 }
 
 @immutable

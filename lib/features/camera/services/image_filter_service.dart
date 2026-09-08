@@ -44,10 +44,7 @@ Uint8List? _isolateApplyMagicColor(Map<String, dynamic> params) {
   if (image == null) return null;
 
   img.Image processed = image;
-  // Increase contrast
-  processed = img.adjustColor(processed, contrast: 1.3, saturation: 1.2);
-  // Sharpen slightly
-  processed = img.gaussianBlur(processed, radius: 1);
+  processed = img.adjustColor(processed, contrast: 1.4, saturation: 1.25, brightness: 0.03);
 
   return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
 }
@@ -156,24 +153,107 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   late img.Image processed;
   switch (filterName) {
     case 'lighten':
-      processed = img.adjustColor(image, brightness: 0.18);
+      processed = img.adjustColor(image, brightness: 0.2, contrast: 1.05);
     case 'enhance':
       processed = img.adjustColor(
         image,
-        contrast: 1.35,
-        saturation: 1.12,
-        brightness: 0.06,
+        contrast: 1.4,
+        saturation: 1.15,
+        brightness: 0.05,
       );
     case 'eco':
       processed = img.adjustColor(
         img.grayscale(image),
-        contrast: 1.12,
-        brightness: 0.04,
+        contrast: 1.15,
+        brightness: 0.05,
       );
     case 'grayscale':
       processed = img.grayscale(image);
+      processed = img.adjustColor(processed, contrast: 1.1);
     case 'invert':
       processed = img.invert(image);
+    case 'sepia':
+      processed = img.sepia(image);
+      processed = img.adjustColor(processed, saturation: 0.85, brightness: 0.05);
+    case 'warm':
+      processed = img.adjustColor(
+        image,
+        saturation: 1.2,
+        brightness: 0.04,
+      );
+      for (var y = 0; y < processed.height; y++) {
+        for (var x = 0; x < processed.width; x++) {
+          final p = processed.getPixel(x, y);
+          final r = (p.r + 8).clamp(0, 255).toInt();
+          final g = (p.g + 3).clamp(0, 255).toInt();
+          final b = (p.b - 5).clamp(0, 255).toInt();
+          processed.setPixelRgba(x, y, r, g, b, p.a.toInt());
+        }
+      }
+    case 'cool':
+      processed = img.adjustColor(
+        image,
+        saturation: 1.1,
+        brightness: 0.03,
+      );
+      for (var y = 0; y < processed.height; y++) {
+        for (var x = 0; x < processed.width; x++) {
+          final p = processed.getPixel(x, y);
+          final r = (p.r - 5).clamp(0, 255).toInt();
+          final g = (p.g + 2).clamp(0, 255).toInt();
+          final b = (p.b + 10).clamp(0, 255).toInt();
+          processed.setPixelRgba(x, y, r, g, b, p.a.toInt());
+        }
+      }
+    case 'dramatic':
+      processed = img.adjustColor(
+        image,
+        contrast: 1.6,
+        saturation: 0.7,
+        brightness: -0.05,
+      );
+    case 'bwHighContrast':
+      processed = img.grayscale(image);
+      final histogram = List.filled(256, 0);
+      for (var y = 0; y < processed.height; y++) {
+        for (var x = 0; x < processed.width; x++) {
+          final l = processed.getPixel(x, y).r.toInt();
+          histogram[l.clamp(0, 255)]++;
+        }
+      }
+      var total = processed.width * processed.height;
+      var sum = 0.0;
+      for (var i = 0; i < 256; i++) {
+        sum += i * histogram[i];
+      }
+      var sumB = 0.0;
+      var wB = 0;
+      var maxVariance = 0.0;
+      var threshold = 128;
+      for (var i = 0; i < 256; i++) {
+        wB += histogram[i];
+        if (wB == 0) continue;
+        final wF = total - wB;
+        if (wF == 0) break;
+        sumB += i * histogram[i];
+        final mB = sumB / wB;
+        final mF = (sum - sumB) / wF;
+        final between = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
+        if (between >= maxVariance) {
+          maxVariance = between;
+          threshold = i;
+        }
+      }
+      for (var y = 0; y < processed.height; y++) {
+        for (var x = 0; x < processed.width; x++) {
+          final intensity = processed.getPixel(x, y).r;
+          if (intensity > threshold) {
+            processed.setPixelRgba(x, y, 255, 255, 255, 255);
+          } else {
+            processed.setPixelRgba(x, y, 0, 0, 0, 255);
+          }
+        }
+      }
     default:
       processed = image;
   }

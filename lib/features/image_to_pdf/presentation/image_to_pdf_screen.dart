@@ -61,11 +61,14 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
                   _showSettings = !_showSettings;
                 });
               },
-              icon: Icon(_showSettings ? Icons.settings : Icons.settings_outlined),
+              icon: Icon(
+                  _showSettings ? Icons.settings : Icons.settings_outlined),
             ),
           IconButton(
             tooltip: 'Clear All',
-            onPressed: state.images.isEmpty ? null : () => _showClearDialog(context, notifier),
+            onPressed: state.images.isEmpty
+                ? null
+                : () => _showClearDialog(context, notifier),
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -74,13 +77,19 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         child: Column(
           children: [
             if (_showSettings)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: PdfSettingsPanel(
-                  settings: state.pageSettings,
-                  onSettingsChanged: (settings) {
-                    notifier.updatePageSettings(settings);
-                  },
+              Flexible(
+                flex: 0,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    16 + MediaQuery.of(context).viewInsets.bottom,
+                  ),
+                  child: PdfSettingsPanel(
+                    settings: state.pageSettings,
+                    onSettingsChanged: notifier.updatePageSettings,
+                  ),
                 ),
               ),
             Expanded(
@@ -100,7 +109,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
   Widget _buildEmptyState(BuildContext context, ImageToPdfNotifier notifier) {
     final theme = Theme.of(context);
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -143,7 +152,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               icon: const Icon(Icons.add_photo_alternate_outlined),
               label: const Text('Select Images'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),
           ],
@@ -152,7 +162,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     );
   }
 
-  Widget _buildImageGrid(BuildContext context, ImageToPdfState state, ImageToPdfNotifier notifier) {
+  Widget _buildImageGrid(BuildContext context, ImageToPdfState state,
+      ImageToPdfNotifier notifier) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -164,7 +175,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
       itemCount: state.images.length,
       itemBuilder: (context, index) {
         final item = state.images[index];
-        
+
         return ReorderableDragStartListener(
           key: ValueKey(item.path),
           index: index,
@@ -175,9 +186,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             imageSize: item.sizeBytes,
             totalImages: state.images.length,
             onRemove: () => notifier.removeImage(index),
-            onSwapBefore: index > 0
-                ? () => notifier.swapImage(index, index - 1)
-                : null,
+            onSwapBefore:
+                index > 0 ? () => notifier.swapImage(index, index - 1) : null,
             onSwapAfter: index < state.images.length - 1
                 ? () => notifier.swapImage(index, index + 1)
                 : null,
@@ -188,9 +198,10 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     );
   }
 
-  Widget _buildBottomBar(BuildContext context, ImageToPdfState state, ImageToPdfNotifier notifier) {
+  Widget _buildBottomBar(BuildContext context, ImageToPdfState state,
+      ImageToPdfNotifier notifier) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -240,7 +251,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     );
   }
 
-  Future<void> _generatePdf(BuildContext context, ImageToPdfNotifier notifier) async {
+  Future<void> _generatePdf(
+      BuildContext context, ImageToPdfNotifier notifier) async {
     final pdfPath = await notifier.generatePdf();
 
     if (!context.mounted) return;
@@ -248,13 +260,13 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     if (pdfPath != null) {
       final fileName = pdfPath.split('/').last;
       ref.read(editHistoryProvider.notifier).addEntry(
-        EditHistoryItem(
-          fileName: fileName,
-          toolUsed: 'Image to PDF',
-          editedAt: DateTime.now(),
-          toolIcon: Icons.picture_as_pdf_rounded,
-        ),
-      );
+            EditHistoryItem(
+              fileName: fileName,
+              toolUsed: 'Image to PDF',
+              editedAt: DateTime.now(),
+              toolIcon: Icons.picture_as_pdf_rounded,
+            ),
+          );
       _showPDFSavedDialog(context, pdfPath);
       InterstitialTracker.instance.trackAction();
     } else {
@@ -299,16 +311,16 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             Text(
               'PDF Saved',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+                    fontWeight: FontWeight.w800,
+                  ),
             ),
             const SizedBox(height: 8),
             Text(
               fileName,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

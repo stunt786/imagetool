@@ -71,11 +71,14 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
             IconButton(
               tooltip: _showSettings ? 'Hide Settings' : 'Show Settings',
               onPressed: () => setState(() => _showSettings = !_showSettings),
-              icon: Icon(_showSettings ? Icons.settings : Icons.settings_outlined),
+              icon: Icon(
+                  _showSettings ? Icons.settings : Icons.settings_outlined),
             ),
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFile || state.outputPaths.isNotEmpty || state.publicExportPaths.isNotEmpty
+            onPressed: state.hasFile ||
+                    state.outputPaths.isNotEmpty ||
+                    state.publicExportPaths.isNotEmpty
                 ? notifier.clear
                 : null,
             icon: const Icon(Icons.delete_outline),
@@ -91,7 +94,10 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFile && !state.isProcessing && state.outputPaths.isEmpty && state.publicExportPaths.isEmpty)
+          if (state.hasFile &&
+              !state.isProcessing &&
+              state.outputPaths.isEmpty &&
+              state.publicExportPaths.isEmpty)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -140,7 +146,8 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),
           ],
@@ -168,6 +175,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                 state: state,
                 onFormatChanged: notifier.setOutputFormat,
                 onDpiChanged: notifier.setDpi,
+                onPageRangeChanged: notifier.setPageRange,
               ),
             ),
 
@@ -209,10 +217,13 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                       const SizedBox(height: 4),
                       Text(
                         [
-                          if (state.pageCount != null) '${state.pageCount} pages',
+                          if (state.pageCount != null)
+                            '${state.pageCount} pages',
                           if (state.selectedFileSize != null)
                             PdfService.formatFileSize(state.selectedFileSize!),
                           '→ ${state.outputFormat.label}',
+                          if (state.usePageRange)
+                            '· Pages ${state.pageRangeStart}–${state.pageRangeEnd}',
                         ].join(' · '),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
@@ -299,7 +310,13 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/'),
+                      state.publicExportPaths.first
+                          .split('/')
+                          .sublist(
+                              0,
+                              state.publicExportPaths.first.split('/').length -
+                                  1)
+                          .join('/'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'monospace',
                         color: theme.colorScheme.onSecondaryContainer,
@@ -389,7 +406,8 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                       content: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('${state.publicExportPaths.length} files created'),
+                          Text(
+                              '${state.publicExportPaths.length} files created'),
                           const SizedBox(height: 8),
                           Text(
                             'Location: ${state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/')}',
@@ -434,8 +452,17 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
   ) {
     final theme = Theme.of(context);
 
-    final buttonLabel = state.hasPageInfo
-        ? 'Convert ${state.pageCount} page${state.pageCount! > 1 ? 's' : ''} to ${state.outputFormat.label}'
+    final int pagesBeingConverted;
+    if (state.usePageRange && state.pageRangeStart != null && state.pageRangeEnd != null) {
+      pagesBeingConverted = state.pageRangeEnd! - state.pageRangeStart! + 1;
+    } else if (state.hasPageInfo) {
+      pagesBeingConverted = state.pageCount!;
+    } else {
+      pagesBeingConverted = 0;
+    }
+
+    final buttonLabel = pagesBeingConverted > 0
+        ? 'Convert $pagesBeingConverted page${pagesBeingConverted > 1 ? 's' : ''} to ${state.outputFormat.label}'
         : 'Convert to ${state.outputFormat.label}';
 
     return Container(
@@ -461,11 +488,14 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                     if (result != null && mounted) {
                       ref.read(editHistoryProvider.notifier).addEntry(
                             EditHistoryItem(
-                              fileName: state.selectedFileName ?? 'converted.${state.outputFormat.extension}',
+                              fileName: state.selectedFileName ??
+                                  'converted.${state.outputFormat.extension}',
                               toolUsed: 'PDF Converter',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.transform_rounded,
-                              thumbnailPath: state.outputPaths.isNotEmpty ? state.outputPaths.first : null,
+                              thumbnailPath: state.outputPaths.isNotEmpty
+                                  ? state.outputPaths.first
+                                  : null,
                             ),
                           );
                     }

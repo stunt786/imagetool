@@ -34,6 +34,9 @@ class PdfConvertState {
     this.pageCount,
     this.outputFormat = ConvertFormat.jpg,
     this.dpi = ConvertDpi.medium,
+    this.pagesToConvert,
+    this.pageRangeStart,
+    this.pageRangeEnd,
     this.isProcessing = false,
     this.progress = 0.0,
     this.errorMessage,
@@ -47,6 +50,16 @@ class PdfConvertState {
   final int? pageCount;
   final ConvertFormat outputFormat;
   final ConvertDpi dpi;
+
+  /// Null means all pages; otherwise converts the first N pages.
+  final int? pagesToConvert;
+
+  /// Custom page range: null pageRangeStart means "All Pages" mode.
+  final int? pageRangeStart;
+  final int? pageRangeEnd;
+
+  bool get usePageRange => pageRangeStart != null && pageRangeEnd != null;
+
   final bool isProcessing;
   final double progress;
   final String? errorMessage;
@@ -64,6 +77,11 @@ class PdfConvertState {
     int? pageCount,
     ConvertFormat? outputFormat,
     ConvertDpi? dpi,
+    int? pagesToConvert,
+    bool clearPagesToConvert = false,
+    int? pageRangeStart,
+    int? pageRangeEnd,
+    bool clearPageRange = false,
     bool? isProcessing,
     double? progress,
     String? errorMessage,
@@ -77,6 +95,12 @@ class PdfConvertState {
       pageCount: pageCount ?? this.pageCount,
       outputFormat: outputFormat ?? this.outputFormat,
       dpi: dpi ?? this.dpi,
+      pagesToConvert:
+          clearPagesToConvert ? null : (pagesToConvert ?? this.pagesToConvert),
+      pageRangeStart:
+          clearPageRange ? null : (pageRangeStart ?? this.pageRangeStart),
+      pageRangeEnd:
+          clearPageRange ? null : (pageRangeEnd ?? this.pageRangeEnd),
       isProcessing: isProcessing ?? this.isProcessing,
       progress: progress ?? this.progress,
       errorMessage: errorMessage,

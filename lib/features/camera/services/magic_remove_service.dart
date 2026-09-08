@@ -51,8 +51,19 @@ class MagicRemoveService {
     final image = img.decodeImage(imageBytes);
     if (image == null) return null;
 
-    final width = image.width;
-    final height = image.height;
+    // Downscale large images to prevent OOM (max 1024px on longest side)
+    const maxDim = 1024;
+    double downscaleFactor = 1.0;
+    img.Image workImage = image;
+    if (image.width > maxDim || image.height > maxDim) {
+      downscaleFactor = maxDim / math.max(image.width, image.height);
+      final newW = (image.width * downscaleFactor).round();
+      final newH = (image.height * downscaleFactor).round();
+      workImage = img.copyResize(image, width: newW, height: newH);
+    }
+
+    final width = workImage.width;
+    final height = workImage.height;
     final totalPixels = width * height;
 
     final scaleX = width / imageWidth;
@@ -127,7 +138,7 @@ class MagicRemoveService {
     for (int y = 0; y < height; y++) {
       final rowOffset = y * width;
       for (int x = 0; x < width; x++) {
-        final p = image.getPixel(x, y);
+        final p = workImage.getPixel(x, y);
         final idx = rowOffset + x;
         rArr[idx] = p.r.toInt();
         gArr[idx] = p.g.toInt();
@@ -278,7 +289,7 @@ class MagicRemoveService {
 
         // Gather gradient-weighted samples from known neighbors
         double sumR = 0, sumG = 0, sumB = 0, sumW = 0;
-        final searchR = 6;
+        final searchR = 8;
         final minNvy = (y - searchR).clamp(0, height - 1);
         final maxNvy = (y + searchR).clamp(0, height - 1);
         final minNvx = (x - searchR).clamp(0, width - 1);
@@ -380,7 +391,80 @@ class MagicRemoveService {
       }
     }
 
-    // Bilateral filter: edge-preserving smoothing
+    // Bilateral filter: edge-preserving smoothing with larger kernel
+    for (int pass = 0; pass < 3; pass++) {
+      final tempR = Uint8List.fromList(rArr);
+      final tempG = Uint8List.fromList(gArr);
+      final tempB = Uint8List.fromList(bArr);
+
+      for (int y = 3; y < height - 3; y++) {
+        final yRow = y * width;
+        for (int x = 3; x < width - 3; x++) {
+          final idx = yRow + x;
+          if (smoothRegion[idx] != 1) continue;
+
+          double sumR = 0, sumG = 0, sumB = 0, sumW = 0;
+          final centerGray = gray[idx];
+
+          for (int ky = -3; ky <= 3; ky++) {
+            final kRow = (y + ky) * width;
+            for (int kx = -3; kx <= 3; kx++) {
+              final nIdx = kRow + (x + kx);
+              final d2 = kx * kx + ky * ky;
+
+              final spatialW = math.exp(-d2 / 8.0);
+              final colorDiff = (gray[nIdx] - centerGray).abs();
+              final rangeW = math.exp(-colorDiff * colorDiff / 350.0);
+
+              final w = spatialW * rangeW;
+              sumR += tempR[nIdx] * w;
+              sumG += tempG[nIdx] * w;
+              sumB += tempB[nIdx] * w;
+              sumW += w;
+            }
+          }
+
+          if (sumW > 0) {
+            rArr[idx] = (sumR / sumW).round().clamp(0, 255);
+            gArr[idx] = (sumG / sumW).round().clamp(0, 255);
+            bArr[idx] = (sumB / sumW).round().clamp(0, 255);
+          }
+        }
+      }
+    }
+
+    // Edge feathering: smooth transitions at the boundary of inpainted region
+    final featherRegion = Uint8List(totalPixels);
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        final idx = y * width + x;
+        if (state[idx] != 0) continue;
+        bool touchesInpainted = false;
+        for (final n in neighbors) {
+          final nx = x + n[0];
+          final ny = y + n[1];
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+            if (state[ny * width + nx] == 2) {
+              touchesInpainted = true;
+              break;
+            }
+          }
+        }
+        if (touchesInpainted) {
+          const fr = 4;
+          final minY = (y - fr).clamp(0, height - 1);
+          final maxY = (y + fr).clamp(0, height - 1);
+          final minX = (x - fr).clamp(0, width - 1);
+          final maxX = (x + fr).clamp(0, width - 1);
+          for (int fy = minY; fy <= maxY; fy++) {
+            for (int fx = minX; fx <= maxX; fx++) {
+              featherRegion[fy * width + fx] = 1;
+            }
+          }
+        }
+      }
+    }
+
     for (int pass = 0; pass < 2; pass++) {
       final tempR = Uint8List.fromList(rArr);
       final tempG = Uint8List.fromList(gArr);
@@ -390,7 +474,7 @@ class MagicRemoveService {
         final yRow = y * width;
         for (int x = 2; x < width - 2; x++) {
           final idx = yRow + x;
-          if (smoothRegion[idx] != 1) continue;
+          if (featherRegion[idx] != 1) continue;
 
           double sumR = 0, sumG = 0, sumB = 0, sumW = 0;
           final centerGray = gray[idx];
@@ -401,12 +485,9 @@ class MagicRemoveService {
               final nIdx = kRow + (x + kx);
               final d2 = kx * kx + ky * ky;
 
-              // Spatial weight (Gaussian)
-              final spatialW = math.exp(-d2 / 4.5);
-
-              // Range weight (edge-aware): only smooth similar colors
+              final spatialW = math.exp(-d2 / 3.0);
               final colorDiff = (gray[nIdx] - centerGray).abs();
-              final rangeW = math.exp(-colorDiff * colorDiff / 500.0);
+              final rangeW = math.exp(-colorDiff * colorDiff / 600.0);
 
               final w = spatialW * rangeW;
               sumR += tempR[nIdx] * w;
@@ -430,11 +511,22 @@ class MagicRemoveService {
       final rowOffset = y * width;
       for (int x = 0; x < width; x++) {
         final idx = rowOffset + x;
-        image.setPixelRgb(x, y, rArr[idx], gArr[idx], bArr[idx]);
+        workImage.setPixelRgb(x, y, rArr[idx], gArr[idx], bArr[idx]);
       }
     }
 
-    return Uint8List.fromList(img.encodeJpg(image, quality: 95));
+    // Upscale back to original dimensions if we downscaled
+    img.Image resultImage = workImage;
+    if (downscaleFactor < 1.0) {
+      resultImage = img.copyResize(
+        workImage,
+        width: image.width,
+        height: image.height,
+        interpolation: img.Interpolation.linear,
+      );
+    }
+
+    return Uint8List.fromList(img.encodeJpg(resultImage, quality: 95));
   }
 
   /// Compute confidence for a pixel based on known neighbors.

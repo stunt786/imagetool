@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -76,7 +78,9 @@ class CollageToolbar extends ConsumerWidget {
                         onTap: state.imageCount >= 6
                             ? null
                             : () {
-                                ref.read(collageProvider.notifier).pickImages(context);
+                                ref
+                                    .read(collageProvider.notifier)
+                                    .pickImages(context);
                                 InterstitialTracker.instance.trackAction();
                               },
                       ),
@@ -222,7 +226,9 @@ class CollageToolbar extends ConsumerWidget {
               children: colors.map((color) {
                 return GestureDetector(
                   onTap: () {
-                    ref.read(collageProvider.notifier).setBackgroundColor(color);
+                    ref
+                        .read(collageProvider.notifier)
+                        .setBackgroundColor(color);
                     Navigator.pop(context);
                   },
                   child: Container(
@@ -244,12 +250,6 @@ class CollageToolbar extends ConsumerWidget {
   }
 
   void _showTextCaptionSheet(BuildContext context, WidgetRef ref) {
-    final state = ref.read(collageProvider);
-    final textController = TextEditingController(text: state.captionText ?? '');
-    double size = state.captionSize;
-    Color color = state.captionColor;
-    Alignment alignment = state.captionAlignment;
-
     final colorOptions = [
       Colors.white,
       Colors.black,
@@ -269,24 +269,14 @@ class CollageToolbar extends ConsumerWidget {
       ('Impact', 'Bold Sans'),
     ];
 
-    final alignments = [
-      (Alignment.topLeft, 'Top Left', const Offset(0.15, 0.15)),
-      (Alignment.topCenter, 'Top', const Offset(0.5, 0.15)),
-      (Alignment.topRight, 'Top Right', const Offset(0.85, 0.15)),
-      (Alignment.centerLeft, 'Left', const Offset(0.15, 0.5)),
-      (Alignment.center, 'Center', const Offset(0.5, 0.5)),
-      (Alignment.centerRight, 'Right', const Offset(0.85, 0.5)),
-      (Alignment.bottomLeft, 'Bottom Left', const Offset(0.15, 0.85)),
-      (Alignment.bottomCenter, 'Bottom', const Offset(0.5, 0.85)),
-      (Alignment.bottomRight, 'Bottom Right', const Offset(0.85, 0.85)),
-    ];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
           final currentState = ref.watch(collageProvider);
+          final layers = currentState.textLayers;
+
           return Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -303,167 +293,206 @@ class CollageToolbar extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Collage Caption',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        'Text Layers',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                       ),
-                      if (textController.text.isNotEmpty)
-                        TextButton(
-                          onPressed: () {
-                            textController.clear();
-                            ref.read(collageProvider.notifier).setCaptionText('');
-                            setState(() {});
-                          },
-                          child: const Text('Clear'),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: textController,
-                    decoration: const InputDecoration(
-                      labelText: 'Caption Text',
-                      hintText: 'Enter overlay caption...',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (val) {
-                      ref.read(collageProvider.notifier).setCaptionText(val);
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Font Style',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: fontStyles.map((item) {
-                        final isSelected = currentState.captionFontFamily == item.$1;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: ChoiceChip(
-                            label: Text(
-                              item.$2,
-                              style: TextStyle(
-                                fontFamily: item.$1 == 'Roboto' ? null : item.$1,
-                                fontWeight: item.$1 == 'Impact' ? FontWeight.w900 : null,
-                              ),
-                            ),
-                            selected: isSelected,
-                            onSelected: (_) {
-                              setState(() {});
-                              ref.read(collageProvider.notifier).setCaptionFontFamily(item.$1);
-                            },
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Font Size: ${size.toInt()}px',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  Slider(
-                    value: size,
-                    min: 12,
-                    max: 48,
-                    divisions: 36,
-                    onChanged: (val) {
-                      setState(() => size = val);
-                      ref.read(collageProvider.notifier).setCaptionSize(val);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Text Color',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: colorOptions.map((c) {
-                      final isSelected = c == color;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() => color = c);
-                          ref.read(collageProvider.notifier).setCaptionColor(c);
+                      IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () {
+                          ref.read(collageProvider.notifier).addTextLayer();
                         },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: c,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isSelected
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Colors.grey.shade400,
-                              width: isSelected ? 3 : 1,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Position Presets',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: alignments.map((item) {
-                      final isSelected = item.$1 == alignment;
-                      return ChoiceChip(
-                        label: Text(item.$2),
-                        selected: isSelected,
-                        onSelected: (_) {
-                          setState(() => alignment = item.$1);
-                          ref.read(collageProvider.notifier).setCaptionAlignment(item.$1);
-                          ref.read(collageProvider.notifier).setCaptionNormalizedOffset(item.$3);
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            ref
-                                .read(collageProvider.notifier)
-                                .setCaptionNormalizedOffset(const Offset(0.5, 0.85));
-                            ref.read(collageProvider.notifier).setCaptionScale(1.0);
-                            setState(() {});
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Caption position and scale reset'),
-                                duration: Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.restart_alt, size: 18),
-                          label: const Text('Reset Position & Scale'),
-                        ),
                       ),
                     ],
                   ),
+                  if (layers.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          'No text layers. Tap + to add one.',
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ),
+                    )
+                  else ...[
+                    SizedBox(
+                      height: 160,
+                      child: ListView.builder(
+                        itemCount: layers.length,
+                        itemBuilder: (context, index) {
+                          final layer = layers[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          decoration: const InputDecoration(
+                                            hintText: 'Enter text...',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                            contentPadding: EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 8,
+                                            ),
+                                          ),
+                                          controller: TextEditingController(
+                                            text: layer.text,
+                                          ),
+                                          onChanged: (val) {
+                                            ref
+                                                .read(collageProvider.notifier)
+                                                .updateTextLayer(layer.id, text: val);
+                                          },
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, size: 20),
+                                        onPressed: () {
+                                          ref
+                                              .read(collageProvider.notifier)
+                                              .removeTextLayer(layer.id);
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        ...colorOptions.map((c) {
+                                          final isSelected = c == layer.color;
+                                          return GestureDetector(
+                                            onTap: () {
+                                              ref
+                                                  .read(collageProvider.notifier)
+                                                  .updateTextLayer(layer.id, color: c);
+                                              setState(() {});
+                                            },
+                                            child: Container(
+                                              width: 28,
+                                              height: 28,
+                                              margin: const EdgeInsets.only(right: 6),
+                                              decoration: BoxDecoration(
+                                                color: c,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                  color: isSelected
+                                                      ? Theme.of(context).colorScheme.primary
+                                                      : Colors.grey.shade400,
+                                                  width: isSelected ? 2 : 1,
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                        const SizedBox(width: 8),
+                                        ...fontStyles.map((item) {
+                                          final isSelected = layer.fontFamily == item.$1;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(right: 6),
+                                            child: ChoiceChip(
+                                              label: Text(
+                                                item.$2,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontFamily:
+                                                      item.$1 == 'Roboto' ? null : item.$1,
+                                                  fontWeight: item.$1 == 'Impact'
+                                                      ? FontWeight.w900
+                                                      : null,
+                                                ),
+                                              ),
+                                              selected: isSelected,
+                                              onSelected: (_) {
+                                                ref
+                                                    .read(collageProvider.notifier)
+                                                    .updateTextLayer(
+                                                      layer.id,
+                                                      fontFamily: item.$1,
+                                                    );
+                                                setState(() {});
+                                              },
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.text_fields, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Slider(
+                                          value: layer.fontSize,
+                                          min: 12,
+                                          max: 48,
+                                          divisions: 36,
+                                          label: '${layer.fontSize.toInt()}px',
+                                          onChanged: (val) {
+                                            ref
+                                                .read(collageProvider.notifier)
+                                                .updateTextLayer(layer.id, fontSize: val);
+                                          },
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 40,
+                                        child: Text(
+                                          '${layer.fontSize.toInt()}',
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.rotate_right, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Slider(
+                                          value: layer.rotation,
+                                          min: -math.pi,
+                                          max: math.pi,
+                                          divisions: 60,
+                                          label: '${(layer.rotation * 180 / math.pi).toInt()}°',
+                                          onChanged: (val) {
+                                            ref
+                                                .read(collageProvider.notifier)
+                                                .setTextLayerRotation(layer.id, val);
+                                          },
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 40,
+                                        child: Text(
+                                          '${(layer.rotation * 180 / math.pi).toInt()}°',
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                 ],
               ),
@@ -484,14 +513,14 @@ class CollageToolbar extends ConsumerWidget {
 
       if (context.mounted) {
         ref.read(editHistoryProvider.notifier).addEntry(
-          EditHistoryItem(
-            fileName: saveResult.fileName,
-            toolUsed: 'Collage Builder',
-            editedAt: DateTime.now(),
-            toolIcon: Icons.dashboard_customize_rounded,
-            thumbnailPath: saveResult.path,
-          ),
-        );
+              EditHistoryItem(
+                fileName: saveResult.fileName,
+                toolUsed: 'Collage Builder',
+                editedAt: DateTime.now(),
+                toolIcon: Icons.dashboard_customize_rounded,
+                thumbnailPath: saveResult.path,
+              ),
+            );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Saved'),
@@ -560,14 +589,18 @@ class _ToolbarButton extends StatelessWidget {
             Icon(
               icon,
               size: 20,
-              color: isDisabled ? scheme.onSurfaceVariant.withValues(alpha: 0.4) : null,
+              color: isDisabled
+                  ? scheme.onSurfaceVariant.withValues(alpha: 0.4)
+                  : null,
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 10,
-                color: isDisabled ? scheme.onSurfaceVariant.withValues(alpha: 0.4) : null,
+                color: isDisabled
+                    ? scheme.onSurfaceVariant.withValues(alpha: 0.4)
+                    : null,
               ),
             ),
           ],
