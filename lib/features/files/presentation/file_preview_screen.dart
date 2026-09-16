@@ -32,8 +32,24 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
   @override
   void initState() {
     super.initState();
-    _items = List.from(widget.items);
-    _currentIndex = widget.initialIndex.clamp(0, _items.length - 1);
+    final selected =
+        widget.items[widget.initialIndex.clamp(0, widget.items.length - 1)];
+    final retainedPages = selected.pagePaths;
+    _items = retainedPages != null && retainedPages.isNotEmpty
+        ? retainedPages
+            .map((path) => EditHistoryItem(
+                  fileName: path.split(Platform.pathSeparator).last,
+                  toolUsed: selected.toolUsed,
+                  editedAt: selected.editedAt,
+                  filePath: path,
+                  thumbnailPath: path,
+                  toolIcon: selected.toolIcon,
+                ))
+            .toList()
+        : List.from(widget.items);
+    _currentIndex = retainedPages != null && retainedPages.isNotEmpty
+        ? 0
+        : widget.initialIndex.clamp(0, _items.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
   }
 
@@ -115,7 +131,7 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       ),
       body: PageView.builder(
         controller: _pageController,
-        scrollDirection: Axis.vertical,
+        scrollDirection: Axis.horizontal,
         itemCount: total,
         onPageChanged: (index) => setState(() => _currentIndex = index),
         itemBuilder: (_, index) => _PreviewContent(item: _items[index]),
@@ -209,8 +225,9 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
     );
 
     if (newName != null && newName.isNotEmpty && newName != item.fileName) {
-      final success =
-          await ref.read(editHistoryProvider.notifier).renameEntry(item, newName);
+      final success = await ref
+          .read(editHistoryProvider.notifier)
+          .renameEntry(item, newName);
       if (mounted) {
         if (success) {
           setState(() {
@@ -285,7 +302,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete file'),
-        content: Text('Remove "${item.fileName}" from history and delete the file?'),
+        content:
+            Text('Remove "${item.fileName}" from history and delete the file?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -392,11 +410,14 @@ class _PreviewContentState extends State<_PreviewContent> {
     final filePath = item.filePath;
 
     if (!isPdf) {
-      final imagePath = (thumb != null && thumb.isNotEmpty && File(thumb).existsSync())
-          ? thumb
-          : (filePath != null && filePath.isNotEmpty && File(filePath).existsSync())
-              ? filePath
-              : null;
+      final imagePath =
+          (thumb != null && thumb.isNotEmpty && File(thumb).existsSync())
+              ? thumb
+              : (filePath != null &&
+                      filePath.isNotEmpty &&
+                      File(filePath).existsSync())
+                  ? filePath
+                  : null;
 
       if (imagePath != null) {
         return SafeArea(
@@ -442,7 +463,8 @@ class _PreviewContentState extends State<_PreviewContent> {
                     child: Image.file(
                       File(displayImage),
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => _buildPlaceholder(item, false),
+                      errorBuilder: (_, __, ___) =>
+                          _buildPlaceholder(item, false),
                     ),
                   ),
                 ),
@@ -450,7 +472,8 @@ class _PreviewContentState extends State<_PreviewContent> {
                   top: 12,
                   right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.65),
                       borderRadius: BorderRadius.circular(8),
@@ -509,7 +532,8 @@ class _PreviewContentState extends State<_PreviewContent> {
           const SizedBox(height: 16),
           Text(
             item.fileName,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

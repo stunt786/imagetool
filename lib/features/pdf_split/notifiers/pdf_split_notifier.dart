@@ -34,7 +34,8 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
 
     final file = picked.first;
     if (file.path == null && file.bytes == null) {
-      state = state.copyWith(errorMessage: 'Could not access the selected file');
+      state =
+          state.copyWith(errorMessage: 'Could not access the selected file');
       return;
     }
 
@@ -65,7 +66,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
 
   void setSplitMode(SplitMode mode) {
     if (state.splitMode == mode) return;
-    state = state.copyWith(splitMode: mode, outputPaths: [], publicExportPaths: [], errorMessage: null);
+    state = state.copyWith(
+        splitMode: mode,
+        outputPaths: [],
+        publicExportPaths: [],
+        errorMessage: null);
   }
 
   /// Sets the chunk size for by-chunks mode.
@@ -107,7 +112,9 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
     );
 
     try {
-      final baseName = state.selectedFileName!.replaceAll('.pdf', '');
+      final selectedName = state.selectedFileName!;
+      final dot = selectedName.lastIndexOf('.');
+      final baseName = dot > 0 ? selectedName.substring(0, dot) : selectedName;
       final inputBytes = File(state.selectedFilePath!).readAsBytesSync();
       state = state.copyWith(progress: 0.1);
 
@@ -127,7 +134,8 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
 
       List<String> outputPaths;
 
-      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final saveDir =
+          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
 
       Future<String> savePdfFile(Uint8List bytes, String name) async {
@@ -152,7 +160,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             for (int i = 0; i < results.length; i++) {
               final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_${timestamp}_page_${i + 1}.pdf',
+                'pixeltools_${baseName}_${timestamp}_page_${i + 1}.pdf',
               );
               outputPaths.add(savedPath);
             }
@@ -180,7 +188,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             state = state.copyWith(progress: 0.7);
             final savedPath = await savePdfFile(
               resultBytes,
-              '${baseName}_${timestamp}_extracted.pdf',
+              'pixeltools_${baseName}_${timestamp}_extracted.pdf',
             );
             outputPaths = [savedPath];
           }
@@ -209,7 +217,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             for (int i = 0; i < results.length; i++) {
               final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_${timestamp}_page_${sortedPages[i]}.pdf',
+                'pixeltools_${baseName}_${timestamp}_page_${sortedPages[i]}.pdf',
               );
               outputPaths.add(savedPath);
             }
@@ -231,7 +239,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             for (int i = 0; i < results.length; i++) {
               final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_${timestamp}_part_${i + 1}.pdf',
+                'pixeltools_${baseName}_${timestamp}_part_${i + 1}.pdf',
               );
               outputPaths.add(savedPath);
             }

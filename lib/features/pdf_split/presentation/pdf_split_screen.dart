@@ -71,11 +71,16 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             IconButton(
               tooltip: _showSettings ? 'Hide Settings' : 'Show Settings',
               onPressed: () => setState(() => _showSettings = !_showSettings),
-              icon: Icon(_showSettings ? Icons.settings : Icons.settings_outlined),
+              icon: Icon(
+                  _showSettings ? Icons.settings : Icons.settings_outlined),
             ),
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFile || state.outputPaths.isNotEmpty || state.publicExportPaths.isNotEmpty ? notifier.clear : null,
+            onPressed: state.hasFile ||
+                    state.outputPaths.isNotEmpty ||
+                    state.publicExportPaths.isNotEmpty
+                ? notifier.clear
+                : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -83,12 +88,15 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
       body: Column(
         children: [
           if (_showSettings)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: _SplitSettingsPanel(
-                state: state,
-                onModeChanged: notifier.setSplitMode,
-                onChunkSizeChanged: notifier.setChunkSize,
+            Flexible(
+              flex: 0,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: _SplitSettingsPanel(
+                  state: state,
+                  onModeChanged: notifier.setSplitMode,
+                  onChunkSizeChanged: notifier.setChunkSize,
+                ),
               ),
             ),
           Expanded(
@@ -98,7 +106,10 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFile && !state.isProcessing && state.outputPaths.isEmpty && state.publicExportPaths.isEmpty)
+          if (state.hasFile &&
+              !state.isProcessing &&
+              state.outputPaths.isEmpty &&
+              state.publicExportPaths.isEmpty)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -147,7 +158,8 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),
           ],
@@ -205,7 +217,8 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                       const SizedBox(height: 4),
                       Text(
                         [
-                          if (state.pageCount != null) '${state.pageCount} pages',
+                          if (state.pageCount != null)
+                            '${state.pageCount} pages',
                           if (state.selectedFileSize != null)
                             PdfService.formatFileSize(state.selectedFileSize!),
                           '→ ${state.splitMode.label}',
@@ -227,10 +240,13 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
-          if ((state.splitMode == SplitMode.pageRange || state.splitMode == SplitMode.byPages) && state.hasPageInfo) ...[
+          if ((state.splitMode == SplitMode.pageRange ||
+                  state.splitMode == SplitMode.byPages) &&
+              state.hasPageInfo) ...[
             Text(
-              state.splitMode == SplitMode.byPages ? 'Select Pages to Split' : 'Select Pages to Extract',
+              state.splitMode == SplitMode.byPages
+                  ? 'Select Pages to Split'
+                  : 'Select Pages to Extract',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -249,18 +265,19 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 TextButton(
                   onPressed: notifier.selectAllPages,
                   child: const Text('Select All'),
                 ),
-                const SizedBox(width: 8),
                 TextButton(
                   onPressed: notifier.clearPageSelection,
                   child: const Text('Clear Selection'),
                 ),
-                const SizedBox(width: 8),
                 Text(
                   '${state.selectedPages.length} selected',
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -271,12 +288,12 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
             const SizedBox(height: 20),
           ],
-
           if (state.splitMode == SplitMode.byChunks && state.hasPageInfo) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                color:
+                    theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -300,7 +317,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
             const SizedBox(height: 20),
           ],
-
           if (state.isProcessing) ...[
             LinearProgressIndicator(value: state.progress),
             const SizedBox(height: 8),
@@ -312,7 +328,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             ),
             const SizedBox(height: 20),
           ],
-
           if (state.outputPaths.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -366,7 +381,13 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/'),
+                      state.publicExportPaths.first
+                          .split('/')
+                          .sublist(
+                              0,
+                              state.publicExportPaths.first.split('/').length -
+                                  1)
+                          .join('/'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'monospace',
                         color: theme.colorScheme.onSecondaryContainer,
@@ -377,7 +398,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             if (state.publicExportPaths.isEmpty) ...[
               FilledButton.icon(
                 onPressed: () => notifier.exportFiles(),
@@ -389,7 +409,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
               ),
               const SizedBox(height: 12),
             ],
-
             Text(
               'Output Files',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -442,7 +461,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                 ),
               );
             }),
-
             if (state.publicExportPaths.isNotEmpty) ...[
               const SizedBox(height: 20),
               Row(
@@ -460,7 +478,8 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: () async {
-                        final files = state.outputPaths.map((p) => XFile(p)).toList();
+                        final files =
+                            state.outputPaths.map((p) => XFile(p)).toList();
                         await Share.shareXFiles(files);
                       },
                       icon: const Icon(Icons.share_rounded),
@@ -518,8 +537,11 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                 ? () async {
                     final result = await notifier.split();
                     if (result != null && mounted) {
-                      final firstPath = state.outputPaths.isNotEmpty ? state.outputPaths.first : null;
-                      final fileName = firstPath?.split('/').last ?? (state.selectedFileName ?? 'split.pdf');
+                      final firstPath = state.outputPaths.isNotEmpty
+                          ? state.outputPaths.first
+                          : null;
+                      final fileName = firstPath?.split('/').last ??
+                          (state.selectedFileName ?? 'split.pdf');
                       ref.read(editHistoryProvider.notifier).addEntry(
                             EditHistoryItem(
                               fileName: fileName,
@@ -680,7 +702,6 @@ class _SplitSettingsPanel extends StatelessWidget {
               ),
             );
           }),
-
           if (state.splitMode == SplitMode.byChunks) ...[
             const SizedBox(height: 16),
             Text(
@@ -699,7 +720,8 @@ class _SplitSettingsPanel extends StatelessWidget {
                   icon: const Icon(Icons.remove),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     border: Border.all(color: theme.colorScheme.outlineVariant),
                     borderRadius: BorderRadius.circular(8),
@@ -712,7 +734,8 @@ class _SplitSettingsPanel extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: state.pageCount != null && state.chunkSize < state.pageCount!
+                  onPressed: state.pageCount != null &&
+                          state.chunkSize < state.pageCount!
                       ? () => onChunkSizeChanged(state.chunkSize + 1)
                       : null,
                   icon: const Icon(Icons.add),

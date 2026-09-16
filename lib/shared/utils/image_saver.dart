@@ -7,8 +7,16 @@ import 'image_saver_types.dart';
 
 export 'image_saver_types.dart';
 
-Future<ImageSaveResult> saveImageBytes(Uint8List bytes, {required String fileName}) {
-  return saveImageBytesImpl(bytes, fileName: fileName);
+Future<ImageSaveResult> saveImageBytes(
+  Uint8List bytes, {
+  required String fileName,
+  String? replacePath,
+}) {
+  return saveImageBytesImpl(
+    bytes,
+    fileName: fileName,
+    replacePath: replacePath,
+  );
 }
 
 Future<List<ImageSaveResult>> saveMultipleImages(

@@ -11,7 +11,8 @@ import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_compress_state.dart';
 
-final pdfCompressProvider = NotifierProvider<PdfCompressNotifier, PdfCompressState>(
+final pdfCompressProvider =
+    NotifierProvider<PdfCompressNotifier, PdfCompressState>(
   PdfCompressNotifier.new,
 );
 
@@ -108,10 +109,13 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
 
       state = state.copyWith(progress: 0.8);
 
-      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
-      final baseName = (state.selectedFileName ?? 'compressed').replaceAll('.pdf', '');
+      final saveDir =
+          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final selectedName = state.selectedFileName ?? 'compressed';
+      final dot = selectedName.lastIndexOf('.');
+      final baseName = dot > 0 ? selectedName.substring(0, dot) : selectedName;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = '${baseName}_compressed_$timestamp.pdf';
+      final fileName = 'pixeltools_${baseName}_compressed_$timestamp.pdf';
       final outputPath = '${saveDir.path}/$fileName';
       final file = File(outputPath);
       await file.writeAsBytes(resultBytes, flush: true);
@@ -127,6 +131,10 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
         outputPath: outputPath,
         outputFileSize: outputFileSize,
         publicExportPath: outputPath,
+        errorMessage: !appSettings.enableGlobalWatermark &&
+                outputFileSize >= (state.selectedFileSize ?? 0)
+            ? 'This PDF is already highly optimized; no smaller output was possible.'
+            : null,
       );
 
       return outputPath;
@@ -148,8 +156,8 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     try {
       final resultPath = await _manager.exportSingleFile(
         sandboxPath: state.outputPath!,
-        suggestedName: (state.selectedFileName ?? 'compressed')
-            .replaceAll('.pdf', '_compressed.pdf'),
+        suggestedName:
+            'pixeltools_${_pdfBaseName(state.selectedFileName)}_compressed.pdf',
       );
 
       if (resultPath != null) {
@@ -174,5 +182,11 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
   /// Clears only the error message.
   void clearError() {
     state = state.copyWith(errorMessage: null);
+  }
+
+  String _pdfBaseName(String? name) {
+    final value = name ?? 'compressed';
+    final dot = value.lastIndexOf('.');
+    return dot > 0 ? value.substring(0, dot) : value;
   }
 }

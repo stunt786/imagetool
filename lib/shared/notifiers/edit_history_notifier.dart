@@ -52,6 +52,7 @@ class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
     required int count,
     String? thumbnailPath,
     String? filePath,
+    List<String>? pagePaths,
   }) {
     final item = EditHistoryItem(
       fileName: '$toolName ($count files)',
@@ -62,6 +63,7 @@ class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
       toolIcon: toolIcon,
       isGroup: true,
       groupCount: count,
+      pagePaths: pagePaths,
     );
     state = [item, ...state].take(_maxHistoryItems).toList();
     _save();

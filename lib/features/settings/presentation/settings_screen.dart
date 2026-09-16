@@ -6,13 +6,115 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/permission_service.dart';
 import '../../../core/settings/app_settings.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen>
+    with WidgetsBindingObserver {
+  bool? _hasFilePermission;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshFilePermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshFilePermission();
+  }
+
+  Future<void> _refreshFilePermission() async {
+    final granted = await const AppPermissionService().hasStoragePermission();
+    if (mounted) setState(() => _hasFilePermission = granted);
+  }
+
+  Future<void> _showFilePermissionDialog() async {
+    final service = const AppPermissionService();
+    final granted = await service.hasStoragePermission();
+    if (mounted) setState(() => _hasFilePermission = granted);
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Allow file access'),
+        content: Text(
+          granted
+              ? 'PixelTools can access files for importing images and PDFs and saving your results.'
+              : 'Allow PixelTools to access files so you can import images and PDFs and save results.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          if (!granted)
+            FilledButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                final requested = await service.requestStoragePermission();
+                if (!requested &&
+                    await service.isStoragePermissionPermanentlyDenied() &&
+                    mounted) {
+                  await _showOpenSettingsDialog();
+                }
+                await _refreshFilePermission();
+              },
+              child: const Text('Allow file access'),
+            ),
+          if (granted)
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Done'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showOpenSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Permission needs attention'),
+        content: const Text(
+          'File access was blocked by the system. Open PixelTools settings, enable file access, then return to the app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await const AppPermissionService().openAppSettings();
+              await _refreshFilePermission();
+            },
+            child: const Text('Open App Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final topPadding = MediaQuery.of(context).padding.top + 72;
@@ -70,6 +172,25 @@ class SettingsScreen extends ConsumerWidget {
                           onTap: () => _pickFolder(context, ref),
                         );
                       },
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: Icon(
+                        _hasFilePermission == true
+                            ? Icons.folder_shared_outlined
+                            : Icons.folder_off_outlined,
+                        color: _hasFilePermission == true
+                            ? scheme.primary
+                            : scheme.error,
+                      ),
+                      title: const Text('File Access'),
+                      subtitle: Text(
+                        _hasFilePermission == true
+                            ? 'Allowed for importing and saving files'
+                            : 'Tap to allow image and PDF file access',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _showFilePermissionDialog,
                     ),
                   ],
                 ),

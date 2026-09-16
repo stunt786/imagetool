@@ -32,7 +32,8 @@ abstract final class AppSavePaths {
     }
 
     if (Platform.isAndroid) {
-      final picturesDir = Directory('/storage/emulated/0/Pictures/$defaultDirectoryName');
+      final picturesDir =
+          Directory('/storage/emulated/0/Pictures/$defaultDirectoryName');
       if (!await picturesDir.exists()) {
         await picturesDir.create(recursive: true);
       }
@@ -41,7 +42,8 @@ abstract final class AppSavePaths {
 
     if (Platform.isIOS) {
       final baseDir = await getApplicationDocumentsDirectory();
-      final outputDir = Directory(path.join(baseDir.path, defaultDirectoryName));
+      final outputDir =
+          Directory(path.join(baseDir.path, defaultDirectoryName));
       if (!await outputDir.exists()) {
         await outputDir.create(recursive: true);
       }
@@ -50,7 +52,8 @@ abstract final class AppSavePaths {
 
     final downloads = await getDownloadsDirectory();
     if (downloads != null) {
-      final outputDir = Directory(path.join(downloads.path, defaultDirectoryName));
+      final outputDir =
+          Directory(path.join(downloads.path, defaultDirectoryName));
       if (!await outputDir.exists()) {
         await outputDir.create(recursive: true);
       }
@@ -66,7 +69,21 @@ abstract final class AppSavePaths {
   }
 }
 
-Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
+Future<ImageSaveResult> saveImageBytesImpl(
+  Uint8List bytes, {
+  required String fileName,
+  String? replacePath,
+}) async {
+  // FilePicker supplies a writable path on native platforms. Respect an
+  // explicit replacement request instead of silently creating a new export.
+  if (replacePath != null && replacePath.isNotEmpty) {
+    final original = File(replacePath);
+    if (await original.exists()) {
+      await original.writeAsBytes(bytes, flush: true);
+      return ImageSaveResult(
+          fileName: path.basename(original.path), path: original.path);
+    }
+  }
   final safeName = fileName.trim().isEmpty ? 'image.jpg' : fileName.trim();
   final prefixed = 'pixeltools_$safeName';
   final targetDir = await AppSavePaths.getOutputDirectory();
@@ -85,7 +102,8 @@ Future<List<ImageSaveResult>> saveMultipleImagesImpl(
   final results = <ImageSaveResult>[];
 
   for (final item in items) {
-    final safeName = item.fileName.trim().isEmpty ? 'image.jpg' : item.fileName.trim();
+    final safeName =
+        item.fileName.trim().isEmpty ? 'image.jpg' : item.fileName.trim();
     final prefixed = 'pixeltools_$safeName';
     final timestamp = DateTime.now().millisecondsSinceEpoch + results.length;
     final outName = _withSuffix(prefixed, '_$timestamp');

@@ -42,7 +42,6 @@ enum _CropAspectPreset {
 }
 
 class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
-
   static const List<_PresetSize> _presetSizes = <_PresetSize>[
     _PresetSize('Instagram', 1080, 1080),
     _PresetSize('Story', 1080, 1920),
@@ -165,7 +164,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         return;
       }
 
-      await ref.read(imageEditProvider.notifier).loadImage(file.bytes!, file.name);
+      await ref
+          .read(imageEditProvider.notifier)
+          .loadImage(file.bytes!, file.name);
       if (!mounted) return;
 
       final state = ref.read(imageEditProvider);
@@ -199,7 +200,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       if (picked.isEmpty) return;
 
       final existingNames = _batchFiles.map((f) => f.name).toSet();
-      final newFiles = picked.where((f) => !existingNames.contains(f.name)).toList();
+      final newFiles =
+          picked.where((f) => !existingNames.contains(f.name)).toList();
       if (newFiles.isNotEmpty) {
         _batchFiles.addAll(newFiles);
       }
@@ -208,8 +210,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       if (!ref.read(imageEditProvider).hasImage && _batchFiles.isNotEmpty) {
         final first = _batchFiles.first;
         if (first.bytes != null) {
-          await ref.read(imageEditProvider.notifier).loadImage(first.bytes!, first.name);
-          _syncInputsFromImage(ref.read(imageEditProvider).width, ref.read(imageEditProvider).height);
+          await ref
+              .read(imageEditProvider.notifier)
+              .loadImage(first.bytes!, first.name);
+          _syncInputsFromImage(ref.read(imageEditProvider).width,
+              ref.read(imageEditProvider).height);
         }
       }
       if (mounted) setState(() {});
@@ -231,11 +236,15 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     if (_batchFiles.length == 1) {
       _isBatchMode = false;
     }
-    if (ref.read(imageEditProvider).fileName == removed.name && _batchFiles.isNotEmpty) {
+    if (ref.read(imageEditProvider).fileName == removed.name &&
+        _batchFiles.isNotEmpty) {
       final next = _batchFiles.first;
       if (next.bytes != null) {
-        await ref.read(imageEditProvider.notifier).loadImage(next.bytes!, next.name);
-        _syncInputsFromImage(ref.read(imageEditProvider).width, ref.read(imageEditProvider).height);
+        await ref
+            .read(imageEditProvider.notifier)
+            .loadImage(next.bytes!, next.name);
+        _syncInputsFromImage(ref.read(imageEditProvider).width,
+            ref.read(imageEditProvider).height);
       }
     }
     if (mounted) setState(() {});
@@ -301,7 +310,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             format: _outputFormat,
             settings: appSettings,
           );
-        } else if (_mode == _ResizeMode.preset && _selectedSocialPreset != null) {
+        } else if (_mode == _ResizeMode.preset &&
+            _selectedSocialPreset != null) {
           result = await ImageProcessorService.resizeToPreset(
             bytes: file.bytes!,
             preset: _selectedSocialPreset!,
@@ -322,13 +332,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               format: _outputFormat,
               quality: _quality.value,
               settings: appSettings,
+              preserveAspectRatio: _lockAspectRatio,
             );
           }
         } else if (_mode == _ResizeMode.bestFit) {
           final info = await ImageProcessorService.decodeImageInfo(file.bytes!);
           if (info != null) {
-            final maxWidth = int.tryParse(_bestFitWidthController.text) ?? info.width;
-            final maxHeight = int.tryParse(_bestFitHeightController.text) ?? info.height;
+            final maxWidth =
+                int.tryParse(_bestFitWidthController.text) ?? info.width;
+            final maxHeight =
+                int.tryParse(_bestFitHeightController.text) ?? info.height;
             int targetWidth = maxWidth;
             int targetHeight = maxHeight;
             if (_lockAspectRatio && info.width > 0 && info.height > 0) {
@@ -346,6 +359,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               format: _outputFormat,
               quality: _quality.value,
               settings: appSettings,
+              preserveAspectRatio: _lockAspectRatio,
             );
           }
         } else {
@@ -368,7 +382,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             baseName: file.name,
             format: _outputFormat,
           );
-          final saveResult = await saveImageBytes(result.bytes, fileName: fileName);
+          final saveResult =
+              await saveImageBytes(result.bytes, fileName: fileName);
           firstSavedPath ??= saveResult.path;
           successCount++;
         }
@@ -385,12 +400,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
     if (mounted && successCount > 0) {
       ref.read(editHistoryProvider.notifier).addGroup(
-        toolName: 'Batch Resize',
-        toolIcon: Icons.photo_size_select_large_rounded,
-        count: successCount,
-        filePath: firstSavedPath,
-        thumbnailPath: firstSavedPath,
-      );
+            toolName: 'Batch Resize',
+            toolIcon: Icons.photo_size_select_large_rounded,
+            count: successCount,
+            filePath: firstSavedPath,
+            thumbnailPath: firstSavedPath,
+          );
       _showSnack('Batch resize complete. $successCount images saved.');
       InterstitialTracker.instance.trackAction();
       _resetScreen();
@@ -657,6 +672,13 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
+    if (_mode == _ResizeMode.smartCompress) {
+      if (mounted) {
+        setState(() => _estimatedBytes = _targetSizeKB * 1024);
+      }
+      return;
+    }
+
     final target = _resolveTargetSize(state);
     if (target == null) {
       if (mounted) {
@@ -666,14 +688,13 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
 
     final requestId = ++_estimateRequestId;
-    final estimate = await ref
-        .read(imageEditProvider.notifier)
-        .estimateResizeBytes(
-          width: target.width,
-          height: target.height,
-          format: _outputFormat,
-          quality: _quality.value,
-        );
+    final estimate =
+        await ref.read(imageEditProvider.notifier).estimateResizeBytes(
+              width: target.width,
+              height: target.height,
+              format: _outputFormat,
+              quality: _quality.value,
+            );
 
     if (!mounted || requestId != _estimateRequestId) return;
     setState(() => _estimatedBytes = estimate);
@@ -703,22 +724,18 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ref.read(imageEditProvider.notifier).setLoading(true);
 
     final result = _selectedSocialPreset != null && _mode == _ResizeMode.preset
-        ? await ref
-              .read(imageEditProvider.notifier)
-              .resizeToPreset(
-                _selectedSocialPreset!.width,
-                _selectedSocialPreset!.height,
-                _outputFormat,
-                _quality.value,
-              )
-        : await ref
-              .read(imageEditProvider.notifier)
-              .generateResize(
-                width: target.width,
-                height: target.height,
-                format: _outputFormat,
-                quality: _quality.value,
-              );
+        ? await ref.read(imageEditProvider.notifier).resizeToPreset(
+              _selectedSocialPreset!.width,
+              _selectedSocialPreset!.height,
+              _outputFormat,
+              _quality.value,
+            )
+        : await ref.read(imageEditProvider.notifier).generateResize(
+              width: target.width,
+              height: target.height,
+              format: _outputFormat,
+              quality: _quality.value,
+            );
 
     if (!mounted) return;
 
@@ -745,18 +762,22 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
-      final saveResult = await saveImageBytes(result.bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(
+        result.bytes,
+        fileName: fileName,
+        replacePath: _replaceOriginal ? _sourcePathFor(state.fileName) : null,
+      );
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
-        EditHistoryItem(
-          fileName: fileName,
-          toolUsed: 'Image Resizer',
-          editedAt: DateTime.now(),
-          toolIcon: Icons.photo_size_select_large_rounded,
-          filePath: saveResult.path,
-          thumbnailPath: saveResult.path,
-        ),
-      );
+            EditHistoryItem(
+              fileName: fileName,
+              toolUsed: 'Image Resizer',
+              editedAt: DateTime.now(),
+              toolIcon: Icons.photo_size_select_large_rounded,
+              filePath: saveResult.path,
+              thumbnailPath: saveResult.path,
+            ),
+          );
       _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
       InterstitialTracker.instance.trackAction();
     } catch (error) {
@@ -785,9 +806,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ref.read(imageEditProvider.notifier).setLoading(true);
 
     // Apply rotation first, then flip if needed.
-    var result = await ref
-        .read(imageEditProvider.notifier)
-        .generateRotate(
+    var result = await ref.read(imageEditProvider.notifier).generateRotate(
           angleDegrees: _normalizedRotationDegrees,
           format: _outputFormat,
           quality: _quality.value,
@@ -805,15 +824,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
     if (_flipPreviewH || _flipPreviewV) {
       // Load rotated result temporarily, then flip.
-      await ref.read(imageEditProvider.notifier).loadImage(result.bytes, state.fileName ?? 'image.jpg');
-      final flipResult = await ref
+      await ref
           .read(imageEditProvider.notifier)
-          .generateFlip(
-            _flipPreviewH,
-            _flipPreviewV,
-            format: _outputFormat,
-            quality: _quality.value,
-          );
+          .loadImage(result.bytes, state.fileName ?? 'image.jpg');
+      final flipResult =
+          await ref.read(imageEditProvider.notifier).generateFlip(
+                _flipPreviewH,
+                _flipPreviewV,
+                format: _outputFormat,
+                quality: _quality.value,
+              );
       if (!mounted) return;
       result = flipResult ?? result;
     }
@@ -850,9 +870,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
 
     ref.read(imageEditProvider.notifier).setLoading(true);
-    final result = await ref
-        .read(imageEditProvider.notifier)
-        .generateFlip(
+    final result = await ref.read(imageEditProvider.notifier).generateFlip(
           horizontal,
           vertical,
           format: _outputFormat,
@@ -889,6 +907,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
+    // Compression is an export operation. Ask once up front, then process and
+    // save in the same action so users never need to apply and save twice.
+    final replaceOriginal = await _showSaveDialog();
+    if (!mounted) return;
+
     final targetBytes = _targetSizeKB * 1024;
     final result = await ref
         .read(imageEditProvider.notifier)
@@ -903,9 +926,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
-    final fileName = _buildOutputFileName(
+    final fileName = _buildSaveFileName(
       baseName: state.fileName ?? 'image',
       format: _outputFormat,
+      replaceOriginal: replaceOriginal,
     );
     ref
         .read(imageEditProvider.notifier)
@@ -914,23 +938,30 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
-      final saveResult = await saveImageBytes(result.bytes, fileName: fileName);
+      final saveResult = await saveImageBytes(
+        result.bytes,
+        fileName: fileName,
+        replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
+      );
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
-        EditHistoryItem(
-          fileName: fileName,
-          toolUsed: 'Image Resizer',
-          editedAt: DateTime.now(),
-          toolIcon: Icons.compress_rounded,
-          filePath: saveResult.path,
-          thumbnailPath: saveResult.path,
-          compressionLevel: 'Smart',
-        ),
-      );
+            EditHistoryItem(
+              fileName: fileName,
+              toolUsed: 'Image Resizer',
+              editedAt: DateTime.now(),
+              toolIcon: Icons.compress_rounded,
+              filePath: saveResult.path,
+              thumbnailPath: saveResult.path,
+              compressionLevel: 'Smart',
+            ),
+          );
       if (result.fileSize > targetBytes) {
-        _showSnack('Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}');
+        _showSnack(
+            'Minimum quality reached. Final size: ${_formatFileSize(result.fileSize)}');
       } else {
-        _showSnack('Compressed to ${_formatFileSize(result.fileSize)}.');
+        _showSnack(
+          '${replaceOriginal ? 'Replaced original with' : 'Compressed to'} ${_formatFileSize(result.fileSize)}.',
+        );
       }
     } catch (error) {
       _showSnack('Compression applied, but saving failed: $error');
@@ -1039,9 +1070,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     if (parsed == null) return;
     final state = ref.read(imageEditProvider);
     final y = int.tryParse(_cropYController.text) ?? 0;
-    final safeHeight = math
-        .min(parsed, state.height - y)
-        .clamp(1, state.height);
+    final safeHeight =
+        math.min(parsed, state.height - y).clamp(1, state.height);
     if (safeHeight != parsed) {
       _cropHeightController.text = safeHeight.toString();
     }
@@ -1109,9 +1139,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
 
     ref.read(imageEditProvider.notifier).setLoading(true);
-    final result = await ref
-        .read(imageEditProvider.notifier)
-        .generateCrop(
+    final result = await ref.read(imageEditProvider.notifier).generateCrop(
           x: x,
           y: y,
           width: width,
@@ -1128,9 +1156,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(
+    ref.read(imageEditProvider.notifier).replaceWithResult(
           result: result,
           fileName: state.fileName ?? 'image.jpg',
         );
@@ -1183,13 +1209,15 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   int _scaledHeightForWidth(int width) {
     if (_aspectWidth == 0 || _aspectHeight == 0) return width;
     // Use integer arithmetic to avoid floating-point drift
-    return math.max(1, (width * _aspectHeight + _aspectWidth ~/ 2) ~/ _aspectWidth);
+    return math.max(
+        1, (width * _aspectHeight + _aspectWidth ~/ 2) ~/ _aspectWidth);
   }
 
   int _scaledWidthForHeight(int height) {
     if (_aspectWidth == 0 || _aspectHeight == 0) return height;
     // Use integer arithmetic to avoid floating-point drift
-    return math.max(1, (height * _aspectWidth + _aspectHeight ~/ 2) ~/ _aspectHeight);
+    return math.max(
+        1, (height * _aspectWidth + _aspectHeight ~/ 2) ~/ _aspectHeight);
   }
 
   void _rememberRecentSize(Size size) {
@@ -1225,6 +1253,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   String _formatEstimateComparison(ImageEditState state) {
     final estimate = _estimatedBytes;
     if (estimate == null) return 'Estimated file size will appear here';
+    if (_mode == _ResizeMode.smartCompress) {
+      return 'up to ${_formatFileSize(estimate)} target';
+    }
     final delta = estimate - state.fileSize;
     final percent = state.fileSize == 0
         ? 0
@@ -1232,8 +1263,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final changeLabel = delta == 0
         ? 'same size'
         : delta < 0
-        ? '$percent% smaller'
-        : '$percent% larger';
+            ? '$percent% smaller'
+            : '$percent% larger';
     return '~ ${_formatFileSize(estimate)} ($changeLabel)';
   }
 
@@ -1265,7 +1296,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Save Options'),
-        content: const Text('Would you like to replace the original file or save as a new file?'),
+        content: const Text(
+            'Would you like to replace the original file or save as a new file?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1294,42 +1326,14 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return _buildOutputFileName(baseName: baseName, format: format);
   }
 
-  Future<void> _saveCurrentImage() async {
-    final state = ref.read(imageEditProvider);
-    final bytes = state.currentBytes;
-    if (bytes == null || !state.hasImage) {
-      _showSnack('Pick an image first.');
-      return;
+  String? _sourcePathFor(String? fileName) {
+    if (fileName == null) return ref.read(imageEditProvider).sourcePath;
+    for (final file in _batchFiles) {
+      if (file.name == fileName && file.path != null && file.path!.isNotEmpty) {
+        return file.path;
+      }
     }
-
-    _replaceOriginal = await _showSaveDialog();
-    if (!mounted) return;
-
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: _replaceOriginal,
-    );
-
-    try {
-      final saveResult = await saveImageBytes(bytes, fileName: fileName);
-      if (!mounted) return;
-      ref.read(editHistoryProvider.notifier).addEntry(
-        EditHistoryItem(
-          fileName: fileName,
-          toolUsed: 'Image Resizer',
-          editedAt: DateTime.now(),
-          toolIcon: Icons.photo_size_select_large_rounded,
-          filePath: saveResult.path,
-          thumbnailPath: saveResult.path,
-        ),
-      );
-      _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved to gallery');
-      InterstitialTracker.instance.trackAction();
-      _resetScreen();
-    } catch (error) {
-      _showSnack('Saving failed: $error');
-    }
+    return ref.read(imageEditProvider).sourcePath;
   }
 
   void _pushUndoState(Uint8List bytes) {
@@ -1391,7 +1395,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
     if (_activePanel == _EditorPanel.resize &&
         _mode == _ResizeMode.smartCompress) {
-      return 'Apply Compression';
+      return 'Apply Compression & Save';
     }
     return switch (_activePanel) {
       _EditorPanel.resize => 'Apply Resize',
@@ -1408,10 +1412,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     final scheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor:
-          theme.brightness == Brightness.dark
-              ? scheme.surface
-              : const Color(0xFFF9F7FF),
+      backgroundColor: theme.brightness == Brightness.dark
+          ? scheme.surface
+          : const Color(0xFFF9F7FF),
       appBar: AppBar(
         title: const Text('Resize Image'),
         actions: [
@@ -1424,15 +1427,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             IconButton(
               icon: const Icon(Icons.redo_rounded),
               tooltip: 'Redo',
-              onPressed:
-                  (_undoIndex >= 0 && _undoIndex < _undoStack.length - 1)
-                      ? _redo
-                      : null,
-            ),
-            IconButton(
-              icon: const Icon(Icons.save_rounded),
-              tooltip: 'Save to Gallery',
-              onPressed: _saveCurrentImage,
+              onPressed: (_undoIndex >= 0 && _undoIndex < _undoStack.length - 1)
+                  ? _redo
+                  : null,
             ),
           ],
         ],
@@ -1501,7 +1498,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                   icon: const Icon(Icons.add_photo_alternate),
                   label: const Text('Pick Images'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1510,7 +1508,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                   icon: const Icon(Icons.collections_rounded),
                   label: const Text('Batch Resize'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                   ),
                 ),
               ],
@@ -1579,7 +1578,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: scheme.primaryContainer,
                   borderRadius: BorderRadius.circular(20),
@@ -1610,7 +1610,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 label: const Text('Add More'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 ),
               ),
             ],
@@ -1646,7 +1647,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: isSelected ? scheme.primary : scheme.outlineVariant,
+                              color: isSelected
+                                  ? scheme.primary
+                                  : scheme.outlineVariant,
                               width: isSelected ? 2.5 : 1.0,
                             ),
                           ),
@@ -1943,8 +1946,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             for (final size in _recentSizes)
               _RecentSizeChip(
                 label: '${size.width.round()} × ${size.height.round()}',
-                selected:
-                    target != null &&
+                selected: target != null &&
                     target.width == size.width.round() &&
                     target.height == size.height.round(),
                 onTap: () => _applyRecentSize(size),
@@ -2259,7 +2261,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+            color: Theme.of(context)
+                .colorScheme
+                .primaryContainer
+                .withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
@@ -2285,25 +2290,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       ),
       child: Row(
         children: [
-          if (_activePanel != _EditorPanel.resize) ...[
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 20,
-                icon: Icon(Icons.save_rounded, color: scheme.primary),
-                tooltip: 'Save to Gallery',
-                onPressed: _saveCurrentImage,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
           Expanded(
             child: FilledButton.icon(
               onPressed: _applyAndSave,
@@ -2315,14 +2301,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              icon: Icon(switch (_activePanel) {
-                _EditorPanel.resize => Icons.auto_awesome_rounded,
-                _EditorPanel.crop => Icons.crop_rounded,
-                _EditorPanel.rotate => Icons.rotate_right_rounded,
-              }, size: 18),
+              icon: Icon(
+                  switch (_activePanel) {
+                    _EditorPanel.resize => Icons.auto_awesome_rounded,
+                    _EditorPanel.crop => Icons.crop_rounded,
+                    _EditorPanel.rotate => Icons.rotate_right_rounded,
+                  },
+                  size: 18),
               label: Text(
                 _applyButtonLabel,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
             ),
           ),
@@ -2385,7 +2374,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                                 _ResizeMode.percentage => 'Percentage',
                                 _ResizeMode.preset => 'Presets',
                                 _ResizeMode.bestFit => 'Best Fit',
-                                _ResizeMode.smartCompress => 'Smart Compression',
+                                _ResizeMode.smartCompress =>
+                                  'Smart Compression',
                               },
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
@@ -2398,7 +2388,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                             Text(
                               'Lock',
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 12,
                               ),
@@ -2408,7 +2400,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                               value: _lockAspectRatio,
                               onChanged: _toggleAspectLock,
                               activeThumbColor: Colors.white,
-                              activeTrackColor: Theme.of(context).colorScheme.primary,
+                              activeTrackColor:
+                                  Theme.of(context).colorScheme.primary,
                             ),
                           ],
                         ],
@@ -2437,7 +2430,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                         Text(
                           'Lock aspect',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -2447,7 +2441,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                           value: _lockAspectRatio,
                           onChanged: _toggleAspectLock,
                           activeThumbColor: Colors.white,
-                          activeTrackColor: Theme.of(context).colorScheme.primary,
+                          activeTrackColor:
+                              Theme.of(context).colorScheme.primary,
                         ),
                       ],
                     ],
@@ -2491,7 +2486,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -2572,6 +2570,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   Widget _buildPresetGrid() {
+    final imageState = ref.read(imageEditProvider);
+    final target = imageState.hasImage ? _resolveTargetSize(imageState) : null;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -2585,11 +2585,27 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 ),
                 child: Container(
                   width: 120,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                    color: target?.width == preset.width &&
+                            target?.height == preset.height
+                        ? Theme.of(context)
+                            .colorScheme
+                            .primaryContainer
+                            .withValues(alpha: 0.3)
+                        : Theme.of(context).colorScheme.surfaceContainerLowest,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: target?.width == preset.width &&
+                              target?.height == preset.height
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.outlineVariant,
+                      width: target?.width == preset.width &&
+                              target?.height == preset.height
+                          ? 2
+                          : 1,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2634,15 +2650,22 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               borderRadius: BorderRadius.circular(12),
               onTap: () => _selectSocialPreset(preset),
               child: Ink(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: _selectedSocialPreset?.name == preset.name
-                      ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withValues(alpha: 0.3)
                       : Theme.of(context).colorScheme.surfaceContainerLowest,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: _selectedSocialPreset?.name == preset.name
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.5)
+                        ? Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.5)
                         : Theme.of(context).colorScheme.outlineVariant,
                   ),
                 ),
@@ -2665,7 +2688,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                             '${preset.width} × ${preset.height}'
                             '${preset.description == null ? '' : ' • ${preset.description}'}',
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
                             ),
@@ -2776,8 +2801,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             activeColor: scheme.primary,
             onChanged: (value) {
               setState(() {
-                _targetSizeKB =
-                    SocialPresets.targetFileSizeKB[value.round()];
+                _targetSizeKB = SocialPresets.targetFileSizeKB[value.round()];
               });
             },
           ),
@@ -2895,9 +2919,7 @@ class _ModeCard extends StatelessWidget {
               Icon(
                 icon,
                 size: 22,
-                color: selected
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
               ),
               const SizedBox(height: 4),
               Text(
@@ -3027,10 +3049,14 @@ class _RecentSizeChip extends StatelessWidget {
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? scheme.primaryContainer.withValues(alpha: 0.3) : scheme.surfaceContainerLowest,
+          color: selected
+              ? scheme.primaryContainer.withValues(alpha: 0.3)
+              : scheme.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? scheme.primary.withValues(alpha: 0.5) : scheme.outlineVariant,
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.5)
+                : scheme.outlineVariant,
           ),
         ),
         child: Text(
@@ -3063,7 +3089,9 @@ class _PreviewToolButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: selected ? scheme.primary : scheme.primaryContainer.withValues(alpha: 0.4),
+      color: selected
+          ? scheme.primary
+          : scheme.primaryContainer.withValues(alpha: 0.4),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -3123,7 +3151,8 @@ class _MetaPill extends StatelessWidget {
 }
 
 class _RotateStepChip extends StatelessWidget {
-  const _RotateStepChip({required this.label, required this.onTap, this.isActive = false});
+  const _RotateStepChip(
+      {required this.label, required this.onTap, this.isActive = false});
 
   final String label;
   final VoidCallback onTap;
@@ -3224,8 +3253,7 @@ class _InteractiveImagePreview extends StatefulWidget {
     required int width,
     required int height,
     bool rebuild,
-  })
-  onCropUpdate;
+  }) onCropUpdate;
 
   @override
   State<_InteractiveImagePreview> createState() =>
@@ -3240,9 +3268,11 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
         final maxWidth = constraints.maxWidth.toDouble();
         final normalizedRotation = widget.rotationDegrees % 360;
         final isCropMode = widget.activePanel == _EditorPanel.crop;
-        final maxPreviewHeight = MediaQuery.of(context).size.height * (isCropMode ? 0.45 : 0.22);
+        final maxPreviewHeight =
+            MediaQuery.of(context).size.height * (isCropMode ? 0.45 : 0.22);
         final basePreviewHeight = math
-            .min(maxWidth * (widget.imageHeight / widget.imageWidth), maxPreviewHeight)
+            .min(maxWidth * (widget.imageHeight / widget.imageWidth),
+                maxPreviewHeight)
             .toDouble();
         final baseScale = math.min(
           maxWidth / math.max(widget.imageWidth, 1),
@@ -3261,9 +3291,8 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                 maxWidth / math.max(rotatedWidth, 1),
                 maxPreviewHeight / math.max(rotatedHeight, 1),
               );
-        final previewWidth = normalizedRotation == 0
-            ? maxWidth
-            : rotatedWidth * rotationScale;
+        final previewWidth =
+            normalizedRotation == 0 ? maxWidth : rotatedWidth * rotationScale;
         final previewHeight = normalizedRotation == 0
             ? basePreviewHeight
             : rotatedHeight * rotationScale;
@@ -3459,10 +3488,10 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
       'tr': Offset(hx(_cropX + _cropWidth), hy(_cropY)),
       'bl': Offset(hx(_cropX), hy(_cropY + _cropHeight)),
       'br': Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight)),
-      't':  Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY)),
-      'b':  Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY + _cropHeight)),
-      'l':  Offset(hx(_cropX), hy(_cropY + _cropHeight ~/ 2)),
-      'r':  Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight ~/ 2)),
+      't': Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY)),
+      'b': Offset(hx(_cropX + _cropWidth ~/ 2), hy(_cropY + _cropHeight)),
+      'l': Offset(hx(_cropX), hy(_cropY + _cropHeight ~/ 2)),
+      'r': Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight ~/ 2)),
     };
 
     for (final id in ['tl', 'tr', 'bl', 'br', 't', 'b', 'l', 'r']) {
@@ -3470,7 +3499,8 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
     }
 
     final r = Rect.fromLTWH(
-      hx(_cropX), hy(_cropY),
+      hx(_cropX),
+      hy(_cropY),
       hx(_cropX + _cropWidth) - hx(_cropX),
       hy(_cropY + _cropHeight) - hy(_cropY),
     );
@@ -3498,17 +3528,46 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
 
     switch (_draggingHandle) {
       case 'move':
-        left += dx; top += dy;
-        right += dx; bottom += dy;
+        left += dx;
+        top += dy;
+        right += dx;
+        bottom += dy;
+        // Moving the frame must preserve its dimensions at every edge. The
+        // former independent edge clamps turned a drag into an unintended
+        // resize when the frame reached the image boundary.
+        left = left.clamp(0, widget.imageWidth - _cropWidth);
+        top = top.clamp(0, widget.imageHeight - _cropHeight);
+        right = left + _cropWidth;
+        bottom = top + _cropHeight;
         break;
-      case 'tl': left += dx; top += dy; break;
-      case 'tr': right += dx; top += dy; break;
-      case 'bl': left += dx; bottom += dy; break;
-      case 'br': right += dx; bottom += dy; break;
-      case 't': top += dy; break;
-      case 'b': bottom += dy; break;
-      case 'l': left += dx; break;
-      case 'r': right += dx; break;
+      case 'tl':
+        left += dx;
+        top += dy;
+        break;
+      case 'tr':
+        right += dx;
+        top += dy;
+        break;
+      case 'bl':
+        left += dx;
+        bottom += dy;
+        break;
+      case 'br':
+        right += dx;
+        bottom += dy;
+        break;
+      case 't':
+        top += dy;
+        break;
+      case 'b':
+        bottom += dy;
+        break;
+      case 'l':
+        left += dx;
+        break;
+      case 'r':
+        right += dx;
+        break;
     }
 
     left = left.clamp(0, widget.imageWidth);
@@ -3517,14 +3576,18 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
     bottom = bottom.clamp(0, widget.imageHeight);
 
     if (right - left < _minCropSize) {
-      if (_draggingHandle == 'l' || _draggingHandle == 'tl' || _draggingHandle == 'bl') {
+      if (_draggingHandle == 'l' ||
+          _draggingHandle == 'tl' ||
+          _draggingHandle == 'bl') {
         left = (right - _minCropSize).clamp(0, widget.imageWidth);
       } else {
         right = (left + _minCropSize).clamp(0, widget.imageWidth);
       }
     }
     if (bottom - top < _minCropSize) {
-      if (_draggingHandle == 't' || _draggingHandle == 'tl' || _draggingHandle == 'tr') {
+      if (_draggingHandle == 't' ||
+          _draggingHandle == 'tl' ||
+          _draggingHandle == 'tr') {
         top = (bottom - _minCropSize).clamp(0, widget.imageHeight);
       } else {
         bottom = (top + _minCropSize).clamp(0, widget.imageHeight);
@@ -3533,40 +3596,63 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
 
     final ratio = widget.cropAspectRatio;
     if (ratio != null && _draggingHandle != 'move') {
-      int w = right - left;
-      int h = bottom - top;
+      final handle = _draggingHandle!;
+      final changesLeft = handle.contains('l');
+      final changesRight = handle.contains('r');
+      final changesTop = handle.contains('t');
+      final changesBottom = handle.contains('b');
+      final isCorner =
+          (changesLeft || changesRight) && (changesTop || changesBottom);
 
-      final topEdge = _draggingHandle == 't' || _draggingHandle == 'tl' || _draggingHandle == 'tr';
-      final bottomEdge = _draggingHandle == 'b' || _draggingHandle == 'bl' || _draggingHandle == 'br';
-      final leftEdge = _draggingHandle == 'l' || _draggingHandle == 'tl' || _draggingHandle == 'bl';
-      final rightEdge = _draggingHandle == 'r' || _draggingHandle == 'tr' || _draggingHandle == 'br';
+      final anchorX = changesLeft ? right : left;
+      final anchorY = changesTop ? bottom : top;
+      final maxWidth = changesLeft ? anchorX : widget.imageWidth - anchorX;
+      final maxHeight = changesTop ? anchorY : widget.imageHeight - anchorY;
 
-      bool adjusted = false;
-      final targetH = (w / ratio).round();
-      if (targetH >= _minCropSize) {
-        if (topEdge) {
-          final newTop = bottom - targetH;
-          if (newTop >= 0) { top = newTop; adjusted = true; }
+      int width;
+      int height;
+      if (isCorner) {
+        final widthFromDrag = math.max(_minCropSize, right - left);
+        final heightFromDrag = math.max(_minCropSize, bottom - top);
+        final widthFromHeight = (heightFromDrag * ratio).round();
+        final heightFromWidth = (widthFromDrag / ratio).round();
+        if ((widthFromHeight - widthFromDrag).abs() <
+            (heightFromWidth - heightFromDrag).abs()) {
+          width = widthFromDrag;
+          height = widthFromHeight;
+        } else {
+          width = heightFromWidth;
+          height = heightFromDrag;
         }
-        if (!adjusted && bottomEdge) {
-          final newBottom = top + targetH;
-          if (newBottom <= widget.imageHeight) { bottom = newBottom; adjusted = true; }
-        }
+      } else if (changesLeft || changesRight) {
+        width = math.max(_minCropSize, right - left);
+        height = (width / ratio).round();
+      } else {
+        height = math.max(_minCropSize, bottom - top);
+        width = (height * ratio).round();
       }
 
-      if (!adjusted) {
-        final targetW = (h * ratio).round();
-        if (targetW >= _minCropSize) {
-          if (leftEdge) {
-            final newLeft = right - targetW;
-            if (newLeft >= 0) { left = newLeft; }
-          } else if (rightEdge) {
-            final newRight = left + targetW;
-            if (newRight <= widget.imageWidth) { right = newRight; }
-          }
-        }
+      final scale = math.min(
+        maxWidth / math.max(width, 1),
+        maxHeight / math.max(height, 1),
+      );
+      width = math.max(_minCropSize, (width * scale).floor());
+      height = math.max(_minCropSize, (width / ratio).round());
+      if (height > maxHeight) {
+        height = math.max(_minCropSize, maxHeight);
+        width = math.max(_minCropSize, (height * ratio).round());
       }
+
+      left = changesLeft ? anchorX - width : anchorX;
+      right = left + width;
+      top = changesTop ? anchorY - height : anchorY;
+      bottom = top + height;
     }
+
+    left = left.clamp(0, widget.imageWidth - 1);
+    top = top.clamp(0, widget.imageHeight - 1);
+    right = right.clamp(left + 1, widget.imageWidth);
+    bottom = bottom.clamp(top + 1, widget.imageHeight);
 
     _cropX = left;
     _cropY = top;
@@ -3578,8 +3664,10 @@ class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
   void _onPanEnd(DragEndDetails d) {
     if (_draggingHandle != null) {
       widget.onCropEnd(
-        x: _cropX, y: _cropY,
-        width: _cropWidth, height: _cropHeight,
+        x: _cropX,
+        y: _cropY,
+        width: _cropWidth,
+        height: _cropHeight,
         rebuild: true,
       );
     }
@@ -3680,13 +3768,16 @@ class _CropPainter extends CustomPainter {
 
     // Corner circles
     final corners = [
-      cropRect.topLeft, cropRect.topRight,
-      cropRect.bottomLeft, cropRect.bottomRight,
+      cropRect.topLeft,
+      cropRect.topRight,
+      cropRect.bottomLeft,
+      cropRect.bottomRight,
     ];
     for (final c in corners) {
       canvas.drawCircle(c, 12, Paint()..color = Colors.white);
       canvas.drawCircle(
-        c, 12,
+        c,
+        12,
         Paint()
           ..color = const Color(0xFF8B1BFF)
           ..style = PaintingStyle.stroke
@@ -3719,8 +3810,10 @@ class _CropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CropPainter oldDelegate) {
-    return x != oldDelegate.x || y != oldDelegate.y ||
-        width != oldDelegate.width || height != oldDelegate.height ||
+    return x != oldDelegate.x ||
+        y != oldDelegate.y ||
+        width != oldDelegate.width ||
+        height != oldDelegate.height ||
         imageWidth != oldDelegate.imageWidth ||
         imageHeight != oldDelegate.imageHeight ||
         containerSize != oldDelegate.containerSize;

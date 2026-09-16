@@ -53,14 +53,16 @@ class PdfPageSettings {
   }
 
   static const PdfPageSettings defaults = PdfPageSettings(
-    pageSize: PdfPageSize.a4,
-    orientation: PdfOrientation.portrait,
+    // A page that matches its source image is the least surprising default:
+    // it keeps every pixel visible and does not introduce white borders.
+    pageSize: PdfPageSize.matchImage,
+    orientation: PdfOrientation.auto,
     fitMode: ImageFitMode.fit,
     quality: PdfQuality.optimized,
-    marginTop: 0.25,
-    marginBottom: 0.25,
-    marginLeft: 0.25,
-    marginRight: 0.25,
+    marginTop: 0,
+    marginBottom: 0,
+    marginLeft: 0,
+    marginRight: 0,
   );
 }
 

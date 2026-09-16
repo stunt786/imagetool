@@ -155,44 +155,25 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
               ),
             ),
             const SizedBox(height: 8),
-            ...ConvertDpi.values.map((dpi) {
-              final isSelected = dpi == widget.state.dpi;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Material(
-                  color: isSelected
-                      ? theme.colorScheme.primaryContainer
-                      : theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    onTap: () => widget.onDpiChanged(dpi),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Radio<ConvertDpi>(
-                            value: dpi,
-                            onChanged: (_) => widget.onDpiChanged(dpi),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            dpi.label,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: ConvertDpi.values.map((dpi) {
+                final isSelected = dpi == widget.state.dpi;
+                return ChoiceChip(
+                  label: Text(dpi.label),
+                  selected: isSelected,
+                  showCheckmark: false,
+                  selectedColor: theme.colorScheme.primaryContainer,
+                  side: BorderSide(
+                    color: isSelected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outlineVariant,
                   ),
-                ),
-              );
-            }),
+                  onSelected: (_) => widget.onDpiChanged(dpi),
+                );
+              }).toList(growable: false),
+            ),
           ],
 
           const SizedBox(height: 16),

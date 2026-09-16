@@ -20,6 +20,10 @@ final documentBatchProvider =
 );
 
 class DocumentBatchNotifier extends Notifier<DocumentBatch> {
+  final List<DocumentBatch> _undoStack = <DocumentBatch>[];
+  final List<DocumentBatch> _redoStack = <DocumentBatch>[];
+  static const int _maxUndoSteps = 20;
+
   @override
   DocumentBatch build() {
     return const DocumentBatch(
@@ -28,11 +32,34 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     );
   }
 
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+
+  void _recordEdit() {
+    if (!state.hasPages) return;
+    _undoStack.add(state);
+    if (_undoStack.length > _maxUndoSteps) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  void undo() {
+    if (!canUndo) return;
+    _redoStack.add(state);
+    state = _undoStack.removeLast();
+  }
+
+  void redo() {
+    if (!canRedo) return;
+    _undoStack.add(state);
+    state = _redoStack.removeLast();
+  }
+
   /// Returns the display bytes of a scanned page, applying global watermark if enabled.
   Uint8List getExportPageBytes(int index, AppSettingsState settings) {
     final page = state.pages.elementAtOrNull(index);
     if (page == null) return Uint8List(0);
-    return WatermarkHelper.applyGlobalWatermarkIfNeeded(page.displayBytes, settings);
+    return WatermarkHelper.applyGlobalWatermarkIfNeeded(
+        page.displayBytes, settings);
   }
 
   /// Returns all scanned page bytes for export, applying global watermark if enabled.
@@ -55,6 +82,8 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
       createdAt: DateTime.now(),
       batchDirectory: batchDir.path,
     );
+    _undoStack.clear();
+    _redoStack.clear();
   }
 
   Future<void> addPageFromPath(String filePath) async {
@@ -156,6 +185,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
   }
 
   void updatePage(int index, ScannedPage page) {
+    _recordEdit();
     state = state.updatePage(index, page);
   }
 
@@ -164,6 +194,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
   Future<void> updatePageAndPersist(int index, ScannedPage page) async {
     if (index < 0 || index >= state.pages.length) return;
 
+    _recordEdit();
     var persistedPage = page;
     if (state.id.isNotEmpty &&
         state.batchDirectory != null &&
@@ -227,6 +258,8 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
       id: '',
       pages: [],
     );
+    _undoStack.clear();
+    _redoStack.clear();
   }
 
   void _saveToEditHistory({FilterType? filterType}) {
@@ -239,11 +272,11 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
         : 'Document Scan';
 
     ref.read(editHistoryProvider.notifier).addGroup(
-      toolName: toolName,
-      toolIcon: Icons.document_scanner_outlined,
-      count: state.pages.length,
-      filePath: filePath,
-    );
+          toolName: toolName,
+          toolIcon: Icons.document_scanner_outlined,
+          count: state.pages.length,
+          filePath: filePath,
+        );
   }
 
   String _filterDisplayName(FilterType type) {

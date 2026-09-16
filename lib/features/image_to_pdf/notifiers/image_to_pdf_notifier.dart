@@ -13,7 +13,8 @@ import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/image_to_pdf_state.dart';
 
-final imageToPdfProvider = NotifierProvider<ImageToPdfNotifier, ImageToPdfState>(
+final imageToPdfProvider =
+    NotifierProvider<ImageToPdfNotifier, ImageToPdfState>(
   ImageToPdfNotifier.new,
 );
 
@@ -124,14 +125,14 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
   Future<void> _loadImage(int index) async {
     if (index < 0 || index >= state.images.length) return;
-    
+
     final item = state.images[index];
     if (item.isLoaded) return;
 
     try {
       final file = File(item.path);
       final bytes = await file.readAsBytes();
-      
+
       int? width;
       int? height;
       try {
@@ -140,8 +141,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           width = decoded[0];
           height = decoded[1];
         }
-      } catch (_) {
-      }
+      } catch (_) {}
 
       final updatedItem = item.copyWith(
         imageBytes: bytes,
@@ -150,7 +150,8 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       );
       state = state.updateImage(index, updatedItem);
     } catch (e) {
-      state = state.copyWith(errorMessage: 'Failed to load image: ${item.name}');
+      state =
+          state.copyWith(errorMessage: 'Failed to load image: ${item.name}');
     }
   }
 
@@ -160,8 +161,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       if (image != null) {
         return [image.width, image.height];
       }
-    } catch (_) {
-    }
+    } catch (_) {}
     return null;
   }
 
@@ -211,7 +211,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
       for (int i = 0; i < state.images.length; i++) {
         final item = state.images[i];
-        
+
         if (!item.isLoaded) {
           await _loadImage(i);
         }
@@ -286,7 +286,8 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           processedBytes = Uint8List.fromList(jpegBytes);
         } else {
           if (decodedImage.hasAlpha) {
-            final flattened = img.Image(width: decodedImage.width, height: decodedImage.height);
+            final flattened = img.Image(
+                width: decodedImage.width, height: decodedImage.height);
             img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
             img.compositeImage(flattened, decodedImage);
             final pngBytes = img.encodePng(flattened);
@@ -310,7 +311,8 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
                   right: marginRight,
                   bottom: marginBottom,
                 ),
-                child: _buildImageWidget(pdfImage, settings.fitMode, availableFormat, imageWidth, imageHeight),
+                child: _buildImageWidget(pdfImage, settings.fitMode,
+                    availableFormat, imageWidth, imageHeight),
               );
 
               if (appSettings.enableGlobalWatermark) {
@@ -338,15 +340,19 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
       final pdfBytes = await pdf.save();
 
-      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final saveDir =
+          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'pixeltools_$timestamp.pdf';
+      final firstName = state.images.first.name;
+      final dot = firstName.lastIndexOf('.');
+      final baseName = dot > 0 ? firstName.substring(0, dot) : firstName;
+      final fileName = 'pixeltools_${baseName}_$timestamp.pdf';
       final outputPath = path.join(saveDir.path, fileName);
-      
+
       final file = File(outputPath);
       await file.writeAsBytes(pdfBytes, flush: true);
-      
+
       final fileSize = await file.length();
       if (!await file.exists() || fileSize == 0) {
         throw Exception('PDF file was not created or is empty');

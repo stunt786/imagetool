@@ -14,20 +14,28 @@ class EditHistoryItem {
     this.compressionLevel,
     this.isGroup = false,
     this.groupCount,
+    this.pagePaths,
   });
 
   final String fileName;
   final String toolUsed;
   final DateTime editedAt;
+
   /// Actual saved file path on disk (for open/share actions).
   final String? filePath;
   final String? thumbnailPath;
   final IconData toolIcon;
   final String? compressionLevel;
+
   /// True when this entry represents a batch operation (multiple files).
   final bool isGroup;
+
   /// Number of files in the batch group.
   final int? groupCount;
+
+  /// Pages retained for a scanner document. Keeping these paths lets Files
+  /// reopen the complete scan rather than only its first thumbnail.
+  final List<String>? pagePaths;
 
   /// Friendly relative-time label
   String get timeAgo {
@@ -49,6 +57,7 @@ class EditHistoryItem {
     String? compressionLevel,
     bool? isGroup,
     int? groupCount,
+    List<String>? pagePaths,
   }) {
     return EditHistoryItem(
       fileName: fileName ?? this.fileName,
@@ -60,6 +69,7 @@ class EditHistoryItem {
       compressionLevel: compressionLevel ?? this.compressionLevel,
       isGroup: isGroup ?? this.isGroup,
       groupCount: groupCount ?? this.groupCount,
+      pagePaths: pagePaths ?? this.pagePaths,
     );
   }
 
@@ -75,22 +85,27 @@ class EditHistoryItem {
       'compressionLevel': compressionLevel,
       'isGroup': isGroup,
       'groupCount': groupCount,
+      'pagePaths': pagePaths,
     };
   }
 
   factory EditHistoryItem.fromJson(Map<String, dynamic> json) {
-    final codePoint = json['toolIconCodePoint'] as int? ?? Icons.image_outlined.codePoint;
+    final codePoint =
+        json['toolIconCodePoint'] as int? ?? Icons.image_outlined.codePoint;
     final fontFamily = json['toolIconFontFamily'] as String? ?? 'MaterialIcons';
     return EditHistoryItem(
       fileName: json['fileName'] as String? ?? '',
       toolUsed: json['toolUsed'] as String? ?? '',
-      editedAt: DateTime.tryParse(json['editedAt'] as String? ?? '') ?? DateTime.now(),
+      editedAt: DateTime.tryParse(json['editedAt'] as String? ?? '') ??
+          DateTime.now(),
       filePath: json['filePath'] as String?,
       thumbnailPath: json['thumbnailPath'] as String?,
       toolIcon: IconData(codePoint, fontFamily: fontFamily),
       compressionLevel: json['compressionLevel'] as String?,
       isGroup: json['isGroup'] as bool? ?? false,
       groupCount: json['groupCount'] as int?,
+      pagePaths:
+          (json['pagePaths'] as List<dynamic>?)?.whereType<String>().toList(),
     );
   }
 

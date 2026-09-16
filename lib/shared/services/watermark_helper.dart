@@ -115,12 +115,14 @@ class WatermarkHelper {
   }) {
     if (!settings.enableGlobalWatermark) return image;
 
-    final useSidebar = asRightVerticalSidebar ?? settings.useImageVerticalSidebar;
+    final useSidebar =
+        asRightVerticalSidebar ?? settings.useImageVerticalSidebar;
     if (useSidebar) {
       return applyRightVerticalSidebar(image, settings, iconBytes: iconBytes);
     }
 
-    final text = settings.watermarkText.isEmpty ? 'PixelTools' : settings.watermarkText;
+    final text =
+        settings.watermarkText.isEmpty ? 'PixelTools' : settings.watermarkText;
     final colorHex = settings.watermarkColorHex;
     final opacity = settings.watermarkOpacity.clamp(0.1, 1.0);
     final posIndex = settings.watermarkPositionIndex;
@@ -137,7 +139,8 @@ class WatermarkHelper {
             : img.arial14);
 
     final charWidth = font == img.arial48 ? 28 : (font == img.arial24 ? 14 : 8);
-    final charHeight = font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
+    final charHeight =
+        font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
 
     if (iconBytes != null && iconBytes.isNotEmpty) {
       setIconBytes(iconBytes);
@@ -161,7 +164,8 @@ class WatermarkHelper {
     }
 
     final spacing = (charWidth * 0.45).round();
-    final totalWidth = (iconDim > 0 ? iconDim + spacing : 0) + text.length * charWidth;
+    final totalWidth =
+        (iconDim > 0 ? iconDim + spacing : 0) + text.length * charWidth;
 
     const margin = 20;
     int x;
@@ -222,10 +226,20 @@ class WatermarkHelper {
             final dstA = existing.a / 255.0;
             final outA = srcA + dstA * (1.0 - srcA);
             if (outA > 0) {
-              final outR = ((textColor.r * srcA + existing.r * dstA * (1.0 - srcA)) / outA).round();
-              final outG = ((textColor.g * srcA + existing.g * dstA * (1.0 - srcA)) / outA).round();
-              final outB = ((textColor.b * srcA + existing.b * dstA * (1.0 - srcA)) / outA).round();
-              image.setPixel(px, py, img.ColorRgba8(outR, outG, outB, (outA * 255).round()));
+              final outR =
+                  ((textColor.r * srcA + existing.r * dstA * (1.0 - srcA)) /
+                          outA)
+                      .round();
+              final outG =
+                  ((textColor.g * srcA + existing.g * dstA * (1.0 - srcA)) /
+                          outA)
+                      .round();
+              final outB =
+                  ((textColor.b * srcA + existing.b * dstA * (1.0 - srcA)) /
+                          outA)
+                      .round();
+              image.setPixel(px, py,
+                  img.ColorRgba8(outR, outG, outB, (outA * 255).round()));
             }
           }
         }
@@ -255,7 +269,8 @@ class WatermarkHelper {
   }) {
     if (!settings.enableGlobalWatermark) return image;
 
-    final text = settings.watermarkText.isEmpty ? 'PixelTools' : settings.watermarkText;
+    final text =
+        settings.watermarkText.isEmpty ? 'PixelTools' : settings.watermarkText;
     final colorHex = settings.watermarkColorHex;
 
     // Subtle low opacity for photo exports
@@ -272,7 +287,8 @@ class WatermarkHelper {
         : (minDimension >= 700 ? img.arial24 : img.arial14);
 
     final charWidth = font == img.arial48 ? 28 : (font == img.arial24 ? 14 : 8);
-    final charHeight = font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
+    final charHeight =
+        font == img.arial48 ? 48 : (font == img.arial24 ? 24 : 14);
 
     if (iconBytes != null && iconBytes.isNotEmpty) {
       setIconBytes(iconBytes);
@@ -298,12 +314,14 @@ class WatermarkHelper {
     final padX = (charWidth * 0.4).round();
     final padY = (charHeight * 0.2).round();
     final spacing = (charWidth * 0.45).round();
-    final contentWidth = (iconDim > 0 ? iconDim + spacing : 0) + text.length * charWidth;
+    final contentWidth =
+        (iconDim > 0 ? iconDim + spacing : 0) + text.length * charWidth;
     final stripWidth = contentWidth + padX * 2;
     final stripHeight = charHeight + padY * 2;
 
     // Create transparent horizontal strip canvas (no background color)
-    final strip = img.Image(width: stripWidth, height: stripHeight, numChannels: 4);
+    final strip =
+        img.Image(width: stripWidth, height: stripHeight, numChannels: 4);
     strip.clear(img.ColorRgba8(0, 0, 0, 0));
 
     int drawX = padX;
@@ -392,9 +410,12 @@ class WatermarkHelper {
         final da = dstPixel.a / 255.0;
         final outA = sa + da * (1.0 - sa);
         if (outA > 0) {
-          final outR = ((srcPixel.r * sa + dstPixel.r * da * (1.0 - sa)) / outA).round();
-          final outG = ((srcPixel.g * sa + dstPixel.g * da * (1.0 - sa)) / outA).round();
-          final outB = ((srcPixel.b * sa + dstPixel.b * da * (1.0 - sa)) / outA).round();
+          final outR =
+              ((srcPixel.r * sa + dstPixel.r * da * (1.0 - sa)) / outA).round();
+          final outG =
+              ((srcPixel.g * sa + dstPixel.g * da * (1.0 - sa)) / outA).round();
+          final outB =
+              ((srcPixel.b * sa + dstPixel.b * da * (1.0 - sa)) / outA).round();
           image.setPixel(
             dx,
             dy,
@@ -443,7 +464,8 @@ class WatermarkHelper {
     }
 
     final effectiveBytes = iconBytes ?? _cachedIconBytes;
-    final hasIcon = useAppLogo && effectiveBytes != null && effectiveBytes.isNotEmpty;
+    final hasIcon =
+        useAppLogo && effectiveBytes != null && effectiveBytes.isNotEmpty;
 
     return pw.Align(
       alignment: alignment,
@@ -453,8 +475,10 @@ class WatermarkHelper {
           mainAxisSize: pw.MainAxisSize.min,
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-              if (hasIcon) ...[
-                pw.ClipRRect(
+            if (hasIcon) ...[
+              pw.Opacity(
+                opacity: safeOpacity,
+                child: pw.ClipRRect(
                   horizontalRadius: 3,
                   verticalRadius: 3,
                   child: pw.Image(
@@ -464,20 +488,21 @@ class WatermarkHelper {
                     fit: pw.BoxFit.contain,
                   ),
                 ),
-                pw.SizedBox(width: 5),
-              ],
-              if (text.isNotEmpty)
-                pw.Text(
-                  text,
-                  style: pw.TextStyle(
-                    color: textColor,
-                    fontSize: 10,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
+              ),
+              pw.SizedBox(width: 5),
             ],
-          ),
+            if (text.isNotEmpty)
+              pw.Text(
+                text,
+                style: pw.TextStyle(
+                  color: textColor,
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+          ],
         ),
+      ),
     );
   }
 }

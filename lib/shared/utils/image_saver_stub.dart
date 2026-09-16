@@ -6,7 +6,11 @@ abstract final class AppSavePaths {
   static const String defaultDirectoryName = 'PixelTools';
 }
 
-Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
+Future<ImageSaveResult> saveImageBytesImpl(
+  Uint8List bytes, {
+  required String fileName,
+  String? replacePath,
+}) async {
   throw UnsupportedError('Saving images is not supported on this platform.');
 }
 

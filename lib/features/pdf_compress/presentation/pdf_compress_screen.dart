@@ -61,7 +61,11 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
         actions: [
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFile || state.outputPath != null || state.publicExportPath != null ? notifier.clear : null,
+            onPressed: state.hasFile ||
+                    state.outputPath != null ||
+                    state.publicExportPath != null
+                ? notifier.clear
+                : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -75,7 +79,10 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFile && !state.isProcessing && state.outputPath == null && state.publicExportPath == null)
+          if (state.hasFile &&
+              !state.isProcessing &&
+              state.outputPath == null &&
+              state.publicExportPath == null)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -124,7 +131,8 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDF'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),
           ],
@@ -186,12 +194,16 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                       ),
                       if (state.selectedFileSize != null)
                         Text(
-                          state.outputPath != null && state.outputFileSize != null
+                          state.outputPath != null &&
+                                  state.outputFileSize != null
                               ? '${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)}'
-                              : PdfService.formatFileSize(state.selectedFileSize!),
+                              : PdfService.formatFileSize(
+                                  state.selectedFileSize!),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: state.outputPath != null ? FontWeight.w600 : null,
+                            fontWeight: state.outputPath != null
+                                ? FontWeight.w600
+                                : null,
                           ),
                         ),
                     ],
@@ -207,7 +219,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
             ),
           ),
           const SizedBox(height: 20),
-
           if (state.isProcessing) ...[
             LinearProgressIndicator(value: state.progress),
             const SizedBox(height: 8),
@@ -219,7 +230,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
             ),
             const SizedBox(height: 20),
           ],
-
           if (state.outputPath != null) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -250,7 +260,9 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                   const SizedBox(height: 12),
                   if (state.compressionRatio != null)
                     Text(
-                      'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})',
+                      state.compressionRatio! >= 0
+                          ? 'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})'
+                          : 'This PDF is already at its practical compression limit. The original-size output was retained to avoid making it larger.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSecondaryContainer,
                         fontWeight: FontWeight.w600,
@@ -275,7 +287,11 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/'),
+                      state.publicExportPath!
+                          .split('/')
+                          .sublist(
+                              0, state.publicExportPath!.split('/').length - 1)
+                          .join('/'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'monospace',
                         color: theme.colorScheme.onSecondaryContainer,
@@ -286,7 +302,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             if (state.publicExportPath == null) ...[
               FilledButton.icon(
                 onPressed: () => notifier.exportFile(),
@@ -298,7 +313,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
               ),
               const SizedBox(height: 12),
             ],
-
             Text(
               'Output File',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -345,7 +359,6 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                 ],
               ),
             ),
-
             if (state.publicExportPath != null) ...[
               const SizedBox(height: 20),
               Row(
@@ -390,7 +403,9 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLowest,
-        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5))),
+        border: Border(
+            top: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.5))),
       ),
       child: SafeArea(
         child: SizedBox(

@@ -30,6 +30,8 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
+  final bool preserveAspectRatio =
+      params['preserveAspectRatio'] as bool? ?? true;
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -40,17 +42,16 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
     final safeWidth = width.clamp(1, 12000);
     final safeHeight = height.clamp(1, 12000);
 
-    final sourceAspect = image.width / image.height;
-    final targetAspect = safeWidth / safeHeight;
-
-    int newWidth;
-    int newHeight;
-    if (sourceAspect > targetAspect) {
-      newWidth = safeWidth;
-      newHeight = (safeWidth / sourceAspect).round().clamp(1, 12000);
-    } else {
-      newHeight = safeHeight;
-      newWidth = (safeHeight * sourceAspect).round().clamp(1, 12000);
+    int newWidth = safeWidth;
+    int newHeight = safeHeight;
+    if (preserveAspectRatio) {
+      final sourceAspect = image.width / image.height;
+      final targetAspect = safeWidth / safeHeight;
+      if (sourceAspect > targetAspect) {
+        newHeight = (safeWidth / sourceAspect).round().clamp(1, 12000);
+      } else {
+        newWidth = (safeHeight * sourceAspect).round().clamp(1, 12000);
+      }
     }
 
     processed = img.copyResize(
@@ -61,7 +62,8 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
     );
   }
 
-  final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
+  final encoded = _encodeImage(processed,
+      format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -98,7 +100,8 @@ ImageProcessResult? _isolateCrop(Map<String, dynamic> params) {
     height: safeHeight,
   );
 
-  final encoded = _encodeImage(cropped, format: format, quality: quality, settings: settings);
+  final encoded = _encodeImage(cropped,
+      format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -121,7 +124,8 @@ ImageProcessResult? _isolateRotate(Map<String, dynamic> params) {
 
   final rotated = img.copyRotate(image, angle: angle);
 
-  final encoded = _encodeImage(rotated, format: format, quality: quality, settings: settings);
+  final encoded = _encodeImage(rotated,
+      format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -151,7 +155,8 @@ ImageProcessResult? _isolateFlip(Map<String, dynamic> params) {
     flipped = img.flipVertical(flipped);
   }
 
-  final encoded = _encodeImage(flipped, format: format, quality: quality, settings: settings);
+  final encoded = _encodeImage(flipped,
+      format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -214,7 +219,8 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
     );
   }
 
-  final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
+  final encoded = _encodeImage(processed,
+      format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
 
   return ImageProcessResult(
@@ -228,6 +234,9 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
 ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final Uint8List bytes = params['bytes'] as Uint8List;
   final int targetBytes = params['targetBytes'] as int;
+  // Leave a small safety margin so a user selecting 100 KB receives a file
+  // below the displayed target rather than one that rounds above it.
+  final int budgetBytes = math.max(1, (targetBytes * 0.99).floor());
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final SendPort? sendPort = params['sendPort'] as SendPort?;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
@@ -244,7 +253,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       height: h,
       interpolation: img.Interpolation.average,
     );
-    final encoded = _encodeImage(processed, format: format, quality: quality, settings: settings);
+    final encoded = _encodeImage(processed,
+        format: format, quality: quality, settings: settings);
     return ImageProcessResult(
       bytes: Uint8List.fromList(encoded),
       width: processed.width,
@@ -257,7 +267,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   ImageProcessResult? bestUnderTarget;
 
   void consider(ImageProcessResult r) {
-    if (r.fileSize <= targetBytes) {
+    if (r.fileSize <= budgetBytes) {
       if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
         bestUnderTarget = r;
       }
@@ -273,7 +283,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final probe = encodeAt(image.width, image.height, 50);
   consider(probe);
   reportProgress(0.15);
-  if (probe.fileSize <= targetBytes) {
+  if (probe.fileSize <= budgetBytes) {
     int low = 1;
     int high = 100;
     ImageProcessResult? best;
@@ -284,7 +294,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       consider(result);
       searchProgress += 0.05;
       reportProgress(searchProgress.clamp(0.15, 0.45));
-      if (result.fileSize <= targetBytes) {
+      if (result.fileSize <= budgetBytes) {
         best = result;
         low = mid + 1;
       } else {
@@ -297,7 +307,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   }
 
   // ––– Step 2: iterative dimension + quality reduction –––
-  double scale = (targetBytes / math.max(probe.fileSize, 1)).clamp(0.05, 1.0);
+  double scale = (budgetBytes / math.max(probe.fileSize, 1)).clamp(0.05, 1.0);
 
   for (int i = 0; i < 10; i++) {
     final int quality = math.max(10, 85 - i * 8);
@@ -308,14 +318,14 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     consider(result);
     reportProgress(0.45 + (i + 1) * 0.05);
 
-    if (result.fileSize <= targetBytes) {
+    if (result.fileSize <= budgetBytes) {
       int qLow = quality;
       int qHigh = 100;
       while (qLow <= qHigh) {
         final mid = (qLow + qHigh) ~/ 2;
         final r = encodeAt(w, h, mid);
         consider(r);
-        if (r.fileSize <= targetBytes) {
+        if (r.fileSize <= budgetBytes) {
           qLow = mid + 1;
         } else {
           qHigh = mid - 1;
@@ -324,7 +334,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       break;
     }
 
-    scale *= math.sqrt(targetBytes / math.max(result.fileSize, 1));
+    scale *= math.sqrt(budgetBytes / math.max(result.fileSize, 1));
     scale = scale.clamp(0.02, 1.0);
   }
 
@@ -337,7 +347,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       final h = math.max(16, (image.height * fallbackScale).round());
       final attempt = encodeAt(w, h, q);
       consider(attempt);
-      if (attempt.fileSize <= targetBytes) {
+      if (attempt.fileSize <= budgetBytes) {
         break;
       }
       if (q > 5) {
@@ -350,14 +360,14 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
 
   reportProgress(1.0);
   sendPort?.send('done');
-  if (bestUnderTarget != null && bestUnderTarget!.fileSize <= targetBytes) {
+  if (bestUnderTarget != null && bestUnderTarget!.fileSize <= budgetBytes) {
     return bestUnderTarget;
   }
 
   // Absolute fallback: tiny low quality image strictly under target
   for (int dim = 64; dim >= 8; dim ~/= 2) {
     final lastAttempt = encodeAt(dim, dim, 5);
-    if (lastAttempt.fileSize <= targetBytes) {
+    if (lastAttempt.fileSize <= budgetBytes) {
       return lastAttempt;
     }
   }
@@ -395,9 +405,16 @@ List<int> _encodeImage(
   }
   final clampedQuality = quality.clamp(1, 100);
   return switch (format) {
-    OutputImageFormat.jpg => img.JpegEncoder(quality: clampedQuality).encode(processed),
-    OutputImageFormat.png => img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9)).encode(processed),
-    OutputImageFormat.webp => img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9)).encode(processed),
+    OutputImageFormat.jpg =>
+      img.JpegEncoder(quality: clampedQuality).encode(processed),
+    OutputImageFormat.png =>
+      img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9))
+          .encode(processed),
+    // image currently supplies a WebP decoder only. Preserve the existing
+    // lossless fallback for cross-platform exports.
+    OutputImageFormat.webp =>
+      img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9))
+          .encode(processed),
   };
 }
 
@@ -409,6 +426,7 @@ class ImageProcessorService {
     required OutputImageFormat format,
     required int quality,
     AppSettingsState? settings,
+    bool preserveAspectRatio = true,
   }) async {
     return Isolate.run<ImageProcessResult?>(
       () => _isolateResize(<String, dynamic>{
@@ -418,6 +436,7 @@ class ImageProcessorService {
         'format': format,
         'quality': quality,
         'settings': settings,
+        'preserveAspectRatio': preserveAspectRatio,
       }),
     );
   }

@@ -68,7 +68,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   Future<void> _saveConvertedImages() async {
     final state = ref.read(formatConverterProvider);
     final convertedImages = state.images
-        .where((i) => i.status == ConvertStatus.success && i.convertedBytes != null)
+        .where((i) =>
+            i.status == ConvertStatus.success && i.convertedBytes != null)
         .toList();
 
     if (convertedImages.isEmpty) return;
@@ -77,7 +78,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
     try {
       final items = convertedImages.map((image) {
-        final outputName = '${image.baseName}.${state.selectedFormat.extension}';
+        final outputName =
+            '${image.baseName}.${state.selectedFormat.extension}';
         return (bytes: image.convertedBytes!, fileName: outputName);
       }).toList();
 
@@ -86,27 +88,28 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       if (mounted) {
         if (results.length > 1) {
           ref.read(editHistoryProvider.notifier).addGroup(
-            toolName: 'Format Converter',
-            toolIcon: Icons.swap_horiz_rounded,
-            count: results.length,
-            thumbnailPath: results.first.path,
-            filePath: results.first.path,
-          );
+                toolName: 'Format Converter',
+                toolIcon: Icons.swap_horiz_rounded,
+                count: results.length,
+                thumbnailPath: results.first.path,
+                filePath: results.first.path,
+              );
         } else if (results.length == 1) {
           ref.read(editHistoryProvider.notifier).addEntry(
-            EditHistoryItem(
-              fileName: results.first.fileName,
-              toolUsed: 'Format Converter',
-              editedAt: DateTime.now(),
-              toolIcon: Icons.swap_horiz_rounded,
-              thumbnailPath: results.first.path,
-            ),
-          );
+                EditHistoryItem(
+                  fileName: results.first.fileName,
+                  toolUsed: 'Format Converter',
+                  editedAt: DateTime.now(),
+                  toolIcon: Icons.swap_horiz_rounded,
+                  thumbnailPath: results.first.path,
+                ),
+              );
         }
 
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Saved ${results.length} file${results.length > 1 ? 's' : ''} to gallery'),
+            content: Text(
+                'Saved ${results.length} file${results.length > 1 ? 's' : ''} to gallery'),
             backgroundColor: Colors.green,
           ),
         );
@@ -234,7 +237,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     );
   }
 
-  Widget _buildFormatSelector(BuildContext context, FormatConverterState state) {
+  Widget _buildFormatSelector(
+      BuildContext context, FormatConverterState state) {
     final theme = Theme.of(context);
 
     return Container(
@@ -265,9 +269,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                 label: Text(format.label),
                 selected: isSelected,
                 onSelected: (_) {
-                  ref
-                      .read(formatConverterProvider.notifier)
-                      .setFormat(format);
+                  ref.read(formatConverterProvider.notifier).setFormat(format);
                 },
                 selectedColor: theme.colorScheme.primaryContainer,
                 labelStyle: TextStyle(
@@ -335,9 +337,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   }
 
   Widget _buildImageList(BuildContext context, FormatConverterState state) {
-    final validImages = state.images
-        .where((i) => i.status != ConvertStatus.removed)
-        .toList();
+    final validImages =
+        state.images.where((i) => i.status != ConvertStatus.removed).toList();
 
     return Expanded(
       child: ListView.builder(
@@ -500,7 +501,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                     color: Colors.red[300],
                     size: 32,
                   )
-                    : image.bytes != null
+                : image.bytes != null
                     ? Image.memory(
                         image.bytes!,
                         width: 56,
@@ -549,8 +550,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   Widget _buildBottomBar(BuildContext context, FormatConverterState state) {
     final theme = Theme.of(context);
     final pendingCount = state.pendingCount;
-    final hasValidImages = pendingCount > 0;
     final hasSuccess = state.successCount > 0;
+    final hasValidImages = pendingCount > 0 || hasSuccess;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -615,18 +616,6 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                 Expanded(
                   child: _buildConvertButton(context, state, hasValidImages),
                 ),
-                if (hasSuccess) ...[
-                  const SizedBox(width: 10),
-                  _ActionIconButton(
-                    icon: const Icon(Icons.photo_library_rounded),
-                    label: 'Save to Gallery',
-                    onPressed: _saveConvertedImages,
-                    theme: theme,
-                    backgroundColor: theme.colorScheme.secondary,
-                    foregroundColor: theme.colorScheme.onSecondary,
-                    badge: state.successCount.toString(),
-                  ),
-                ],
               ],
             ),
           ],
@@ -679,9 +668,13 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
           onTap: isConverting || !hasValidImages
               ? null
               : () async {
-                  await ref
-                      .read(formatConverterProvider.notifier)
-                      .convertAll();
+                  if (state.pendingCount > 0) {
+                    await ref
+                        .read(formatConverterProvider.notifier)
+                        .convertAll();
+                    if (!mounted) return;
+                  }
+                  await _saveConvertedImages();
                 },
           borderRadius: BorderRadius.circular(16),
           child: Center(
@@ -714,7 +707,9 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                       const Icon(Icons.swap_horiz_rounded, color: Colors.white),
                       const SizedBox(width: 8),
                       Text(
-                        'Convert',
+                        state.pendingCount > 0
+                            ? 'Convert & Save'
+                            : 'Save to Gallery',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -773,8 +768,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     );
   }
 
-  FormatConverterState get state =>
-      ref.read(formatConverterProvider);
+  FormatConverterState get state => ref.read(formatConverterProvider);
 }
 
 class _ActionIconButton extends StatelessWidget {
@@ -782,24 +776,18 @@ class _ActionIconButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final ThemeData theme;
-  final Color? backgroundColor;
-  final Color? foregroundColor;
-  final String? badge;
 
   const _ActionIconButton({
     required this.icon,
     required this.label,
     required this.onPressed,
     required this.theme,
-    this.backgroundColor,
-    this.foregroundColor,
-    this.badge,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? theme.colorScheme.surfaceContainerHighest;
-    final fg = foregroundColor ?? theme.colorScheme.onSurface;
+    final bg = theme.colorScheme.surfaceContainerHighest;
+    final fg = theme.colorScheme.onSurface;
 
     return InkWell(
       onTap: onPressed,
@@ -835,30 +823,6 @@ class _ActionIconButton extends StatelessWidget {
                     color: fg,
                   ),
                 ),
-                if (badge != null) ...[
-                  const SizedBox(width: 4),
-                  Container(
-                    constraints: const BoxConstraints(minWidth: 16),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: fg.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      badge!,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: fg,
-                        height: 1.2,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
               ],
             ),
           ],

@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/settings/app_settings.dart';
+import '../../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../../shared/services/watermark_helper.dart';
 import '../../../../shared/utils/image_saver.dart';
 import '../../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
@@ -208,7 +209,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     setState(() => _isBusy = true);
     try {
       final flattenedBytes =
-          await DocumentEnhancementService.autoFlattenBendedPaper(page.imageBytes!);
+          await DocumentEnhancementService.autoFlattenBendedPaper(
+              page.imageBytes!);
       if (flattenedBytes != null && mounted) {
         final decoded = img.decodeImage(flattenedBytes);
         await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
@@ -279,8 +281,36 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
           Navigator.pop(context);
           _saveAsImages(pages);
         },
+        onKeep: () {
+          Navigator.pop(context);
+          _keepInFiles(pages);
+        },
       ),
     );
+  }
+
+  Future<void> _keepInFiles(List<ScannedPage> pages) async {
+    final paths = pages
+        .map((page) => page.path)
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+    if (paths.isEmpty) {
+      _showError('The scanned pages could not be retained.');
+      return;
+    }
+    ref.read(editHistoryProvider.notifier).addGroup(
+          toolName: 'Camera Scan',
+          toolIcon: Icons.document_scanner_outlined,
+          count: paths.length,
+          filePath: paths.first,
+          thumbnailPath: paths.first,
+          pagePaths: paths,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Scan kept in Files for later export.')),
+    );
+    context.go('/pdfs');
   }
 
   Future<void> _openPdfExport(List<ScannedPage> pages) async {
@@ -366,6 +396,10 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               isBusy: _isBusy,
               onClose: () => _confirmDiscard(batch),
               onDone: _finish,
+              canUndo: ref.read(documentBatchProvider.notifier).canUndo,
+              canRedo: ref.read(documentBatchProvider.notifier).canRedo,
+              onUndo: ref.read(documentBatchProvider.notifier).undo,
+              onRedo: ref.read(documentBatchProvider.notifier).redo,
             ),
             Expanded(
               child: _LargePagePreview(
@@ -475,6 +509,10 @@ class _TopBar extends StatelessWidget {
     required this.isBusy,
     required this.onClose,
     required this.onDone,
+    required this.canUndo,
+    required this.canRedo,
+    required this.onUndo,
+    required this.onRedo,
   });
 
   final int pageNumber;
@@ -482,6 +520,10 @@ class _TopBar extends StatelessWidget {
   final bool isBusy;
   final VoidCallback onClose;
   final VoidCallback onDone;
+  final bool canUndo;
+  final bool canRedo;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
 
   @override
   Widget build(BuildContext context) {
@@ -495,6 +537,16 @@ class _TopBar extends StatelessWidget {
             tooltip: 'Discard scan',
           ),
           const Spacer(),
+          IconButton(
+            onPressed: isBusy || !canUndo ? null : onUndo,
+            icon: const Icon(Icons.undo_rounded, color: Colors.white),
+            tooltip: 'Undo edit',
+          ),
+          IconButton(
+            onPressed: isBusy || !canRedo ? null : onRedo,
+            icon: const Icon(Icons.redo_rounded, color: Colors.white),
+            tooltip: 'Redo edit',
+          ),
           Text(
             '$pageNumber / $pageCount',
             style: const TextStyle(
@@ -894,10 +946,12 @@ class _BottomBar extends StatelessWidget {
 }
 
 class _ExportSheet extends StatelessWidget {
-  const _ExportSheet({required this.onPdf, required this.onImages});
+  const _ExportSheet(
+      {required this.onPdf, required this.onImages, required this.onKeep});
 
   final VoidCallback onPdf;
   final VoidCallback onImages;
+  final VoidCallback onKeep;
 
   @override
   Widget build(BuildContext context) {
@@ -940,6 +994,13 @@ class _ExportSheet extends StatelessWidget {
             title: 'Save as images',
             subtitle: 'Save each scanned page separately',
             onTap: onImages,
+          ),
+          const SizedBox(height: 10),
+          _ExportOption(
+            icon: Icons.bookmark_add_outlined,
+            title: 'Keep in Files',
+            subtitle: 'Finish now and export these pages later',
+            onTap: onKeep,
           ),
         ],
       ),

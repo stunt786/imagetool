@@ -55,7 +55,8 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     }
 
     if (newFiles.isEmpty) {
-      state = state.copyWith(errorMessage: 'Could not access the selected files');
+      state =
+          state.copyWith(errorMessage: 'Could not access the selected files');
       return;
     }
 
@@ -66,7 +67,9 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       publicExportPath: null,
     );
 
-    for (int i = state.files.length - newFiles.length; i < state.files.length; i++) {
+    for (int i = state.files.length - newFiles.length;
+        i < state.files.length;
+        i++) {
       await _loadPageCount(i);
     }
   }
@@ -142,9 +145,13 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
 
       state = state.copyWith(progress: 0.8);
 
-      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final saveDir =
+          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'merged_$timestamp.pdf';
+      final firstName = state.files.first.name;
+      final dot = firstName.lastIndexOf('.');
+      final baseName = dot > 0 ? firstName.substring(0, dot) : firstName;
+      final fileName = 'pixeltools_${baseName}_merged_$timestamp.pdf';
       final outputPath = '${saveDir.path}/$fileName';
       final file = File(outputPath);
       await file.writeAsBytes(resultBytes, flush: true);
@@ -179,7 +186,7 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     try {
       final resultPath = await _manager.exportSingleFile(
         sandboxPath: state.outputPath!,
-        suggestedName: 'merged.pdf',
+        suggestedName: 'pixeltools_merged.pdf',
       );
 
       if (resultPath != null) {

@@ -9,7 +9,11 @@ abstract final class AppSavePaths {
   static const String defaultDirectoryName = 'PixelTools';
 }
 
-Future<ImageSaveResult> saveImageBytesImpl(Uint8List bytes, {required String fileName}) async {
+Future<ImageSaveResult> saveImageBytesImpl(
+  Uint8List bytes, {
+  required String fileName,
+  String? replacePath,
+}) async {
   final blob = html.Blob([bytes]);
   final url = html.Url.createObjectUrlFromBlob(blob);
   final anchor = html.AnchorElement(href: url)

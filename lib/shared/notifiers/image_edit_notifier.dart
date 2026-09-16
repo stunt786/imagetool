@@ -50,6 +50,7 @@ class ImageEditState {
     this.originalBytes,
     this.currentBytes,
     this.fileName,
+    this.sourcePath,
     this.width = 0,
     this.height = 0,
     this.fileSize = 0,
@@ -60,6 +61,7 @@ class ImageEditState {
   final Uint8List? originalBytes;
   final Uint8List? currentBytes;
   final String? fileName;
+  final String? sourcePath;
   final int width;
   final int height;
   final int fileSize;
@@ -72,6 +74,7 @@ class ImageEditState {
     Uint8List? originalBytes,
     Uint8List? currentBytes,
     String? fileName,
+    String? sourcePath,
     int? width,
     int? height,
     int? fileSize,
@@ -83,6 +86,7 @@ class ImageEditState {
       originalBytes: originalBytes ?? this.originalBytes,
       currentBytes: currentBytes ?? this.currentBytes,
       fileName: fileName ?? this.fileName,
+      sourcePath: sourcePath ?? this.sourcePath,
       width: width ?? this.width,
       height: height ?? this.height,
       fileSize: fileSize ?? this.fileSize,
@@ -162,7 +166,8 @@ ResizeResult? _isolateCrop(Map<String, dynamic> params) {
     width: safeWidth,
     height: safeHeight,
   );
-  final format = params['format'] as OutputImageFormat? ?? OutputImageFormat.jpg;
+  final format =
+      params['format'] as OutputImageFormat? ?? OutputImageFormat.jpg;
   final quality = params['quality'] as int? ?? 95;
   final bytes = Uint8List.fromList(
     _encodeImage(cropped, format: format, quality: quality),
@@ -227,7 +232,6 @@ ResizeResult? _isolateFlip(Map<String, dynamic> params) {
     fileSize: bytes.length,
   );
 }
-
 
 ResizeResult? _isolateResizeToPreset(Map<String, dynamic> params) {
   final Uint8List sourceBytes = params['bytes'] as Uint8List;
@@ -299,21 +303,25 @@ List<int> _encodeImage(
   final clampedQuality = quality.clamp(1, 100);
   return switch (format) {
     OutputImageFormat.jpg => img.JpegEncoder(
-      quality: clampedQuality,
-    ).encode(image),
+        quality: clampedQuality,
+      ).encode(image),
     OutputImageFormat.png => img.PngEncoder(
-      level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
-    ).encode(image),
+        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
+      ).encode(image),
     OutputImageFormat.webp => img.PngEncoder(
-      level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
-    ).encode(image),
+        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
+      ).encode(image),
   };
 }
 
 class ImageEditNotifier extends StateNotifier<ImageEditState> {
   ImageEditNotifier() : super(const ImageEditState());
 
-  Future<void> loadImage(Uint8List bytes, String fileName) async {
+  Future<void> loadImage(
+    Uint8List bytes,
+    String fileName, {
+    String? sourcePath,
+  }) async {
     state = state.copyWith(isLoading: true, clearError: true);
 
     if (bytes.length > 50 * 1024 * 1024) {
@@ -342,6 +350,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         originalBytes: bytes,
         currentBytes: bytes,
         fileName: fileName,
+        sourcePath: sourcePath,
         width: dimensions['width']!,
         height: dimensions['height']!,
         fileSize: bytes.length,
@@ -411,8 +420,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
       if (result == null) {
         state = state.copyWith(
           isLoading: false,
-          errorMessage:
-              'Could not compress to target size.',
+          errorMessage: 'Could not compress to target size.',
         );
         return null;
       }
@@ -711,7 +719,8 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
       if (format != OutputImageFormat.png || quality < 100) {
         final decoded = img.decodeImage(resultBytes);
         if (decoded != null) {
-          final encoded = _encodeImage(decoded, format: format, quality: quality);
+          final encoded =
+              _encodeImage(decoded, format: format, quality: quality);
           resultBytes = Uint8List.fromList(encoded);
         }
       }
@@ -748,5 +757,5 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
 
 final imageEditProvider =
     StateNotifierProvider<ImageEditNotifier, ImageEditState>((ref) {
-      return ImageEditNotifier();
-    });
+  return ImageEditNotifier();
+});

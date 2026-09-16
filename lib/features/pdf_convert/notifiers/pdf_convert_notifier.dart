@@ -107,7 +107,9 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
     );
 
     try {
-      final baseName = state.selectedFileName!.replaceAll('.pdf', '');
+      final selectedName = state.selectedFileName!;
+      final dot = selectedName.lastIndexOf('.');
+      final baseName = dot > 0 ? selectedName.substring(0, dot) : selectedName;
       final saveDir =
           await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -152,7 +154,8 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           final watermarkApplied = <Uint8List>[];
           for (final pageBytes in renderedPages) {
             watermarkApplied.add(
-              WatermarkHelper.applyGlobalWatermarkIfNeeded(pageBytes, appSettings),
+              WatermarkHelper.applyGlobalWatermarkIfNeeded(
+                  pageBytes, appSettings),
             );
           }
 
@@ -170,7 +173,7 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           for (int i = 0; i < encodedResults.length; i++) {
             final ext = state.outputFormat.extension;
             final fileName =
-                '${baseName}_${timestamp}_page_${startPage + i}.$ext';
+                'pixeltools_${baseName}_${timestamp}_page_${startPage + i}.$ext';
             final filePath = '${saveDir.path}/$fileName';
             await File(filePath).writeAsBytes(encodedResults[i], flush: true);
             outputPaths.add(filePath);
@@ -186,7 +189,8 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final destPath = '${saveDir.path}/${baseName}_$timestamp.txt';
+            final destPath =
+                '${saveDir.path}/pixeltools_${baseName}_$timestamp.txt';
             await File(srcPath).copy(destPath);
             try {
               await File(srcPath).delete();
@@ -204,7 +208,8 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final destPath = '${saveDir.path}/${baseName}_$timestamp.docx';
+            final destPath =
+                '${saveDir.path}/pixeltools_${baseName}_$timestamp.docx';
             await File(srcPath).copy(destPath);
             try {
               await File(srcPath).delete();

@@ -28,7 +28,8 @@ class PdfService {
       try {
         final downloadDir = await getDownloadsDirectory();
         if (downloadDir != null) {
-          final dir = Directory(path.join(downloadDir.path, 'PixelTools', 'PDFs'));
+          final dir =
+              Directory(path.join(downloadDir.path, 'PixelTools', 'PDFs'));
           if (!await dir.exists()) {
             await dir.create(recursive: true);
           }
@@ -59,7 +60,8 @@ class PdfService {
 
       final cacheDir = await getTemporaryDirectory();
       final stat = await file.stat();
-      final thumbName = 'pdf_thumb_${path.basenameWithoutExtension(pdfPath)}_${stat.modified.millisecondsSinceEpoch}.png';
+      final thumbName =
+          'pdf_thumb_${path.basenameWithoutExtension(pdfPath)}_${stat.modified.millisecondsSinceEpoch}.png';
       final thumbFile = File(path.join(cacheDir.path, thumbName));
       if (await thumbFile.exists()) {
         return thumbFile.path;
@@ -189,7 +191,8 @@ class PdfService {
     }
 
     final saveDir = await getSaveDir();
-    final outputPath = path.join(saveDir.path, _generateFileName(outputBaseName, 'pdf'));
+    final outputPath =
+        path.join(saveDir.path, _generateFileName(outputBaseName, 'pdf'));
 
     // Use Syncfusion for reliable PDF merging
     final mergedDoc = syncfusion.PdfDocument();
@@ -208,9 +211,9 @@ class PdfService {
         section.pageSettings.margins.all = 0;
         final newPage = section.pages.add();
         newPage.graphics.drawPdfTemplate(
-              template,
-              ui.Offset.zero,
-            );
+          template,
+          ui.Offset.zero,
+        );
         if (watermark) {
           applyWatermarkToSyncfusionPage(
             newPage,
@@ -244,7 +247,8 @@ class PdfService {
     required String outputBaseName,
     void Function(double progress)? onProgress,
   }) async {
-    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc =
+        syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await getSaveDir();
     final outputPaths = <String>[];
@@ -262,7 +266,8 @@ class PdfService {
             ui.Offset.zero,
           );
 
-      final fileName = _generateFileName('${outputBaseName}_page_${i + 1}', 'pdf');
+      final fileName =
+          _generateFileName('${outputBaseName}_page_${i + 1}', 'pdf');
       final outputPath = path.join(saveDir.path, fileName);
       final bytes = await newDoc.save();
       newDoc.dispose();
@@ -290,7 +295,8 @@ class PdfService {
       throw ArgumentError('At least one page number is required');
     }
 
-    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc =
+        syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await getSaveDir();
 
@@ -298,7 +304,8 @@ class PdfService {
     for (final pageNum in pageNumbers) {
       if (pageNum < 1 || pageNum > pageCount) {
         syncDoc.dispose();
-        throw ArgumentError('Page number $pageNum is out of range (1-$pageCount)');
+        throw ArgumentError(
+            'Page number $pageNum is out of range (1-$pageCount)');
       }
     }
 
@@ -342,7 +349,8 @@ class PdfService {
       throw ArgumentError('Page size must be at least 1');
     }
 
-    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc =
+        syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final pageCount = syncDoc.pages.count;
     final saveDir = await getSaveDir();
     final outputPaths = <String>[];
@@ -366,7 +374,8 @@ class PdfService {
             );
       }
 
-      final fileName = _generateFileName('${outputBaseName}_part_$chunkIndex', 'pdf');
+      final fileName =
+          _generateFileName('${outputBaseName}_part_$chunkIndex', 'pdf');
       final outputPath = path.join(saveDir.path, fileName);
       final bytes = await newDoc.save();
       newDoc.dispose();
@@ -418,14 +427,16 @@ class PdfService {
           String extension;
 
           if (format == 'jpg') {
-            outputBytes = Uint8List.fromList(img.encodeJpg(decodedImage, quality: 95));
+            outputBytes =
+                Uint8List.fromList(img.encodeJpg(decodedImage, quality: 95));
             extension = 'jpg';
           } else {
             outputBytes = Uint8List.fromList(img.encodePng(decodedImage));
             extension = 'png';
           }
 
-          final fileName = _generateFileName('${outputBaseName}_page_$i', extension);
+          final fileName =
+              _generateFileName('${outputBaseName}_page_$i', extension);
           final outputPath = path.join(saveDir.path, fileName);
           await File(outputPath).writeAsBytes(outputBytes);
           outputPaths.add(outputPath);
@@ -478,7 +489,8 @@ class PdfService {
 
   /// Gets the number of pages in a PDF file.
   Future<int> getPageCount(String inputPath) async {
-    final syncDoc = syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
+    final syncDoc =
+        syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
     final count = syncDoc.pages.count;
     syncDoc.dispose();
     return count;
@@ -492,7 +504,7 @@ class PdfService {
     int maxWidth = 200,
   }) async {
     try {
-    final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
+      final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
       if (pageNumber < 1 || pageNumber > pdfDoc.pagesCount) {
         await pdfDoc.close();
         return null;
@@ -539,7 +551,8 @@ class PdfService {
     required int positionIndex,
     bool useAppLogo = true,
   }) {
-    if (text.isEmpty && (!useAppLogo || iconBytes == null || iconBytes.isEmpty)) {
+    if (text.isEmpty &&
+        (!useAppLogo || iconBytes == null || iconBytes.isEmpty)) {
       return;
     }
 
@@ -564,12 +577,14 @@ class PdfService {
         style: syncfusion.PdfFontStyle.bold,
       );
 
-      final textSize = text.isNotEmpty ? font.measureString(text) : const ui.Size(0, 0);
+      final textSize =
+          text.isNotEmpty ? font.measureString(text) : const ui.Size(0, 0);
       final hasIcon = useAppLogo && iconBytes != null && iconBytes.isNotEmpty;
       final iconSize = fontSize * 1.35;
       final spacing = hasIcon && text.isNotEmpty ? fontSize * 0.4 : 0.0;
 
-      final contentWidth = (hasIcon ? iconSize : 0.0) + spacing + textSize.width;
+      final contentWidth =
+          (hasIcon ? iconSize : 0.0) + spacing + textSize.width;
       final contentHeight = math.max(hasIcon ? iconSize : 0.0, textSize.height);
 
       const margin = 18.0;
@@ -627,7 +642,8 @@ class PdfService {
           text,
           font,
           brush: textBrush,
-          bounds: ui.Rect.fromLTWH(curX, textY, textSize.width, textSize.height),
+          bounds:
+              ui.Rect.fromLTWH(curX, textY, textSize.width, textSize.height),
         );
       }
     } catch (_) {
@@ -636,19 +652,40 @@ class PdfService {
     }
   }
 
+  // Keep worker parameters compatible with every caller. Older pipelines used
+  // `watermark`, while the feature notifiers use the clearer `applyWatermark`.
+  // Normalising here prevents a silent loss of the user's watermark settings.
+  static bool _workerWatermarkEnabled(Map<String, dynamic> params) =>
+      params['applyWatermark'] as bool? ??
+      params['watermark'] as bool? ??
+      false;
+
+  static Uint8List? _workerWatermarkIcon(Map<String, dynamic> params) =>
+      params['iconBytes'] as Uint8List? ??
+      params['watermarkIconBytes'] as Uint8List?;
+
+  static int _workerWatermarkColor(Map<String, dynamic> params) =>
+      params['watermarkColor'] as int? ??
+      params['watermarkColorHex'] as int? ??
+      0xFFFFFFFF;
+
+  static int _workerWatermarkPosition(Map<String, dynamic> params) =>
+      params['watermarkPosition'] as int? ??
+      params['watermarkPositionIndex'] as int? ??
+      4;
+
   /// Compress worker for background isolate execution.
   /// Params: inputBytes (Uint8List), quality (double)
   static Future<Uint8List> isolateCompressWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
     final quality = params['quality'] as double;
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final compressionLevel = _mapCompressionLevel(quality);
@@ -693,14 +730,13 @@ class PdfService {
   /// Params: files (List<Uint8List>)
   static Future<Uint8List> isolateMergeWorker(
       Map<String, dynamic> params) async {
-    final filesData =
-        (params['files'] as List<dynamic>).cast<Uint8List>();
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final filesData = (params['files'] as List<dynamic>).cast<Uint8List>();
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final mergedDoc = syncfusion.PdfDocument();
@@ -717,9 +753,9 @@ class PdfService {
         section.pageSettings.margins.all = 0;
         final newPage = section.pages.add();
         newPage.graphics.drawPdfTemplate(
-              template,
-              ui.Offset.zero,
-            );
+          template,
+          ui.Offset.zero,
+        );
         if (applyWatermark) {
           applyWatermarkToSyncfusionPage(
             newPage,
@@ -746,14 +782,13 @@ class PdfService {
   /// Returns: List<Uint8List> — one per page
   static Future<List<Uint8List>> isolateSplitAllPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes']));
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
@@ -770,9 +805,9 @@ class PdfService {
       newDoc.pageSettings.margins.all = 0;
       final newPage = newDoc.pages.add();
       newPage.graphics.drawPdfTemplate(
-            template,
-            ui.Offset.zero,
-          );
+        template,
+        ui.Offset.zero,
+      );
       if (applyWatermark) {
         applyWatermarkToSyncfusionPage(
           newPage,
@@ -798,16 +833,14 @@ class PdfService {
   /// Params: inputBytes (Uint8List), pageNumbers (List<int>) — 1-indexed
   static Future<Uint8List> isolateExtractPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes']));
-    final pageNumbers =
-        (params['pageNumbers'] as List<dynamic>).cast<int>();
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final pageNumbers = (params['pageNumbers'] as List<dynamic>).cast<int>();
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
@@ -824,9 +857,9 @@ class PdfService {
       section.pageSettings.margins.all = 0;
       final newPage = section.pages.add();
       newPage.graphics.drawPdfTemplate(
-            template,
-            ui.Offset.zero,
-          );
+        template,
+        ui.Offset.zero,
+      );
       if (applyWatermark) {
         applyWatermarkToSyncfusionPage(
           newPage,
@@ -852,15 +885,14 @@ class PdfService {
   /// Returns: List<Uint8List> — one per chunk
   static Future<List<Uint8List>> isolateSplitByChunksWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
     final pageSize = params['pageSize'] as int;
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
@@ -881,9 +913,9 @@ class PdfService {
         section.pageSettings.margins.all = 0;
         final newPage = section.pages.add();
         newPage.graphics.drawPdfTemplate(
-              template,
-              ui.Offset.zero,
-            );
+          template,
+          ui.Offset.zero,
+        );
         if (applyWatermark) {
           applyWatermarkToSyncfusionPage(
             newPage,
@@ -912,16 +944,14 @@ class PdfService {
   /// Returns: List<Uint8List> — one per selected page
   static Future<List<Uint8List>> isolateSplitSelectedPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes']));
-    final pageNumbers =
-        (params['pageNumbers'] as List<dynamic>).cast<int>();
-    final applyWatermark = params['watermark'] as bool? ?? false;
-    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final pageNumbers = (params['pageNumbers'] as List<dynamic>).cast<int>();
+    final applyWatermark = _workerWatermarkEnabled(params);
+    final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
-    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final colorHex = _workerWatermarkColor(params);
     final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
-    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
@@ -938,9 +968,9 @@ class PdfService {
       newDoc.pageSettings.margins.all = 0;
       final newPage = newDoc.pages.add();
       newPage.graphics.drawPdfTemplate(
-            template,
-            ui.Offset.zero,
-          );
+        template,
+        ui.Offset.zero,
+      );
       if (applyWatermark) {
         applyWatermarkToSyncfusionPage(
           newPage,
@@ -976,8 +1006,8 @@ class PdfService {
       final decodedImage = img.decodeImage(pageBytes);
       if (decodedImage != null) {
         if (format == 'jpg') {
-          results.add(Uint8List.fromList(
-              img.encodeJpg(decodedImage, quality: 95)));
+          results.add(
+              Uint8List.fromList(img.encodeJpg(decodedImage, quality: 95)));
         } else {
           results.add(Uint8List.fromList(img.encodePng(decodedImage)));
         }
@@ -997,9 +1027,8 @@ class PdfService {
     String? outputDir,
     void Function(double progress)? onProgress,
   }) async {
-    final saveDir = outputDir != null
-        ? Directory(outputDir)
-        : await getSaveDir();
+    final saveDir =
+        outputDir != null ? Directory(outputDir) : await getSaveDir();
 
     onProgress?.call(0.1);
 
@@ -1126,8 +1155,7 @@ class PdfService {
         ) as List<Uint8List>;
 
         final outputPaths = <String>[];
-        final baseName =
-            operationParams['outputBaseName'] as String? ?? 'page';
+        final baseName = operationParams['outputBaseName'] as String? ?? 'page';
         for (int i = 0; i < encodedResults.length; i++) {
           final path = _writeResultFile(
             saveDir,

@@ -113,11 +113,15 @@ class FormatConverterState {
   final String? errorMessage;
 
   int get totalImages => images.length;
-  int get pendingCount => images.where((i) => i.status == ConvertStatus.pending).length;
-  int get successCount => images.where((i) => i.status == ConvertStatus.success).length;
-  int get failedCount => images.where((i) => i.status == ConvertStatus.failed).length;
+  int get pendingCount =>
+      images.where((i) => i.status == ConvertStatus.pending).length;
+  int get successCount =>
+      images.where((i) => i.status == ConvertStatus.success).length;
+  int get failedCount =>
+      images.where((i) => i.status == ConvertStatus.failed).length;
   int get totalOriginalSize => images.fold(0, (sum, i) => sum + i.sizeBytes);
-  int get totalConvertedSize => images.fold(0, (sum, i) => sum + i.convertedSizeBytes);
+  int get totalConvertedSize =>
+      images.fold(0, (sum, i) => sum + i.convertedSizeBytes);
 
   FormatConverterState copyWith({
     List<PickedFile>? files,
@@ -141,7 +145,8 @@ class FormatConverterState {
       isConverting: isConverting ?? this.isConverting,
       progress: progress ?? this.progress,
       totalConverted: totalConverted ?? this.totalConverted,
-      currentConvertingIndex: currentConvertingIndex ?? this.currentConvertingIndex,
+      currentConvertingIndex:
+          currentConvertingIndex ?? this.currentConvertingIndex,
       totalToConvert: totalToConvert ?? this.totalToConvert,
       convertingStatusText: convertingStatusText ?? this.convertingStatusText,
       errorMessage: clearError ? null : errorMessage,
@@ -195,9 +200,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       final sizeBytes = file['sizeBytes'] as int;
       final bytes = file['bytes'] as Uint8List?;
 
-      final ext = name.contains('.')
-          ? name.split('.').last.toLowerCase()
-          : '';
+      final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
       final format = _detectFormatFromExtension(ext);
 
       if (format == null) continue;
@@ -318,7 +321,8 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
     for (int i = 0; i < updated.length; i++) {
       final image = updated[i];
-      if (image.status != ConvertStatus.pending || image.bytes == null) continue;
+      if (image.status != ConvertStatus.pending || image.bytes == null)
+        continue;
 
       final currentIndex = converted + 1;
       final statusMsg = 'Converting file $currentIndex of $total...';
@@ -346,7 +350,9 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         if (WatermarkHelper.cachedIconBytes == null) {
           await WatermarkHelper.loadIconBytes();
         }
-        if (settings != null && settings.enableGlobalWatermark && state.selectedFormat != ConvertFormat.pdf) {
+        if (settings != null &&
+            settings.enableGlobalWatermark &&
+            state.selectedFormat != ConvertFormat.pdf) {
           decoded = WatermarkHelper.applyToImage(decoded, settings);
         }
 
@@ -416,6 +422,9 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       case ConvertFormat.png:
         return img.encodePng(image);
       case ConvertFormat.webp:
+        // The pure-Dart image package decodes WebP but does not encode it.
+        // Keep the existing lossless conversion fallback until a platform
+        // encoder is available for every supported target.
         return img.encodePng(image);
       case ConvertFormat.pdf:
         return _convertToPdf(originalBytes, image, settings);

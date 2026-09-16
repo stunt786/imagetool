@@ -36,7 +36,11 @@ class _PostCaptureMenuState extends ConsumerState<PostCaptureMenu> {
       final file = File(widget.imagePath);
       final bytes = await file.readAsBytes();
       final name = path.basename(widget.imagePath);
-      await ref.read(imageEditProvider.notifier).loadImage(bytes, name);
+      await ref.read(imageEditProvider.notifier).loadImage(
+            bytes,
+            name,
+            sourcePath: widget.imagePath,
+          );
       if (mounted) {
         context.push('/images/resizer');
       }
@@ -280,7 +284,8 @@ class _ActionTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: color.withValues(alpha: 0.5)),
+            Icon(Icons.chevron_right_rounded,
+                color: color.withValues(alpha: 0.5)),
           ],
         ),
       ),

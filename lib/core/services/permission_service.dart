@@ -37,6 +37,33 @@ class AppPermissionService {
     return manageStatus.isGranted;
   }
 
+  Future<bool> requestStoragePermission() async {
+    if (kIsWeb) return true;
+
+    final photosGranted = await _requestPermission(ph.Permission.photos);
+    final storageGranted = await _requestPermission(ph.Permission.storage);
+    if (photosGranted || storageGranted) return true;
+
+    try {
+      final manageStatus = await ph.Permission.manageExternalStorage.status;
+      if (manageStatus.isGranted) return true;
+      if (manageStatus.isDenied || manageStatus.isRestricted) {
+        return (await ph.Permission.manageExternalStorage.request()).isGranted;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<bool> isStoragePermissionPermanentlyDenied() async {
+    if (kIsWeb) return false;
+    final photosStatus = await ph.Permission.photos.status;
+    final storageStatus = await ph.Permission.storage.status;
+    final manageStatus = await ph.Permission.manageExternalStorage.status;
+    return photosStatus.isPermanentlyDenied &&
+        storageStatus.isPermanentlyDenied &&
+        manageStatus.isPermanentlyDenied;
+  }
+
   Future<bool> hasCameraPermission() async {
     if (kIsWeb) return true;
     return (await ph.Permission.camera.status).isGranted;

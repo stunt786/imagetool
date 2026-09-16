@@ -217,17 +217,27 @@ class _PdfSettingsPanelState extends State<PdfSettingsPanel> {
       {required String label, required Widget child}) {
     final theme = Theme.of(context);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelWidget = Text(
           label,
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w500,
           ),
-        ),
-        child,
-      ],
+        );
+        // Dropdown labels are wider than a narrow phone can accommodate in a
+        // single row. Stack them instead of allowing a render overflow.
+        if (constraints.maxWidth < 330) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [labelWidget, const SizedBox(height: 6), child],
+          );
+        }
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [labelWidget, Flexible(child: child)],
+        );
+      },
     );
   }
 
