@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_split_state.dart';
 
 final pdfSplitProvider = NotifierProvider<PdfSplitNotifier, PdfSplitState>(
@@ -109,6 +111,20 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
       final inputBytes = File(state.selectedFilePath!).readAsBytesSync();
       state = state.copyWith(progress: 0.1);
 
+      final appSettings = ref.read(appSettingsProvider);
+      if (WatermarkHelper.cachedIconBytes == null) {
+        await WatermarkHelper.loadIconBytes();
+      }
+      final watermarkParams = {
+        'applyWatermark': appSettings.enableGlobalWatermark,
+        'watermarkText': appSettings.watermarkText,
+        'watermarkPosition': appSettings.watermarkPosition,
+        'watermarkOpacity': appSettings.watermarkOpacity,
+        'watermarkColor': appSettings.watermarkColor,
+        'useWatermarkLogo': appSettings.useWatermarkLogo,
+        'iconBytes': WatermarkHelper.cachedIconBytes,
+      };
+
       List<String> outputPaths;
 
       switch (state.splitMode) {
@@ -116,7 +132,10 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
           {
             final results = await compute(
               PdfService.isolateSplitAllPagesWorker,
-              {'inputBytes': inputBytes},
+              {
+                'inputBytes': inputBytes,
+                ...watermarkParams,
+              },
             );
             state = state.copyWith(progress: 0.7);
             outputPaths = [];
@@ -145,6 +164,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               {
                 'inputBytes': inputBytes,
                 'pageNumbers': sortedPages,
+                ...watermarkParams,
               },
             );
             state = state.copyWith(progress: 0.7);
@@ -171,6 +191,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               {
                 'inputBytes': inputBytes,
                 'pageNumbers': sortedPages,
+                ...watermarkParams,
               },
             );
             state = state.copyWith(progress: 0.7);
@@ -192,6 +213,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               {
                 'inputBytes': inputBytes,
                 'pageSize': state.chunkSize,
+                ...watermarkParams,
               },
             );
             state = state.copyWith(progress: 0.7);

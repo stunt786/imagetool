@@ -343,7 +343,10 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         }
 
         final settings = _ref?.read(appSettingsProvider);
-        if (settings != null && settings.enableGlobalWatermark) {
+        if (WatermarkHelper.cachedIconBytes == null) {
+          await WatermarkHelper.loadIconBytes();
+        }
+        if (settings != null && settings.enableGlobalWatermark && state.selectedFormat != ConvertFormat.pdf) {
           decoded = WatermarkHelper.applyToImage(decoded, settings);
         }
 
@@ -352,9 +355,19 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         if (state.selectedFormat == ConvertFormat.jpg ||
             state.selectedFormat == ConvertFormat.bmp) {
           final flattened = _flattenAlpha(decoded);
-          convertedBytes = await _encodeImageAsync(flattened, image.bytes!, state.selectedFormat);
+          convertedBytes = await _encodeImageAsync(
+            flattened,
+            image.bytes!,
+            state.selectedFormat,
+            settings: settings,
+          );
         } else {
-          convertedBytes = await _encodeImageAsync(decoded, image.bytes!, state.selectedFormat);
+          convertedBytes = await _encodeImageAsync(
+            decoded,
+            image.bytes!,
+            state.selectedFormat,
+            settings: settings,
+          );
         }
 
         updated[i] = image.copyWith(
@@ -392,6 +405,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
     Uint8List originalBytes,
     ConvertFormat format, {
     bool stripExif = true,
+    AppSettings? settings,
   }) async {
     if (stripExif) {
       image.exif.clear();
@@ -404,7 +418,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       case ConvertFormat.webp:
         return img.encodePng(image);
       case ConvertFormat.pdf:
-        return _convertToPdf(originalBytes, image);
+        return _convertToPdf(originalBytes, image, settings);
       case ConvertFormat.bmp:
         return img.encodeBmp(image);
       case ConvertFormat.tiff:
@@ -412,9 +426,15 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
     }
   }
 
-  Future<Uint8List> _convertToPdf(Uint8List imageBytes, img.Image decoded) async {
+  Future<Uint8List> _convertToPdf(
+    Uint8List imageBytes,
+    img.Image decoded,
+    AppSettings? settings,
+  ) async {
     final pdf = pw.Document();
     final pdfImage = pw.MemoryImage(imageBytes);
+    final enableWatermark = settings?.enableGlobalWatermark ?? true;
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat(
@@ -423,10 +443,28 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         ),
         margin: pw.EdgeInsets.zero,
         build: (pw.Context context) {
-          return pw.FullPage(
+          final content = pw.FullPage(
             ignoreMargins: true,
             child: pw.Image(pdfImage, fit: pw.BoxFit.fill),
           );
+
+          if (enableWatermark && settings != null) {
+            return pw.Stack(
+              children: [
+                content,
+                WatermarkHelper.buildPdfWatermarkWidget(
+                  iconBytes: WatermarkHelper.cachedIconBytes,
+                  text: settings.watermarkText,
+                  colorHex: settings.watermarkColorHex,
+                  opacity: settings.watermarkOpacity,
+                  positionIndex: settings.watermarkPositionIndex,
+                  useAppLogo: settings.useWatermarkLogo,
+                ),
+              ],
+            );
+          }
+
+          return content;
         },
       ),
     );

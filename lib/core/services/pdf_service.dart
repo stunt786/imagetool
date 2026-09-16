@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -67,6 +68,13 @@ class PdfService {
     required double quality,
     String? outputBaseName,
     void Function(double progress)? onProgress,
+    bool watermark = false,
+    Uint8List? watermarkIconBytes,
+    String watermarkText = 'PixelTools',
+    int watermarkColorHex = 0xFFFFFFFF,
+    double watermarkOpacity = 0.7,
+    int watermarkPositionIndex = 4,
+    bool useWatermarkLogo = true,
   }) async {
     final saveDir = await getSaveDir();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -86,7 +94,19 @@ class PdfService {
 
     for (int i = 0; i < pageCount; i++) {
       final template = srcDoc.pages[i].createTemplate();
-      destDoc.pages.add().graphics.drawPdfTemplate(template, ui.Offset.zero);
+      final page = destDoc.pages.add();
+      page.graphics.drawPdfTemplate(template, ui.Offset.zero);
+      if (watermark) {
+        applyWatermarkToSyncfusionPage(
+          page,
+          iconBytes: watermarkIconBytes,
+          text: watermarkText,
+          colorHex: watermarkColorHex,
+          opacity: watermarkOpacity,
+          positionIndex: watermarkPositionIndex,
+          useAppLogo: useWatermarkLogo,
+        );
+      }
       onProgress?.call(0.2 + ((i + 1) / pageCount) * 0.7);
     }
 
@@ -96,7 +116,7 @@ class PdfService {
     destDoc.dispose();
 
     final Uint8List outputBytes;
-    if (bytes.length < inputBytes.length) {
+    if (watermark || bytes.length < inputBytes.length) {
       outputBytes = Uint8List.fromList(bytes);
     } else {
       outputBytes = inputBytes;
@@ -122,6 +142,13 @@ class PdfService {
     required List<String> inputPaths,
     required String outputBaseName,
     void Function(double progress)? onProgress,
+    bool watermark = false,
+    Uint8List? watermarkIconBytes,
+    String watermarkText = 'PixelTools',
+    int watermarkColorHex = 0xFFFFFFFF,
+    double watermarkOpacity = 0.7,
+    int watermarkPositionIndex = 4,
+    bool useWatermarkLogo = true,
   }) async {
     if (inputPaths.isEmpty) {
       throw ArgumentError('At least one PDF file is required');
@@ -145,10 +172,22 @@ class PdfService {
         final section = mergedDoc.sections!.add();
         section.pageSettings.size = pageSize;
         section.pageSettings.margins.all = 0;
-        section.pages.add().graphics.drawPdfTemplate(
+        final newPage = section.pages.add();
+        newPage.graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
+        if (watermark) {
+          applyWatermarkToSyncfusionPage(
+            newPage,
+            iconBytes: watermarkIconBytes,
+            text: watermarkText,
+            colorHex: watermarkColorHex,
+            opacity: watermarkOpacity,
+            positionIndex: watermarkPositionIndex,
+            useAppLogo: useWatermarkLogo,
+          );
+        }
       }
 
       doc.dispose();
@@ -455,6 +494,114 @@ class PdfService {
 
   // ─── Isolate Workers ─────────────────────────────────────────────────
 
+  /// Applies a watermark (app icon + text with transparency and pill backdrop)
+  /// onto a Syncfusion PDF page graphics context.
+  static void applyWatermarkToSyncfusionPage(
+    syncfusion.PdfPage page, {
+    Uint8List? iconBytes,
+    required String text,
+    required int colorHex,
+    required double opacity,
+    required int positionIndex,
+    bool useAppLogo = true,
+  }) {
+    if (text.isEmpty && (!useAppLogo || iconBytes == null || iconBytes.isEmpty)) {
+      return;
+    }
+
+    final pageSize = page.size;
+    final graphics = page.graphics;
+    final state = graphics.save();
+
+    try {
+      final safeOpacity = opacity.clamp(0.05, 1.0);
+      graphics.setTransparency(safeOpacity);
+
+      final r = (colorHex >> 16) & 0xFF;
+      final g = (colorHex >> 8) & 0xFF;
+      final b = colorHex & 0xFF;
+      final textColor = syncfusion.PdfColor(r, g, b);
+      final textBrush = syncfusion.PdfSolidBrush(textColor);
+
+      final fontSize = (pageSize.width * 0.022).clamp(9.0, 16.0);
+      final font = syncfusion.PdfStandardFont(
+        syncfusion.PdfFontFamily.helvetica,
+        fontSize,
+        style: syncfusion.PdfFontStyle.bold,
+      );
+
+      final textSize = text.isNotEmpty ? font.measureString(text) : const ui.Size(0, 0);
+      final hasIcon = useAppLogo && iconBytes != null && iconBytes.isNotEmpty;
+      final iconSize = fontSize * 1.35;
+      final spacing = hasIcon && text.isNotEmpty ? fontSize * 0.4 : 0.0;
+
+      final contentWidth = (hasIcon ? iconSize : 0.0) + spacing + textSize.width;
+      final contentHeight = math.max(hasIcon ? iconSize : 0.0, textSize.height);
+
+      const margin = 18.0;
+      final paddingH = fontSize * 0.65;
+      final paddingV = fontSize * 0.35;
+      final pillWidth = contentWidth + paddingH * 2;
+      final pillHeight = contentHeight + paddingV * 2;
+
+      double x;
+      double y;
+
+      switch (positionIndex) {
+        case 0: // Top-Left
+          x = margin;
+          y = margin;
+          break;
+        case 1: // Top-Right
+          x = pageSize.width - pillWidth - margin;
+          y = margin;
+          break;
+        case 2: // Center
+          x = (pageSize.width - pillWidth) / 2;
+          y = (pageSize.height - pillHeight) / 2;
+          break;
+        case 3: // Bottom-Left
+          x = margin;
+          y = pageSize.height - pillHeight - margin;
+          break;
+        case 4: // Bottom-Right
+        default:
+          x = pageSize.width - pillWidth - margin;
+          y = pageSize.height - pillHeight - margin;
+          break;
+      }
+
+      x = x.clamp(0.0, math.max(0.0, pageSize.width - pillWidth));
+      y = y.clamp(0.0, math.max(0.0, pageSize.height - pillHeight));
+
+      double curX = x + paddingH;
+      if (hasIcon) {
+        try {
+          final iconBitmap = syncfusion.PdfBitmap(iconBytes);
+          final iconY = y + (pillHeight - iconSize) / 2;
+          graphics.drawImage(
+            iconBitmap,
+            ui.Rect.fromLTWH(curX, iconY, iconSize, iconSize),
+          );
+          curX += iconSize + spacing;
+        } catch (_) {}
+      }
+
+      if (text.isNotEmpty) {
+        final textY = y + (pillHeight - textSize.height) / 2;
+        graphics.drawString(
+          text,
+          font,
+          brush: textBrush,
+          bounds: ui.Rect.fromLTWH(curX, textY, textSize.width, textSize.height),
+        );
+      }
+    } catch (_) {
+    } finally {
+      graphics.restore(state);
+    }
+  }
+
   /// Compress worker for background isolate execution.
   /// Params: inputBytes (Uint8List), quality (double)
   static Future<Uint8List> isolateCompressWorker(
@@ -462,6 +609,13 @@ class PdfService {
     final inputBytes =
         Uint8List.fromList(List<int>.from(params['inputBytes']));
     final quality = params['quality'] as double;
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final compressionLevel = _mapCompressionLevel(quality);
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
@@ -476,14 +630,26 @@ class PdfService {
       final section = destDoc.sections!.add();
       section.pageSettings.size = srcDoc.pages[i].size;
       section.pageSettings.margins.all = 0;
-      section.pages.add().graphics.drawPdfTemplate(template, ui.Offset.zero);
+      final page = section.pages.add();
+      page.graphics.drawPdfTemplate(template, ui.Offset.zero);
+      if (applyWatermark) {
+        applyWatermarkToSyncfusionPage(
+          page,
+          iconBytes: iconBytes,
+          text: watermarkText,
+          colorHex: colorHex,
+          opacity: opacity,
+          positionIndex: positionIndex,
+          useAppLogo: useAppLogo,
+        );
+      }
     }
 
     srcDoc.dispose();
     final bytes = await destDoc.save();
     destDoc.dispose();
 
-    if (bytes.length < inputBytes.length) {
+    if (applyWatermark || bytes.length < inputBytes.length) {
       return Uint8List.fromList(bytes);
     }
     return inputBytes;
@@ -495,6 +661,13 @@ class PdfService {
       Map<String, dynamic> params) async {
     final filesData =
         (params['files'] as List<dynamic>).cast<Uint8List>();
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final mergedDoc = syncfusion.PdfDocument();
 
@@ -508,10 +681,22 @@ class PdfService {
         final section = mergedDoc.sections!.add();
         section.pageSettings.size = pageSize;
         section.pageSettings.margins.all = 0;
-        section.pages.add().graphics.drawPdfTemplate(
+        final newPage = section.pages.add();
+        newPage.graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
+        if (applyWatermark) {
+          applyWatermarkToSyncfusionPage(
+            newPage,
+            iconBytes: iconBytes,
+            text: watermarkText,
+            colorHex: colorHex,
+            opacity: opacity,
+            positionIndex: positionIndex,
+            useAppLogo: useAppLogo,
+          );
+        }
       }
       doc.dispose();
     }
@@ -529,6 +714,13 @@ class PdfService {
       Map<String, dynamic> params) async {
     final inputBytes =
         Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
     final pageCount = srcDoc.pages.count;
@@ -542,10 +734,22 @@ class PdfService {
       final newDoc = syncfusion.PdfDocument();
       newDoc.pageSettings.size = pageSize;
       newDoc.pageSettings.margins.all = 0;
-      newDoc.pages.add().graphics.drawPdfTemplate(
+      final newPage = newDoc.pages.add();
+      newPage.graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
           );
+      if (applyWatermark) {
+        applyWatermarkToSyncfusionPage(
+          newPage,
+          iconBytes: iconBytes,
+          text: watermarkText,
+          colorHex: colorHex,
+          opacity: opacity,
+          positionIndex: positionIndex,
+          useAppLogo: useAppLogo,
+        );
+      }
 
       final bytes = await newDoc.save();
       newDoc.dispose();
@@ -564,6 +768,13 @@ class PdfService {
         Uint8List.fromList(List<int>.from(params['inputBytes']));
     final pageNumbers =
         (params['pageNumbers'] as List<dynamic>).cast<int>();
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
     final newDoc = syncfusion.PdfDocument();
@@ -577,10 +788,22 @@ class PdfService {
       final section = newDoc.sections!.add();
       section.pageSettings.size = pageSize;
       section.pageSettings.margins.all = 0;
-      section.pages.add().graphics.drawPdfTemplate(
+      final newPage = section.pages.add();
+      newPage.graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
           );
+      if (applyWatermark) {
+        applyWatermarkToSyncfusionPage(
+          newPage,
+          iconBytes: iconBytes,
+          text: watermarkText,
+          colorHex: colorHex,
+          opacity: opacity,
+          positionIndex: positionIndex,
+          useAppLogo: useAppLogo,
+        );
+      }
     }
 
     srcDoc.dispose();
@@ -598,6 +821,13 @@ class PdfService {
     final inputBytes =
         Uint8List.fromList(List<int>.from(params['inputBytes']));
     final pageSize = params['pageSize'] as int;
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
     final pageCount = srcDoc.pages.count;
@@ -615,10 +845,22 @@ class PdfService {
         final section = newDoc.sections!.add();
         section.pageSettings.size = pageSize;
         section.pageSettings.margins.all = 0;
-        section.pages.add().graphics.drawPdfTemplate(
+        final newPage = section.pages.add();
+        newPage.graphics.drawPdfTemplate(
               template,
               ui.Offset.zero,
             );
+        if (applyWatermark) {
+          applyWatermarkToSyncfusionPage(
+            newPage,
+            iconBytes: iconBytes,
+            text: watermarkText,
+            colorHex: colorHex,
+            opacity: opacity,
+            positionIndex: positionIndex,
+            useAppLogo: useAppLogo,
+          );
+        }
       }
 
       final bytes = await newDoc.save();
@@ -640,6 +882,13 @@ class PdfService {
         Uint8List.fromList(List<int>.from(params['inputBytes']));
     final pageNumbers =
         (params['pageNumbers'] as List<dynamic>).cast<int>();
+    final applyWatermark = params['watermark'] as bool? ?? false;
+    final iconBytes = params['watermarkIconBytes'] as Uint8List?;
+    final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
+    final colorHex = params['watermarkColorHex'] as int? ?? 0xFFFFFFFF;
+    final opacity = (params['watermarkOpacity'] as num?)?.toDouble() ?? 0.7;
+    final positionIndex = params['watermarkPositionIndex'] as int? ?? 4;
+    final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
     final results = <Uint8List>[];
@@ -653,10 +902,22 @@ class PdfService {
       final newDoc = syncfusion.PdfDocument();
       newDoc.pageSettings.size = pageSize;
       newDoc.pageSettings.margins.all = 0;
-      newDoc.pages.add().graphics.drawPdfTemplate(
+      final newPage = newDoc.pages.add();
+      newPage.graphics.drawPdfTemplate(
             template,
             ui.Offset.zero,
           );
+      if (applyWatermark) {
+        applyWatermarkToSyncfusionPage(
+          newPage,
+          iconBytes: iconBytes,
+          text: watermarkText,
+          colorHex: colorHex,
+          opacity: opacity,
+          positionIndex: positionIndex,
+          useAppLogo: useAppLogo,
+        );
+      }
 
       final bytes = await newDoc.save();
       newDoc.dispose();

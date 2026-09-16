@@ -4,7 +4,9 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/social_presets.dart';
 import '../state/image_editor_state.dart';
@@ -304,8 +306,13 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     }
 
     try {
+      final settings = ref.read(appSettingsProvider);
+      final finalBytes = WatermarkHelper.applyGlobalWatermarkIfNeeded(
+        state.currentBytes!,
+        settings,
+      );
       final result = await StorageService.saveImage(
-        bytes: state.currentBytes!,
+        bytes: finalBytes,
         extension: _outputFormat.extension,
       );
 

@@ -16,7 +16,9 @@ class AppSettingsState {
     this.stripExif = true,
     this.hasCompletedOnboarding = false,
     this.enableGlobalWatermark = true,
-    this.watermarkText = '◈ PixelTools',
+    this.useWatermarkLogo = true,
+    this.useImageVerticalSidebar = true,
+    this.watermarkText = 'PixelTools',
     this.watermarkColorHex = 0xFFFFFFFF,
     this.watermarkOpacity = 0.7,
     this.watermarkPositionIndex = 4,
@@ -29,10 +31,15 @@ class AppSettingsState {
   final bool stripExif;
   final bool hasCompletedOnboarding;
   final bool enableGlobalWatermark;
+  final bool useWatermarkLogo;
+  final bool useImageVerticalSidebar;
   final String watermarkText;
   final int watermarkColorHex;
   final double watermarkOpacity;
   final int watermarkPositionIndex;
+
+  int get watermarkColor => watermarkColorHex;
+  int get watermarkPosition => watermarkPositionIndex;
 
   AppSettingsState copyWith({
     String? savePath,
@@ -42,6 +49,8 @@ class AppSettingsState {
     bool? stripExif,
     bool? hasCompletedOnboarding,
     bool? enableGlobalWatermark,
+    bool? useWatermarkLogo,
+    bool? useImageVerticalSidebar,
     String? watermarkText,
     int? watermarkColorHex,
     double? watermarkOpacity,
@@ -57,6 +66,9 @@ class AppSettingsState {
           hasCompletedOnboarding ?? this.hasCompletedOnboarding,
       enableGlobalWatermark:
           enableGlobalWatermark ?? this.enableGlobalWatermark,
+      useWatermarkLogo: useWatermarkLogo ?? this.useWatermarkLogo,
+      useImageVerticalSidebar:
+          useImageVerticalSidebar ?? this.useImageVerticalSidebar,
       watermarkText: watermarkText ?? this.watermarkText,
       watermarkColorHex: watermarkColorHex ?? this.watermarkColorHex,
       watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
@@ -71,6 +83,9 @@ class AppSettingsState {
   static const String _stripExifKey = 'strip_exif';
   static const String _completedOnboardingKey = 'completed_onboarding';
   static const String _enableGlobalWatermarkKey = 'enable_global_watermark';
+  static const String _useWatermarkLogoKey = 'use_watermark_logo';
+  static const String _useImageVerticalSidebarKey =
+      'use_image_vertical_sidebar';
   static const String _watermarkTextKey = 'watermark_text';
   static const String _watermarkColorHexKey = 'watermark_color_hex';
   static const String _watermarkOpacityKey = 'watermark_opacity';
@@ -148,9 +163,33 @@ class AppSettingsState {
     await prefs.setBool(_enableGlobalWatermarkKey, value);
   }
 
+  static Future<bool> loadUseWatermarkLogo() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_useWatermarkLogoKey) ?? true;
+  }
+
+  static Future<void> persistUseWatermarkLogo(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useWatermarkLogoKey, value);
+  }
+
+  static Future<bool> loadUseImageVerticalSidebar() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_useImageVerticalSidebarKey) ?? true;
+  }
+
+  static Future<void> persistUseImageVerticalSidebar(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useImageVerticalSidebarKey, value);
+  }
+
   static Future<String> loadWatermarkText() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_watermarkTextKey) ?? '◈ PixelTools';
+    final stored = prefs.getString(_watermarkTextKey);
+    if (stored == null || stored.isEmpty || stored == '◈ PixelTools') {
+      return 'PixelTools';
+    }
+    return stored;
   }
 
   static Future<void> persistWatermarkText(String value) async {
@@ -209,6 +248,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
         await AppSettingsState.loadCompletedOnboarding();
     final enableGlobalWatermark =
         await AppSettingsState.loadEnableGlobalWatermark();
+    final useWatermarkLogo = await AppSettingsState.loadUseWatermarkLogo();
+    final useImageVerticalSidebar =
+        await AppSettingsState.loadUseImageVerticalSidebar();
     final watermarkText = await AppSettingsState.loadWatermarkText();
     final watermarkColorHex = await AppSettingsState.loadWatermarkColorHex();
     final watermarkOpacity = await AppSettingsState.loadWatermarkOpacity();
@@ -222,6 +264,8 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
       stripExif: stripExif,
       hasCompletedOnboarding: completedOnboarding,
       enableGlobalWatermark: enableGlobalWatermark,
+      useWatermarkLogo: useWatermarkLogo,
+      useImageVerticalSidebar: useImageVerticalSidebar,
       watermarkText: watermarkText,
       watermarkColorHex: watermarkColorHex,
       watermarkOpacity: watermarkOpacity,
@@ -260,6 +304,16 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     state = state.copyWith(enableGlobalWatermark: value);
   }
 
+  Future<void> setUseWatermarkLogo(bool value) async {
+    await AppSettingsState.persistUseWatermarkLogo(value);
+    state = state.copyWith(useWatermarkLogo: value);
+  }
+
+  Future<void> setUseImageVerticalSidebar(bool value) async {
+    await AppSettingsState.persistUseImageVerticalSidebar(value);
+    state = state.copyWith(useImageVerticalSidebar: value);
+  }
+
   Future<void> setWatermarkText(String value) async {
     await AppSettingsState.persistWatermarkText(value);
     state = state.copyWith(watermarkText: value);
@@ -291,3 +345,6 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     return dir;
   }
 }
+
+typedef AppSettings = AppSettingsState;
+

@@ -175,6 +175,9 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       final pdf = pw.Document();
       final settings = state.pageSettings;
       final appSettings = ref.read(appSettingsProvider);
+      if (WatermarkHelper.cachedIconBytes == null) {
+        await WatermarkHelper.loadIconBytes();
+      }
 
       for (int i = 0; i < state.images.length; i++) {
         final item = state.images[i];
@@ -197,10 +200,6 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
         }
 
         if (decodedImage == null) continue;
-
-        if (appSettings.enableGlobalWatermark) {
-          decodedImage = WatermarkHelper.applyToImage(decodedImage, appSettings);
-        }
 
         final imageWidth = decodedImage.width;
         final imageHeight = decodedImage.height;
@@ -274,7 +273,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
             pageFormat: pageFormat,
             margin: pw.EdgeInsets.zero,
             build: (context) {
-              return pw.Container(
+              final content = pw.Container(
                 padding: pw.EdgeInsets.only(
                   left: marginLeft,
                   top: marginTop,
@@ -283,6 +282,23 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
                 ),
                 child: _buildImageWidget(pdfImage, settings.fitMode, availableFormat, imageWidth, imageHeight),
               );
+
+              if (appSettings.enableGlobalWatermark) {
+                return pw.Stack(
+                  children: [
+                    content,
+                    WatermarkHelper.buildPdfWatermarkWidget(
+                      iconBytes: WatermarkHelper.cachedIconBytes,
+                      text: appSettings.watermarkText,
+                      colorHex: appSettings.watermarkColor,
+                      opacity: appSettings.watermarkOpacity,
+                      positionIndex: appSettings.watermarkPosition,
+                      useAppLogo: appSettings.useWatermarkLogo,
+                    ),
+                  ],
+                );
+              }
+              return content;
             },
           ),
         );

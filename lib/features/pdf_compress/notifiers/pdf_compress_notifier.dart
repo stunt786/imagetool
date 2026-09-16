@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_compress_state.dart';
 
 final pdfCompressProvider = NotifierProvider<PdfCompressNotifier, PdfCompressState>(
@@ -84,11 +86,23 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
       final inputBytes = File(state.selectedFilePath!).readAsBytesSync();
       state = state.copyWith(progress: 0.2);
 
+      final appSettings = ref.read(appSettingsProvider);
+      if (WatermarkHelper.cachedIconBytes == null) {
+        await WatermarkHelper.loadIconBytes();
+      }
+
       final resultBytes = await compute(
         PdfService.isolateCompressWorker,
         {
           'inputBytes': inputBytes,
           'quality': state.compressionLevel.qualityFactor,
+          'applyWatermark': appSettings.enableGlobalWatermark,
+          'watermarkText': appSettings.watermarkText,
+          'watermarkPosition': appSettings.watermarkPosition,
+          'watermarkOpacity': appSettings.watermarkOpacity,
+          'watermarkColor': appSettings.watermarkColor,
+          'useWatermarkLogo': appSettings.useWatermarkLogo,
+          'iconBytes': WatermarkHelper.cachedIconBytes,
         },
       );
 

@@ -223,6 +223,48 @@ class SettingsScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            _WatermarkLivePreview(settings: settings),
+                            const SizedBox(height: 16),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              secondary: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.asset(
+                                  'assets/icons/icon.png',
+                                  width: 28,
+                                  height: 28,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(Icons.image_outlined),
+                                ),
+                              ),
+                              title: const Text('Include App Logo'),
+                              subtitle: const Text(
+                                'Add icon.png alongside watermark text',
+                              ),
+                              value: settings.useWatermarkLogo,
+                              onChanged: (val) {
+                                ref
+                                    .read(appSettingsProvider.notifier)
+                                    .setUseWatermarkLogo(val);
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              secondary: const Icon(Icons.view_sidebar_outlined),
+                              title: const Text('Right Vertical Sidebar for Images'),
+                              subtitle: const Text(
+                                'Apply vertical sidebar watermark with low opacity along the right side on exported images',
+                              ),
+                              value: settings.useImageVerticalSidebar,
+                              onChanged: (val) {
+                                ref
+                                    .read(appSettingsProvider.notifier)
+                                    .setUseImageVerticalSidebar(val);
+                              },
+                            ),
+                            const SizedBox(height: 12),
                             _WatermarkTextField(
                               initialValue: settings.watermarkText,
                               onChanged: (val) {
@@ -507,7 +549,7 @@ class _WatermarkTextFieldState extends State<_WatermarkTextField> {
       controller: _controller,
       decoration: InputDecoration(
         labelText: 'Watermark Text',
-        hintText: '© PixelTools',
+        hintText: 'PixelTools',
         prefixIcon: const Icon(Icons.title),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -515,6 +557,322 @@ class _WatermarkTextFieldState extends State<_WatermarkTextField> {
         isDense: true,
       ),
       onChanged: widget.onChanged,
+    );
+  }
+}
+
+class _WatermarkLivePreview extends StatefulWidget {
+  final AppSettingsState settings;
+
+  const _WatermarkLivePreview({required this.settings});
+
+  @override
+  State<_WatermarkLivePreview> createState() => _WatermarkLivePreviewState();
+}
+
+class _WatermarkLivePreviewState extends State<_WatermarkLivePreview> {
+  int _previewTab = 0; // 0: Image Export, 1: PDF Export
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final settings = widget.settings;
+
+    Alignment alignment;
+    switch (settings.watermarkPositionIndex) {
+      case 0:
+        alignment = Alignment.topLeft;
+        break;
+      case 1:
+        alignment = Alignment.topRight;
+        break;
+      case 2:
+        alignment = Alignment.center;
+        break;
+      case 3:
+        alignment = Alignment.bottomLeft;
+        break;
+      case 4:
+      default:
+        alignment = Alignment.bottomRight;
+        break;
+    }
+
+    final isImageTab = _previewTab == 0;
+    final contentOpacity = isImageTab && settings.useImageVerticalSidebar
+        ? (settings.watermarkOpacity * 0.50).clamp(0.20, 0.40)
+        : settings.watermarkOpacity.clamp(0.10, 1.0);
+
+    final textColor =
+        Color(settings.watermarkColorHex).withValues(alpha: contentOpacity);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Live Preview',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  label: Text('Image'),
+                  icon: Icon(Icons.image_outlined, size: 16),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  label: Text('PDF'),
+                  icon: Icon(Icons.picture_as_pdf_outlined, size: 16),
+                ),
+              ],
+              selected: {_previewTab},
+              onSelectionChanged: (set) {
+                setState(() => _previewTab = set.first);
+              },
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 140,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isImageTab
+                ? (isDark ? const Color(0xFF192231) : const Color(0xFFE2E8F0))
+                : (isDark ? const Color(0xFF1E1E2C) : const Color(0xFFF3F4F8)),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Stack(
+            children: [
+              if (isImageTab) ...[
+                // Simulated photo content with subtle landscape graphic
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Opacity(
+                      opacity: isDark ? 0.25 : 0.18,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.landscape_rounded,
+                            size: 64,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  height: 8,
+                                  width: 80,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.onSurface,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  height: 6,
+                                  width: 120,
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.onSurface,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // Simulated PDF document mockup lines
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 10,
+                        width: 80,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 8,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 8,
+                        width: 160,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 8,
+                        width: 220,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              // Format indicator badge
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color:
+                          theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    isImageTab
+                        ? (settings.useImageVerticalSidebar
+                            ? 'Image • Vertical Sidebar'
+                            : 'Image • Corner')
+                        : 'PDF • Corner Watermark',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+              // Watermark overlay
+              if (isImageTab && settings.useImageVerticalSidebar)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: RotatedBox(
+                      quarterTurns: 1,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (settings.useWatermarkLogo) ...[
+                              Opacity(
+                                opacity: contentOpacity,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: Image.asset(
+                                    'assets/icons/icon.png',
+                                    width: 12,
+                                    height: 12,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.diamond_outlined,
+                                      size: 12,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            if (settings.watermarkText.isNotEmpty)
+                              Text(
+                                settings.watermarkText,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Align(
+                  alignment: alignment,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (settings.useWatermarkLogo) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: Image.asset(
+                              'assets/icons/icon.png',
+                              width: 14,
+                              height: 14,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.diamond_outlined,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        if (settings.watermarkText.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              settings.watermarkText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

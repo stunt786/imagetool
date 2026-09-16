@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/services/storage_service.dart';
+import 'core/settings/app_settings.dart';
 import 'features/image_resize/models/social_presets.dart';
+import 'shared/services/watermark_helper.dart';
 
 /// ImageEditorScreen provides a unified interface for Resize, Crop, and Rotate.
 /// This implementation fixes the handlebar stuck issue by using a dedicated
@@ -273,8 +275,13 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
   Future<void> _saveImage() async {
     setState(() => _isProcessing = true);
     try {
+      final settings = ref.read(appSettingsProvider);
+      final finalBytes = WatermarkHelper.applyGlobalWatermarkIfNeeded(
+        widget.imageBytes,
+        settings,
+      );
       final result = await StorageService.saveImage(
-        bytes: widget.imageBytes,
+        bytes: finalBytes,
         extension: OutputImageFormat.png.extension,
         customFileName: widget.fileName,
       );

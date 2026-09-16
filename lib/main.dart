@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/app/pixeltools_app.dart';
 import 'core/services/ad_service.dart';
 import 'core/services/permission_service.dart';
+import 'shared/services/watermark_helper.dart';
 import 'splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await WatermarkHelper.loadIconBytes();
 
   if (!kIsWeb) {
     await AdService.instance.initialize();
