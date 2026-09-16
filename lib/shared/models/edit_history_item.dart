@@ -39,6 +39,30 @@ class EditHistoryItem {
     return '${editedAt.day}/${editedAt.month}/${editedAt.year}';
   }
 
+  EditHistoryItem copyWith({
+    String? fileName,
+    String? toolUsed,
+    DateTime? editedAt,
+    String? filePath,
+    String? thumbnailPath,
+    IconData? toolIcon,
+    String? compressionLevel,
+    bool? isGroup,
+    int? groupCount,
+  }) {
+    return EditHistoryItem(
+      fileName: fileName ?? this.fileName,
+      toolUsed: toolUsed ?? this.toolUsed,
+      editedAt: editedAt ?? this.editedAt,
+      filePath: filePath ?? this.filePath,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      toolIcon: toolIcon ?? this.toolIcon,
+      compressionLevel: compressionLevel ?? this.compressionLevel,
+      isGroup: isGroup ?? this.isGroup,
+      groupCount: groupCount ?? this.groupCount,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'fileName': fileName,

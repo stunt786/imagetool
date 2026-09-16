@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 
 import '../models/scanned_page.dart';
+import 'document_enhancement_service.dart';
 
 class ImageFilterResult {
   const ImageFilterResult({
@@ -44,7 +45,7 @@ Uint8List? _isolateApplyMagicColor(Map<String, dynamic> params) {
   if (image == null) return null;
 
   img.Image processed = image;
-  processed = img.adjustColor(processed, contrast: 1.4, saturation: 1.25, brightness: 0.03);
+  processed = img.adjustColor(processed, contrast: 1.25, saturation: 1.2, brightness: 1.05);
 
   return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
 }
@@ -75,7 +76,7 @@ Uint8List? _isolateApplyBinarization(Map<String, dynamic> params) {
   var sumB = 0.0;
   var wB = 0;
   var wF = 0;
-  var maxVariance = 0.0;
+  var maxVariance = -1.0;
   var threshold = 128;
 
   for (var i = 0; i < 256; i++) {
@@ -87,11 +88,13 @@ Uint8List? _isolateApplyBinarization(Map<String, dynamic> params) {
     var mB = sumB / wB;
     var mF = (sum - sumB) / wF;
     var between = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
-    if (between >= maxVariance) {
+    if (between > maxVariance) {
       maxVariance = between;
       threshold = i;
     }
   }
+
+  threshold = threshold.clamp(40, 220);
 
   for (var y = 0; y < processed.height; y++) {
     for (var x = 0; x < processed.width; x++) {
@@ -113,26 +116,27 @@ Uint8List? _isolateApplyShadowRemoval(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
-  img.Image processed = img.grayscale(image);
+  final gray = img.grayscale(image);
 
-  // Apply large blur to extract background illumination
-  final kernelSize = math.max(processed.width, processed.height) ~/ 8;
-  final blurred = img.gaussianBlur(processed, radius: kernelSize.clamp(3, 99));
+  // Fast illumination estimation via downsampled blur
+  const bgDim = 64;
+  final smallW = math.max(16, gray.width ~/ bgDim);
+  final smallH = math.max(16, gray.height ~/ bgDim);
+  final small = img.copyResize(gray, width: smallW, height: smallH);
+  final blurredSmall = img.gaussianBlur(small, radius: 4);
+  final bg = img.copyResize(blurredSmall, width: gray.width, height: gray.height);
 
-  // Subtract background and normalize
-  for (var y = 0; y < processed.height; y++) {
-    for (var x = 0; x < processed.width; x++) {
-      final origPixel = processed.getPixel(x, y);
-      final bgPixel = blurred.getPixel(x, y);
-      var diff = origPixel.r.toInt() - bgPixel.r.toInt();
-      diff = ((diff + 255) * 128 ~/ 255).clamp(0, 255);
-      processed.setPixelRgba(x, y, diff, diff, diff, 255);
+  // Division normalization to flatten uneven shadows into clean document background
+  for (var y = 0; y < gray.height; y++) {
+    for (var x = 0; x < gray.width; x++) {
+      final orig = gray.getPixel(x, y).r.toDouble();
+      final bgVal = bg.getPixel(x, y).r.toDouble().clamp(1.0, 255.0);
+      final val = ((orig / bgVal) * 235.0).clamp(0.0, 255.0).toInt();
+      gray.setPixelRgba(x, y, val, val, val, 255);
     }
   }
 
-  // Stretch contrast
-  processed = img.adjustColor(processed, contrast: 1.4);
-
+  final processed = img.adjustColor(gray, contrast: 1.15, brightness: 1.05);
   return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
 }
 
@@ -146,6 +150,33 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   if (filterName == 'shadowRemoval' || filterName == 'noShadow') {
     return _isolateApplyShadowRemoval(params);
   }
+  if (filterName == 'autoFlatten') {
+    final image = img.decodeImage(bytes);
+    if (image == null) return null;
+    final flattened = DocumentEnhancementService.internalAutoFlattenPaper(image);
+    return Uint8List.fromList(img.encodeJpg(flattened, quality: 92));
+  }
+  if (filterName == 'antiLight') {
+    final image = img.decodeImage(bytes);
+    if (image == null) return null;
+    final corrected = DocumentEnhancementService.internalAutocorrectAntiLightShadows(image);
+    return Uint8List.fromList(img.encodeJpg(corrected, quality: 92));
+  }
+  if (filterName == 'autoBrighten') {
+    final image = img.decodeImage(bytes);
+    if (image == null) return null;
+    final brightened = DocumentEnhancementService.internalAutoAdjustDarkImage(image);
+    return Uint8List.fromList(img.encodeJpg(brightened, quality: 92));
+  }
+  if (filterName == 'smartScan') {
+    final image = img.decodeImage(bytes);
+    if (image == null) return null;
+    var processed = DocumentEnhancementService.internalAutoFitPaper(image);
+    processed = DocumentEnhancementService.internalAutoFlattenPaper(processed);
+    processed = DocumentEnhancementService.internalAutocorrectAntiLightShadows(processed);
+    processed = DocumentEnhancementService.internalAutoAdjustDarkImage(processed);
+    return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
+  }
 
   final image = img.decodeImage(bytes);
   if (image == null) return null;
@@ -153,19 +184,19 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   late img.Image processed;
   switch (filterName) {
     case 'lighten':
-      processed = img.adjustColor(image, brightness: 0.2, contrast: 1.05);
+      processed = img.adjustColor(image, brightness: 1.2, contrast: 1.05);
     case 'enhance':
       processed = img.adjustColor(
         image,
-        contrast: 1.4,
+        contrast: 1.25,
         saturation: 1.15,
-        brightness: 0.05,
+        brightness: 1.05,
       );
     case 'eco':
       processed = img.adjustColor(
         img.grayscale(image),
         contrast: 1.15,
-        brightness: 0.05,
+        brightness: 1.05,
       );
     case 'grayscale':
       processed = img.grayscale(image);
@@ -174,12 +205,12 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
       processed = img.invert(image);
     case 'sepia':
       processed = img.sepia(image);
-      processed = img.adjustColor(processed, saturation: 0.85, brightness: 0.05);
+      processed = img.adjustColor(processed, saturation: 0.85, brightness: 1.05);
     case 'warm':
       processed = img.adjustColor(
         image,
         saturation: 1.2,
-        brightness: 0.04,
+        brightness: 1.04,
       );
       for (var y = 0; y < processed.height; y++) {
         for (var x = 0; x < processed.width; x++) {
@@ -194,7 +225,7 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
       processed = img.adjustColor(
         image,
         saturation: 1.1,
-        brightness: 0.03,
+        brightness: 1.03,
       );
       for (var y = 0; y < processed.height; y++) {
         for (var x = 0; x < processed.width; x++) {
@@ -208,9 +239,9 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
     case 'dramatic':
       processed = img.adjustColor(
         image,
-        contrast: 1.6,
-        saturation: 0.7,
-        brightness: -0.05,
+        contrast: 1.35,
+        saturation: 0.8,
+        brightness: 0.95,
       );
     case 'bwHighContrast':
       processed = img.grayscale(image);
@@ -228,7 +259,7 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
       }
       var sumB = 0.0;
       var wB = 0;
-      var maxVariance = 0.0;
+      var maxVariance = -1.0;
       var threshold = 128;
       for (var i = 0; i < 256; i++) {
         wB += histogram[i];
@@ -239,11 +270,12 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
         final mB = sumB / wB;
         final mF = (sum - sumB) / wF;
         final between = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
-        if (between >= maxVariance) {
+        if (between > maxVariance) {
           maxVariance = between;
           threshold = i;
         }
       }
+      threshold = threshold.clamp(40, 220);
       for (var y = 0; y < processed.height; y++) {
         for (var x = 0; x < processed.width; x++) {
           final intensity = processed.getPixel(x, y).r;

@@ -142,20 +142,22 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
 
       state = state.copyWith(progress: 0.8);
 
-      // Write result to sandbox (not public dir)
-      final outputPath = await _manager.writeToSandbox(
-        resultBytes,
-        'merged.pdf',
-      );
+      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'merged_$timestamp.pdf';
+      final outputPath = '${saveDir.path}/$fileName';
+      final file = File(outputPath);
+      await file.writeAsBytes(resultBytes, flush: true);
 
-      if (!File(outputPath).existsSync()) {
-        throw Exception('Merged PDF file was not created');
+      if (!await file.exists() || await file.length() == 0) {
+        throw Exception('Merged PDF file was not created or is empty');
       }
 
       state = state.copyWith(
         isProcessing: false,
         progress: 1.0,
         outputPath: outputPath,
+        publicExportPath: outputPath,
       );
 
       return outputPath;

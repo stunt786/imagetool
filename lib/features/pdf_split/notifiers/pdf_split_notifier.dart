@@ -127,6 +127,16 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
 
       List<String> outputPaths;
 
+      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+      Future<String> savePdfFile(Uint8List bytes, String name) async {
+        final filePath = '${saveDir.path}/$name';
+        final file = File(filePath);
+        await file.writeAsBytes(bytes, flush: true);
+        return filePath;
+      }
+
       switch (state.splitMode) {
         case SplitMode.allPages:
           {
@@ -140,11 +150,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             state = state.copyWith(progress: 0.7);
             outputPaths = [];
             for (int i = 0; i < results.length; i++) {
-              final sandboxPath = await _manager.writeToSandbox(
+              final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_page_${i + 1}.pdf',
+                '${baseName}_${timestamp}_page_${i + 1}.pdf',
               );
-              outputPaths.add(sandboxPath);
+              outputPaths.add(savedPath);
             }
           }
           break;
@@ -168,11 +178,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               },
             );
             state = state.copyWith(progress: 0.7);
-            final sandboxPath = await _manager.writeToSandbox(
+            final savedPath = await savePdfFile(
               resultBytes,
-              '${baseName}_extracted.pdf',
+              '${baseName}_${timestamp}_extracted.pdf',
             );
-            outputPaths = [sandboxPath];
+            outputPaths = [savedPath];
           }
           break;
 
@@ -197,11 +207,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             state = state.copyWith(progress: 0.7);
             outputPaths = [];
             for (int i = 0; i < results.length; i++) {
-              final sandboxPath = await _manager.writeToSandbox(
+              final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_page_${sortedPages[i]}.pdf',
+                '${baseName}_${timestamp}_page_${sortedPages[i]}.pdf',
               );
-              outputPaths.add(sandboxPath);
+              outputPaths.add(savedPath);
             }
           }
           break;
@@ -219,11 +229,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             state = state.copyWith(progress: 0.7);
             outputPaths = [];
             for (int i = 0; i < results.length; i++) {
-              final sandboxPath = await _manager.writeToSandbox(
+              final savedPath = await savePdfFile(
                 results[i],
-                '${baseName}_part_${i + 1}.pdf',
+                '${baseName}_${timestamp}_part_${i + 1}.pdf',
               );
-              outputPaths.add(sandboxPath);
+              outputPaths.add(savedPath);
             }
           }
           break;
@@ -233,6 +243,7 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
         isProcessing: false,
         progress: 1.0,
         outputPaths: outputPaths,
+        publicExportPaths: outputPaths,
       );
 
       return outputPaths;

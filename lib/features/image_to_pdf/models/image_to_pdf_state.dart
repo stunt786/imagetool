@@ -57,10 +57,10 @@ class PdfPageSettings {
     orientation: PdfOrientation.portrait,
     fitMode: ImageFitMode.fit,
     quality: PdfQuality.optimized,
-    marginTop: 0.75,
-    marginBottom: 0.75,
-    marginLeft: 0.75,
-    marginRight: 0.75,
+    marginTop: 0.25,
+    marginBottom: 0.25,
+    marginLeft: 0.25,
+    marginRight: 0.25,
   );
 }
 

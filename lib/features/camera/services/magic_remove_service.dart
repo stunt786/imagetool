@@ -51,31 +51,63 @@ class MagicRemoveService {
     final image = img.decodeImage(imageBytes);
     if (image == null) return null;
 
-    // Downscale large images to prevent OOM (max 1024px on longest side)
+    // Calculate scale factors from display canvas to full resolution image
+    final scaleX = image.width / imageWidth;
+    final scaleY = image.height / imageHeight;
+    final avgScale = (scaleX + scaleY) / 2.0;
+    final scaledRadius = brushRadius * avgScale;
+
+    // Find bounding box of all stroke points in original image space
+    double minPtX = double.infinity;
+    double maxPtX = -double.infinity;
+    double minPtY = double.infinity;
+    double maxPtY = -double.infinity;
+
+    for (int i = 0; i < rawPoints.length; i += 2) {
+      final px = rawPoints[i] * scaleX;
+      final py = rawPoints[i + 1] * scaleY;
+      if (px < minPtX) minPtX = px;
+      if (px > maxPtX) maxPtX = px;
+      if (py < minPtY) minPtY = py;
+      if (py > maxPtY) maxPtY = py;
+    }
+
+    if (minPtX == double.infinity) return imageBytes;
+
+    // Expand bounding box by padding to sample surrounding background context
+    final padding = (scaledRadius * 2.5 + 32).ceil();
+    final roiX = (minPtX - padding).floor().clamp(0, image.width - 1);
+    final roiY = (minPtY - padding).floor().clamp(0, image.height - 1);
+    final roiMaxX = (maxPtX + padding).ceil().clamp(0, image.width - 1);
+    final roiMaxY = (maxPtY + padding).ceil().clamp(0, image.height - 1);
+    final roiW = roiMaxX - roiX + 1;
+    final roiH = roiMaxY - roiY + 1;
+
+    if (roiW <= 0 || roiH <= 0) return imageBytes;
+
+    // Crop ROI for inpainting so the rest of the image stays 100% full-resolution
+    img.Image workImage = img.copyCrop(image, x: roiX, y: roiY, width: roiW, height: roiH);
+
+    // Only downscale if the ROI itself is exceptionally large
     const maxDim = 1024;
-    double downscaleFactor = 1.0;
-    img.Image workImage = image;
-    if (image.width > maxDim || image.height > maxDim) {
-      downscaleFactor = maxDim / math.max(image.width, image.height);
-      final newW = (image.width * downscaleFactor).round();
-      final newH = (image.height * downscaleFactor).round();
-      workImage = img.copyResize(image, width: newW, height: newH);
+    double roiDownscaleFactor = 1.0;
+    if (roiW > maxDim || roiH > maxDim) {
+      roiDownscaleFactor = maxDim / math.max(roiW, roiH);
+      final newW = (roiW * roiDownscaleFactor).round();
+      final newH = (roiH * roiDownscaleFactor).round();
+      workImage = img.copyResize(workImage, width: newW, height: newH);
     }
 
     final width = workImage.width;
     final height = workImage.height;
     final totalPixels = width * height;
+    final effectiveRadius = scaledRadius * roiDownscaleFactor;
 
-    final scaleX = width / imageWidth;
-    final scaleY = height / imageHeight;
-    final avgScale = (scaleX + scaleY) / 2.0;
-    final scaledRadius = brushRadius * avgScale;
-
-    // ── Step 1: Build mask from strokes ──
+    // ── Step 1: Build mask from strokes in ROI coordinates ──
     final mask = Uint8List(totalPixels); // 0 = unmasked, 1 = masked
 
     void markCircle(double cx, double cy, double extraPad) {
-      final r = scaledRadius + extraPad;
+      final r = effectiveRadius + extraPad;
       final rSq = r * r;
       final minX = (cx - r).floor().clamp(0, width - 1);
       final maxX = (cx + r).ceil().clamp(0, width - 1);
@@ -95,20 +127,20 @@ class MagicRemoveService {
       }
     }
 
-    // Connect points with interpolated strokes
+    // Connect points with interpolated strokes in ROI coordinates
     for (int i = 0; i < rawPoints.length; i += 2) {
-      final px = rawPoints[i] * scaleX;
-      final py = rawPoints[i + 1] * scaleY;
+      final px = (rawPoints[i] * scaleX - roiX) * roiDownscaleFactor;
+      final py = (rawPoints[i + 1] * scaleY - roiY) * roiDownscaleFactor;
       markCircle(px, py, 0);
 
       if (i >= 2) {
-        final prevPx = rawPoints[i - 2] * scaleX;
-        final prevPy = rawPoints[i - 1] * scaleY;
+        final prevPx = (rawPoints[i - 2] * scaleX - roiX) * roiDownscaleFactor;
+        final prevPy = (rawPoints[i - 1] * scaleY - roiY) * roiDownscaleFactor;
         final dist = math.sqrt(
           (px - prevPx) * (px - prevPx) + (py - prevPy) * (py - prevPy),
         );
         final steps =
-            (dist / math.max(1.0, scaledRadius / 2.0)).ceil().clamp(1, 200);
+            (dist / math.max(1.0, effectiveRadius / 2.0)).ceil().clamp(1, 200);
         for (int s = 1; s <= steps; s++) {
           final t = s / steps;
           markCircle(
@@ -515,18 +547,25 @@ class MagicRemoveService {
       }
     }
 
-    // Upscale back to original dimensions if we downscaled
-    img.Image resultImage = workImage;
-    if (downscaleFactor < 1.0) {
-      resultImage = img.copyResize(
+    img.Image finishedRoi = workImage;
+    if (roiDownscaleFactor < 1.0) {
+      finishedRoi = img.copyResize(
         workImage,
-        width: image.width,
-        height: image.height,
+        width: roiW,
+        height: roiH,
         interpolation: img.Interpolation.linear,
       );
     }
 
-    return Uint8List.fromList(img.encodeJpg(resultImage, quality: 95));
+    // Blit inpainted ROI back into pristine full-resolution original image
+    for (int y = 0; y < roiH; y++) {
+      for (int x = 0; x < roiW; x++) {
+        final p = finishedRoi.getPixel(x, y);
+        image.setPixelRgb(roiX + x, roiY + y, p.r.toInt(), p.g.toInt(), p.b.toInt());
+      }
+    }
+
+    return Uint8List.fromList(img.encodeJpg(image, quality: 95));
   }
 
   /// Compute confidence for a pixel based on known neighbors.

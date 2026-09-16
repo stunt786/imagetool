@@ -106,10 +106,11 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Saved ${results.length} file${results.length > 1 ? 's' : ''}'),
+            content: Text('Saved ${results.length} file${results.length > 1 ? 's' : ''} to gallery'),
             backgroundColor: Colors.green,
           ),
         );
+        ref.read(formatConverterProvider.notifier).clearAll();
         InterstitialTracker.instance.trackAction();
       }
     } catch (e) {
@@ -617,8 +618,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                 if (hasSuccess) ...[
                   const SizedBox(width: 10),
                   _ActionIconButton(
-                    icon: const Icon(Icons.save_alt_rounded),
-                    label: 'Save',
+                    icon: const Icon(Icons.photo_library_rounded),
+                    label: 'Save to Gallery',
                     onPressed: _saveConvertedImages,
                     theme: theme,
                     backgroundColor: theme.colorScheme.secondary,

@@ -91,16 +91,81 @@ class AppSettingsState {
   static const String _watermarkOpacityKey = 'watermark_opacity';
   static const String _watermarkPositionIndexKey = 'watermark_position_index';
 
-  static Future<String> loadPath() async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<String> loadPath([SharedPreferences? preferences]) async {
+    final prefs = preferences ?? await SharedPreferences.getInstance();
     final stored = prefs.getString(_key);
-    if (stored != null && stored.isNotEmpty) return stored;
+    if (stored != null && stored.isNotEmpty) {
+      final storedDir = Directory(stored);
+      if (!await storedDir.exists()) {
+        try {
+          await storedDir.create(recursive: true);
+        } catch (_) {}
+      }
+      return stored;
+    }
+
+    if (Platform.isAndroid) {
+      try {
+        final defaultDir =
+            Directory('/storage/emulated/0/Documents/PixelTools');
+        if (!await defaultDir.exists()) {
+          await defaultDir.create(recursive: true);
+        }
+        return defaultDir.path;
+      } catch (_) {
+        // Fallback to app documents directory if permission denied
+      }
+    }
+
     final docsDir = await getApplicationDocumentsDirectory();
-    final defaultDir = Directory(path.join(docsDir.path, 'pixeltools'));
+    final defaultDir = Directory(path.join(docsDir.path, 'PixelTools'));
     if (!await defaultDir.exists()) {
       await defaultDir.create(recursive: true);
     }
     return defaultDir.path;
+  }
+
+  static Future<AppSettingsState> loadInitial(SharedPreferences prefs) async {
+    final savePath = await loadPath(prefs);
+    final oneClick = prefs.getBool(_oneClickKey) ?? false;
+    final themeIndex = prefs.getInt(_themeModeKey) ?? 0;
+    final themeMode =
+        ThemeMode.values[themeIndex.clamp(0, ThemeMode.values.length - 1)];
+    final stripExif = prefs.getBool(_stripExifKey) ?? true;
+    final completedOnboarding =
+        prefs.getBool(_completedOnboardingKey) ?? false;
+    final enableGlobalWatermark =
+        prefs.getBool(_enableGlobalWatermarkKey) ?? true;
+    final useWatermarkLogo = prefs.getBool(_useWatermarkLogoKey) ?? true;
+    final useImageVerticalSidebar =
+        prefs.getBool(_useImageVerticalSidebarKey) ?? true;
+    final storedWatermark = prefs.getString(_watermarkTextKey);
+    final watermarkText = (storedWatermark == null ||
+            storedWatermark.isEmpty ||
+            storedWatermark == '◈ PixelTools')
+        ? 'PixelTools'
+        : storedWatermark;
+    final watermarkColorHex =
+        prefs.getInt(_watermarkColorHexKey) ?? 0xFFFFFFFF;
+    final watermarkOpacity = prefs.getDouble(_watermarkOpacityKey) ?? 0.7;
+    final watermarkPositionIndex =
+        prefs.getInt(_watermarkPositionIndexKey) ?? 4;
+
+    return AppSettingsState(
+      savePath: savePath,
+      isLoading: false,
+      oneClickOpen: oneClick,
+      themeMode: themeMode,
+      stripExif: stripExif,
+      hasCompletedOnboarding: completedOnboarding,
+      enableGlobalWatermark: enableGlobalWatermark,
+      useWatermarkLogo: useWatermarkLogo,
+      useImageVerticalSidebar: useImageVerticalSidebar,
+      watermarkText: watermarkText,
+      watermarkColorHex: watermarkColorHex,
+      watermarkOpacity: watermarkOpacity,
+      watermarkPositionIndex: watermarkPositionIndex,
+    );
   }
 
   static Future<void> persistPath(String savePath) async {
@@ -234,8 +299,11 @@ final appSettingsProvider =
 );
 
 class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
-  AppSettingsNotifier() : super(const AppSettingsState(savePath: '')) {
-    _load();
+  AppSettingsNotifier([AppSettingsState? initial])
+      : super(initial ?? const AppSettingsState(savePath: '')) {
+    if (initial == null) {
+      _load();
+    }
   }
 
   Future<void> _load() async {

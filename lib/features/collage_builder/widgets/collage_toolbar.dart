@@ -105,8 +105,8 @@ class CollageToolbar extends ConsumerWidget {
                                   value: state.exportProgress,
                                 ),
                               )
-                            : const Icon(Icons.save),
-                        label: Text(state.isExporting ? 'Saving...' : 'Save'),
+                            : const Icon(Icons.photo_library_rounded),
+                        label: Text(state.isExporting ? 'Saving...' : 'Save to Gallery'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -518,15 +518,17 @@ class CollageToolbar extends ConsumerWidget {
                 toolUsed: 'Collage Builder',
                 editedAt: DateTime.now(),
                 toolIcon: Icons.dashboard_customize_rounded,
+                filePath: saveResult.path,
                 thumbnailPath: saveResult.path,
               ),
             );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Saved'),
+            content: Text('Saved to gallery'),
             duration: Duration(seconds: 2),
           ),
         );
+        ref.read(collageProvider.notifier).reset();
         InterstitialTracker.instance.trackAction();
       }
     } catch (e) {

@@ -50,6 +50,40 @@ class PdfService {
     return 'pixeltools_${baseName}_$timestamp.$extension';
   }
 
+  /// Generates a PNG thumbnail for page 1 of a PDF file using pdfx.
+  /// Caches the generated thumbnail in the temporary directory.
+  Future<String?> renderPdfThumbnail(String pdfPath) async {
+    try {
+      final file = File(pdfPath);
+      if (!await file.exists()) return null;
+
+      final cacheDir = await getTemporaryDirectory();
+      final stat = await file.stat();
+      final thumbName = 'pdf_thumb_${path.basenameWithoutExtension(pdfPath)}_${stat.modified.millisecondsSinceEpoch}.png';
+      final thumbFile = File(path.join(cacheDir.path, thumbName));
+      if (await thumbFile.exists()) {
+        return thumbFile.path;
+      }
+
+      final pdfDoc = await pdfx.PdfDocument.openFile(pdfPath);
+      final page = await pdfDoc.getPage(1);
+      final scale = 250.0 / page.width;
+      final pageImage = await page.render(
+        width: 250,
+        height: (page.height * scale).clamp(100.0, 500.0),
+        format: pdfx.PdfPageImageFormat.png,
+      );
+      await page.close();
+      await pdfDoc.close();
+
+      if (pageImage != null) {
+        await thumbFile.writeAsBytes(pageImage.bytes, flush: true);
+        return thumbFile.path;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ─── Compress PDF ───────────────────────────────────────────────────
 
   /// Maps 0.0-1.0 quality to Syncfusion compression level.

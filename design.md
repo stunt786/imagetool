@@ -5,6 +5,12 @@
 #Image and PDF Modules
 ** After completion of the task and saving the screens should be cleared and should load to initial respective screen of the modules
 ** Image resize->smart resize with file size selection should be less than selected size and shouldnot be higher by few pixels also but less can be okay
+**Fix Image to PDF-> Settings and set margins 0.25 by default
+
+#File Storage & Saving
+** make the images and PDFs save in the app default directory and create if not exist and only Export to Device Gallary or PixelTools directory by asking permission when the app is launched for first time,
+**Images modules : make option Save to gallary instead of convert & Save to save in other directory.
+**For PDF: Save to the directory mentioned in Settings ->Storage section by default .
 
 #Overflow in Files
 **Fix all the buttom overflow in Files pages
@@ -24,3 +30,8 @@
 **Improve magic eraser camera to work perfectly
 **Improve Filters functionality to work properly while keeping scanned images perfectly.
 **Fix after applying filters the image gets blank screen.
+
+#Settings
+**The default storage isn't being created in the storage and Instead set storage/Documents/PixelTools directory by default if allowed by Android Policy by default and ask proper permission from user while installing the application.
+
+

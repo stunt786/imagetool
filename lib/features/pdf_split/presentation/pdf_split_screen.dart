@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -444,33 +445,29 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
 
             if (state.publicExportPaths.isNotEmpty) ...[
               const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Files Saved'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('${state.publicExportPaths.length} files created'),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Location: ${state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/')}',
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        notifier.clear();
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Done'),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text('View Location'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final files = state.outputPaths.map((p) => XFile(p)).toList();
+                        await Share.shareXFiles(files);
+                      },
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Share All'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -521,15 +518,19 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                 ? () async {
                     final result = await notifier.split();
                     if (result != null && mounted) {
+                      final firstPath = state.outputPaths.isNotEmpty ? state.outputPaths.first : null;
+                      final fileName = firstPath?.split('/').last ?? (state.selectedFileName ?? 'split.pdf');
                       ref.read(editHistoryProvider.notifier).addEntry(
                             EditHistoryItem(
-                              fileName: state.selectedFileName ?? 'split.pdf',
+                              fileName: fileName,
                               toolUsed: 'PDF Splitter',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.call_split_rounded,
-                              thumbnailPath: state.outputPaths.isNotEmpty ? state.outputPaths.first : null,
+                              filePath: firstPath,
+                              thumbnailPath: firstPath,
                             ),
                           );
+                      InterstitialTracker.instance.trackAction();
                     }
                   }
                 : null,

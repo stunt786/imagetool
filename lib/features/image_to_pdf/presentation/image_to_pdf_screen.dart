@@ -265,8 +265,10 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               toolUsed: 'Image to PDF',
               editedAt: DateTime.now(),
               toolIcon: Icons.picture_as_pdf_rounded,
+              filePath: pdfPath,
             ),
           );
+      notifier.clearAll();
       _showPDFSavedDialog(context, pdfPath);
       InterstitialTracker.instance.trackAction();
     } else {

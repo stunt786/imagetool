@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -108,7 +110,6 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
                       children: [
                         Radio<ConvertFormat>(
                           value: format,
-                          // ignore: deprecated_member_use
                           onChanged: (_) => widget.onFormatChanged(format),
                         ),
                         const SizedBox(width: 8),
@@ -176,7 +177,6 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
                         children: [
                           Radio<ConvertDpi>(
                             value: dpi,
-                            // ignore: deprecated_member_use
                             onChanged: (_) => widget.onDpiChanged(dpi),
                           ),
                           const SizedBox(width: 4),
@@ -221,7 +221,6 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
                       Radio<bool>(
                         value: false,
                         groupValue: useCustomRange,
-                        // ignore: deprecated_member_use
                         onChanged: (_) =>
                             widget.onPageRangeChanged(null, null),
                       ),
@@ -265,7 +264,6 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
                       Radio<bool>(
                         value: true,
                         groupValue: useCustomRange,
-                        // ignore: deprecated_member_use
                         onChanged: (_) {
                           final start =
                               int.tryParse(_startController.text) ?? 1;

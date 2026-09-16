@@ -281,16 +281,20 @@ class _FilterOption {
 
 final List<_FilterOption> _filterOptions = [
   const _FilterOption(FilterType.none, Icons.auto_fix_high, 'Original'),
-  const _FilterOption(FilterType.lighten, Icons.wb_sunny_outlined, 'Lighten'),
+  const _FilterOption(FilterType.smartScan, Icons.auto_mode_rounded, 'Smart Clean'),
+  const _FilterOption(FilterType.autoFlatten, Icons.straighten_rounded, 'Auto Flatten'),
+  const _FilterOption(FilterType.antiLight, Icons.light_mode_outlined, 'Anti-Light'),
+  const _FilterOption(FilterType.autoBrighten, Icons.brightness_6_outlined, 'Auto Bright'),
+  const _FilterOption(FilterType.magicColor, Icons.palette_outlined, 'Magic color'),
   const _FilterOption(FilterType.enhance, Icons.auto_awesome, 'Enhance'),
+  const _FilterOption(FilterType.lighten, Icons.wb_sunny_outlined, 'Lighten'),
   const _FilterOption(FilterType.noShadow, Icons.wb_cloudy_outlined, 'No shadow'),
   const _FilterOption(FilterType.blackWhite, Icons.contrast, 'B&W'),
   const _FilterOption(FilterType.eco, Icons.eco_outlined, 'Eco'),
   const _FilterOption(FilterType.grayscale, Icons.gradient, 'Grayscale'),
   const _FilterOption(FilterType.invert, Icons.invert_colors_outlined, 'Invert'),
-  const _FilterOption(FilterType.magicColor, Icons.palette_outlined, 'Magic color'),
   const _FilterOption(FilterType.binarization, Icons.text_fields, 'Binarize'),
-  const _FilterOption(FilterType.shadowRemoval, Icons.light_mode, 'Shadow removal'),
+  const _FilterOption(FilterType.shadowRemoval, Icons.wb_twilight, 'Shadow removal'),
 ];
 
 class _FilterTile extends StatelessWidget {

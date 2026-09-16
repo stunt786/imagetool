@@ -108,6 +108,9 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
 
     try {
       final baseName = state.selectedFileName!.replaceAll('.pdf', '');
+      final saveDir =
+          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
       List<String> outputPaths;
 
       switch (state.outputFormat) {
@@ -167,12 +170,10 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
           for (int i = 0; i < encodedResults.length; i++) {
             final ext = state.outputFormat.extension;
             final fileName =
-                '${baseName}_page_${startPage + i}.$ext';
-            final sandboxPath = await _manager.writeToSandbox(
-              encodedResults[i],
-              fileName,
-            );
-            outputPaths.add(sandboxPath);
+                '${baseName}_${timestamp}_page_${startPage + i}.$ext';
+            final filePath = '${saveDir.path}/$fileName';
+            await File(filePath).writeAsBytes(encodedResults[i], flush: true);
+            outputPaths.add(filePath);
           }
           break;
 
@@ -185,12 +186,12 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final sandboxPath = await _manager.copyToSandbox(srcPath);
-            // Remove the file written to saveDir; sandbox is now the source
+            final destPath = '${saveDir.path}/${baseName}_$timestamp.txt';
+            await File(srcPath).copy(destPath);
             try {
               await File(srcPath).delete();
             } catch (_) {}
-            outputPaths = [sandboxPath];
+            outputPaths = [destPath];
           }
           break;
 
@@ -203,11 +204,12 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final sandboxPath = await _manager.copyToSandbox(srcPath);
+            final destPath = '${saveDir.path}/${baseName}_$timestamp.docx';
+            await File(srcPath).copy(destPath);
             try {
               await File(srcPath).delete();
             } catch (_) {}
-            outputPaths = [sandboxPath];
+            outputPaths = [destPath];
           }
           break;
       }
@@ -216,6 +218,7 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
         isProcessing: false,
         progress: 1.0,
         outputPaths: outputPaths,
+        publicExportPaths: outputPaths,
       );
 
       return outputPaths;

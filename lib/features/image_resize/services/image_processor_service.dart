@@ -235,9 +235,6 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
-  // Never scale below this many pixels on the shortest side
-  const int minDimension = 64;
-
   ImageProcessResult encodeAt(int targetWidth, int targetHeight, int quality) {
     final w = targetWidth.clamp(1, 12000);
     final h = targetHeight.clamp(1, 12000);
@@ -300,51 +297,72 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   }
 
   // ––– Step 2: iterative dimension + quality reduction –––
-  double scale = (targetBytes / math.max(probe.fileSize, 1)).clamp(0.15, 1.0);
+  double scale = (targetBytes / math.max(probe.fileSize, 1)).clamp(0.05, 1.0);
 
-  for (int i = 0; i < 8; i++) {
-    final int quality = math.max(15, 85 - i * 10);
-    final int w = math.max(minDimension, (image.width * scale).round());
-    final int h = math.max(minDimension, (image.height * scale).round());
+  for (int i = 0; i < 10; i++) {
+    final int quality = math.max(10, 85 - i * 8);
+    final int w = math.max(16, (image.width * scale).round());
+    final int h = math.max(16, (image.height * scale).round());
 
     final result = encodeAt(w, h, quality);
     consider(result);
-    reportProgress(0.45 + (i + 1) * 0.065);
+    reportProgress(0.45 + (i + 1) * 0.05);
 
     if (result.fileSize <= targetBytes) {
       int qLow = quality;
       int qHigh = 100;
-      ImageProcessResult? best;
       while (qLow <= qHigh) {
         final mid = (qLow + qHigh) ~/ 2;
         final r = encodeAt(w, h, mid);
         consider(r);
         if (r.fileSize <= targetBytes) {
-          best = r;
           qLow = mid + 1;
         } else {
           qHigh = mid - 1;
         }
       }
-      reportProgress(1.0);
-      sendPort?.send('done');
-      return best ?? result;
+      break;
     }
 
-    scale *= targetBytes / math.max(result.fileSize, 1);
-    scale = scale.clamp(0.15, 1.0);
+    scale *= math.sqrt(targetBytes / math.max(result.fileSize, 1));
+    scale = scale.clamp(0.02, 1.0);
   }
 
-  // ––– Step 3: return the best that fits, or a final reasonable attempt –––
+  // ––– Step 3: aggressive fallback loop if still over targetBytes –––
+  if (bestUnderTarget == null) {
+    double fallbackScale = 0.5;
+    int q = 30;
+    while (fallbackScale >= 0.02 && bestUnderTarget == null) {
+      final w = math.max(16, (image.width * fallbackScale).round());
+      final h = math.max(16, (image.height * fallbackScale).round());
+      final attempt = encodeAt(w, h, q);
+      consider(attempt);
+      if (attempt.fileSize <= targetBytes) {
+        break;
+      }
+      if (q > 5) {
+        q = math.max(5, q - 10);
+      } else {
+        fallbackScale *= 0.6;
+      }
+    }
+  }
+
   reportProgress(1.0);
   sendPort?.send('done');
-  if (bestUnderTarget != null) return bestUnderTarget;
+  if (bestUnderTarget != null && bestUnderTarget!.fileSize <= targetBytes) {
+    return bestUnderTarget;
+  }
 
-  return encodeAt(
-    math.max(minDimension, image.width ~/ 4),
-    math.max(minDimension, image.height ~/ 4),
-    15,
-  );
+  // Absolute fallback: tiny low quality image strictly under target
+  for (int dim = 64; dim >= 8; dim ~/= 2) {
+    final lastAttempt = encodeAt(dim, dim, 5);
+    if (lastAttempt.fileSize <= targetBytes) {
+      return lastAttempt;
+    }
+  }
+
+  return bestUnderTarget ?? probe;
 }
 
 ImageProcessResult? _isolateDecodeInfo(Map<String, dynamic> params) {

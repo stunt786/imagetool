@@ -393,7 +393,17 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       );
       _showSnack('Batch resize complete. $successCount images saved.');
       InterstitialTracker.instance.trackAction();
+      _resetScreen();
     }
+  }
+
+  void _resetScreen() {
+    _batchFiles.clear();
+    _undoStack.clear();
+    _undoIndex = -1;
+    _isBatchMode = false;
+    ref.read(imageEditProvider.notifier).clear();
+    setState(() {});
   }
 
   void _syncInputsFromImage(int width, int height) {
@@ -1314,8 +1324,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           thumbnailPath: saveResult.path,
         ),
       );
-      _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
+      _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved to gallery');
       InterstitialTracker.instance.trackAction();
+      _resetScreen();
     } catch (error) {
       _showSnack('Saving failed: $error');
     }
@@ -1420,7 +1431,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.save_rounded),
-              tooltip: 'Save current image',
+              tooltip: 'Save to Gallery',
               onPressed: _saveCurrentImage,
             ),
           ],
@@ -2287,7 +2298,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 padding: EdgeInsets.zero,
                 iconSize: 20,
                 icon: Icon(Icons.save_rounded, color: scheme.primary),
-                tooltip: 'Save without resizing',
+                tooltip: 'Save to Gallery',
                 onPressed: _saveCurrentImage,
               ),
             ),

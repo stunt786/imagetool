@@ -96,10 +96,6 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     );
 
     state = state.addPage(page);
-    
-    // Auto-apply shadow removal for cleaner scan output
-    final newIndex = state.pages.length - 1;
-    _autoApplyShadowRemoval(newIndex);
   }
 
   Future<void> removePage(int index) async {
@@ -282,17 +278,16 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
         return 'Dramatic';
       case FilterType.bwHighContrast:
         return 'B&W High Contrast';
+      case FilterType.autoFlatten:
+        return 'Auto Flatten';
+      case FilterType.antiLight:
+        return 'Anti-Light Shadow';
+      case FilterType.autoBrighten:
+        return 'Auto Brighten';
+      case FilterType.smartScan:
+        return 'Smart Clean';
       case FilterType.none:
         return 'Original';
-    }
-  }
-
-  /// Silently applies shadow removal filter to the given page index.
-  Future<void> _autoApplyShadowRemoval(int index) async {
-    try {
-      await applyFilterToPage(index, FilterType.shadowRemoval);
-    } catch (_) {
-      // Shadow removal is best-effort; failure is silent.
     }
   }
 

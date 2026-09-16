@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
@@ -345,33 +346,28 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
 
             if (state.publicExportPath != null) ...[
               const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('File Saved'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('Merged PDF created from ${state.files.length} files'),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Location: ${state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/')}',
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        notifier.clear();
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Done'),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text('View Location'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        await Share.shareXFiles([XFile(state.outputPath!)]);
+                      },
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Share'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -409,15 +405,18 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                 ? () async {
                     final result = await notifier.merge();
                     if (result != null && mounted) {
+                      final fileName = result.split('/').last;
                       ref.read(editHistoryProvider.notifier).addEntry(
                             EditHistoryItem(
-                              fileName: 'merged.pdf',
+                              fileName: fileName,
                               toolUsed: 'PDF Merger',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.merge_type_rounded,
-                              thumbnailPath: state.outputPath,
+                              filePath: result,
+                              thumbnailPath: result,
                             ),
                           );
+                      InterstitialTracker.instance.trackAction();
                     }
                   }
                 : null,

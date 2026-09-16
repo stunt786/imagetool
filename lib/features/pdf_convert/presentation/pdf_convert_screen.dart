@@ -397,34 +397,30 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
 
             if (state.publicExportPaths.isNotEmpty) ...[
               const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Files Saved'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                              '${state.publicExportPaths.length} files created'),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Location: ${state.publicExportPaths.first.split('/').sublist(0, state.publicExportPaths.first.split('/').length - 1).join('/')}',
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ],
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        notifier.clear();
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Done'),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.folder_open),
-                label: const Text('View Location'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        await Share.shareXFiles(
+                          state.outputPaths.map((p) => XFile(p)).toList(),
+                        );
+                      },
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Share All'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -486,16 +482,18 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                 ? () async {
                     final result = await notifier.convert();
                     if (result != null && mounted) {
+                      final firstPath = result.isNotEmpty ? result.first : null;
+                      final isImage = state.outputFormat == ConvertFormat.jpg ||
+                          state.outputFormat == ConvertFormat.png;
                       ref.read(editHistoryProvider.notifier).addEntry(
                             EditHistoryItem(
                               fileName: state.selectedFileName ??
                                   'converted.${state.outputFormat.extension}',
+                              filePath: firstPath,
                               toolUsed: 'PDF Converter',
                               editedAt: DateTime.now(),
                               toolIcon: Icons.transform_rounded,
-                              thumbnailPath: state.outputPaths.isNotEmpty
-                                  ? state.outputPaths.first
-                                  : null,
+                              thumbnailPath: isImage ? firstPath : null,
                             ),
                           );
                     }

@@ -1,17 +1,23 @@
 import 'package:flutter/foundation.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart' as ph;
 
 class AppPermissionService {
   const AppPermissionService();
 
   Future<void> requestAllPermissions() async {
     if (kIsWeb) return;
-    await _requestPermission(Permission.photos);
-    await _requestPermission(Permission.storage);
-    await _requestPermission(Permission.camera);
+    await _requestPermission(ph.Permission.photos);
+    await _requestPermission(ph.Permission.storage);
+    await _requestPermission(ph.Permission.camera);
+    try {
+      final manageStatus = await ph.Permission.manageExternalStorage.status;
+      if (!manageStatus.isGranted && !manageStatus.isPermanentlyDenied) {
+        await ph.Permission.manageExternalStorage.request();
+      }
+    } catch (_) {}
   }
 
-  Future<bool> _requestPermission(Permission permission) async {
+  Future<bool> _requestPermission(ph.Permission permission) async {
     final status = await permission.status;
     if (status.isGranted) return true;
     if (status.isDenied || status.isRestricted) {
@@ -23,18 +29,21 @@ class AppPermissionService {
 
   Future<bool> hasStoragePermission() async {
     if (kIsWeb) return true;
-    final status = await Permission.photos.status;
-    if (status.isGranted) return true;
-    return (await Permission.storage.status).isGranted;
+    final photosStatus = await ph.Permission.photos.status;
+    if (photosStatus.isGranted) return true;
+    final storageStatus = await ph.Permission.storage.status;
+    if (storageStatus.isGranted) return true;
+    final manageStatus = await ph.Permission.manageExternalStorage.status;
+    return manageStatus.isGranted;
   }
 
   Future<bool> hasCameraPermission() async {
     if (kIsWeb) return true;
-    return (await Permission.camera.status).isGranted;
+    return (await ph.Permission.camera.status).isGranted;
   }
 
   Future<void> openAppSettings() async {
     if (kIsWeb) return;
-    await openAppSettings();
+    await ph.openAppSettings();
   }
 }

@@ -18,6 +18,10 @@ enum FilterType {
   cool,
   dramatic,
   bwHighContrast,
+  autoFlatten,
+  antiLight,
+  autoBrighten,
+  smartScan,
 }
 
 @immutable

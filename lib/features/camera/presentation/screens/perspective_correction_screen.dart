@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
+import '../../services/document_enhancement_service.dart';
 import '../../services/perspective_correction_service.dart';
 import '../widgets/document_corners_painter.dart';
 
@@ -29,7 +30,12 @@ class _PerspectiveCorrectionScreenState
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _pageIndex = GoRouterState.of(context).extra as int?;
+    final extra = GoRouterState.of(context).extra;
+    if (extra is int) {
+      _pageIndex = extra;
+    } else if (extra is Map) {
+      _pageIndex = extra['pageIndex'] as int?;
+    }
     _initCorners();
   }
 
@@ -78,6 +84,11 @@ class _PerspectiveCorrectionScreenState
       appBar: AppBar(
         title: const Text('Adjust Corners'),
         actions: [
+          TextButton.icon(
+            onPressed: _autoFitCorners,
+            icon: const Icon(Icons.crop_free, size: 18),
+            label: const Text('Auto Fit'),
+          ),
           TextButton(
             onPressed: _resetCorners,
             child: const Text('Reset'),
@@ -187,6 +198,21 @@ class _PerspectiveCorrectionScreenState
     setState(() {
       _corners[_draggingCornerIndex!] = normalized;
     });
+  }
+
+  Future<void> _autoFitCorners() async {
+    final batch = ref.read(documentBatchProvider);
+    if (_pageIndex == null || _pageIndex! >= batch.pages.length) return;
+    final page = batch.pages[_pageIndex!];
+    if (!page.isLoaded) return;
+
+    final corners = await DocumentEnhancementService.detectDocumentCorners(page.imageBytes!);
+    if (mounted) {
+      setState(() {
+        _corners = corners;
+        _draggingCornerIndex = null;
+      });
+    }
   }
 
   void _resetCorners() {

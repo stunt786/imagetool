@@ -108,15 +108,16 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
 
       state = state.copyWith(progress: 0.8);
 
-      // Write result to sandbox (not public dir)
+      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final baseName = (state.selectedFileName ?? 'compressed').replaceAll('.pdf', '');
-      final outputPath = await _manager.writeToSandbox(
-        resultBytes,
-        '${baseName}_compressed.pdf',
-      );
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${baseName}_compressed_$timestamp.pdf';
+      final outputPath = '${saveDir.path}/$fileName';
+      final file = File(outputPath);
+      await file.writeAsBytes(resultBytes, flush: true);
 
-      final outputFileSize = File(outputPath).lengthSync();
-      if (!File(outputPath).existsSync() || outputFileSize == 0) {
+      final outputFileSize = await file.length();
+      if (!await file.exists() || outputFileSize == 0) {
         throw Exception('Compressed PDF file was not created or is empty');
       }
 
@@ -125,6 +126,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
         progress: 1.0,
         outputPath: outputPath,
         outputFileSize: outputFileSize,
+        publicExportPath: outputPath,
       );
 
       return outputPath;

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 import 'package:pdf/pdf.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/settings/app_settings.dart';
@@ -90,6 +89,37 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     );
 
     await _loadImage(state.images.length - 1);
+  }
+
+  Future<void> addImageFromBytes({
+    required Uint8List bytes,
+    required String name,
+    String? path,
+  }) async {
+    int? width;
+    int? height;
+    try {
+      final decoded = await compute(_decodeImageDimensions, bytes);
+      if (decoded != null) {
+        width = decoded[0];
+        height = decoded[1];
+      }
+    } catch (_) {}
+
+    final newItem = ImageToPdfItem(
+      path: path ?? '',
+      name: name,
+      sizeBytes: bytes.length,
+      imageBytes: bytes,
+      width: width,
+      height: height,
+    );
+
+    state = state.copyWith(
+      images: [...state.images, newItem],
+      errorMessage: null,
+      generatedPdfPath: null,
+    );
   }
 
   Future<void> _loadImage(int index) async {
@@ -308,27 +338,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
       final pdfBytes = await pdf.save();
 
-      Directory saveDir;
-      if (Platform.isAndroid) {
-        saveDir = Directory('/storage/emulated/0/Download/PixelTools/PDFs');
-        try {
-          if (!await saveDir.exists()) {
-            await saveDir.create(recursive: true);
-          }
-        } catch (_) {
-          final base = await getApplicationDocumentsDirectory();
-          saveDir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
-          if (!await saveDir.exists()) {
-            await saveDir.create(recursive: true);
-          }
-        }
-      } else {
-        final base = await getApplicationDocumentsDirectory();
-        saveDir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
-        if (!await saveDir.exists()) {
-          await saveDir.create(recursive: true);
-        }
-      }
+      final saveDir = await ref.read(appSettingsProvider.notifier).getSaveDirectory();
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'pixeltools_$timestamp.pdf';

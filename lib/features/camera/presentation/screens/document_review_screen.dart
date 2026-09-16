@@ -13,6 +13,7 @@ import '../../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../models/document_batch.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
+import '../../services/document_enhancement_service.dart';
 import '../../services/document_scanner_service.dart';
 import '../widgets/enhance_filters_sheet.dart';
 
@@ -160,6 +161,82 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     );
   }
 
+  Future<void> _smartFixPage() async {
+    final batch = ref.read(documentBatchProvider);
+    if (_selectedIndex >= batch.pages.length) return;
+    final page = batch.pages[_selectedIndex];
+    if (!page.isLoaded || _isBusy) return;
+
+    setState(() => _isBusy = true);
+    try {
+      final enhancedBytes =
+          await DocumentEnhancementService.smartScanEnhance(page.imageBytes!);
+      if (enhancedBytes != null && mounted) {
+        final decoded = img.decodeImage(enhancedBytes);
+        await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
+              _selectedIndex,
+              page.copyWith(
+                imageBytes: enhancedBytes,
+                filteredBytes: null,
+                filterType: FilterType.none,
+                width: decoded?.width ?? page.width,
+                height: decoded?.height ?? page.height,
+                clearFilter: true,
+              ),
+            );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Auto-flattened & lighting corrected!'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Smart fix failed: $e');
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _autoFlattenPage() async {
+    final batch = ref.read(documentBatchProvider);
+    if (_selectedIndex >= batch.pages.length) return;
+    final page = batch.pages[_selectedIndex];
+    if (!page.isLoaded || _isBusy) return;
+
+    setState(() => _isBusy = true);
+    try {
+      final flattenedBytes =
+          await DocumentEnhancementService.autoFlattenBendedPaper(page.imageBytes!);
+      if (flattenedBytes != null && mounted) {
+        final decoded = img.decodeImage(flattenedBytes);
+        await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
+              _selectedIndex,
+              page.copyWith(
+                imageBytes: flattenedBytes,
+                filteredBytes: null,
+                filterType: FilterType.none,
+                width: decoded?.width ?? page.width,
+                height: decoded?.height ?? page.height,
+                clearFilter: true,
+              ),
+            );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Paper flattened successfully!'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Flatten failed: $e');
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
   Future<void> _openMagicRemove() async {
     final batch = ref.read(documentBatchProvider);
     if (_selectedIndex >= batch.pages.length) return;
@@ -210,8 +287,13 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     final notifier = ref.read(imageToPdfProvider.notifier);
     notifier.clearAll();
     for (final page in pages) {
-      await notifier.addImageFromPath(page.path);
+      await notifier.addImageFromBytes(
+        bytes: page.displayBytes,
+        name: page.name,
+        path: page.path,
+      );
     }
+    await ref.read(documentBatchProvider.notifier).clearBatch();
     if (mounted) context.push('/images/to-pdf');
   }
 
@@ -229,9 +311,10 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
           ),
       ]);
       if (!mounted) return;
+      await ref.read(documentBatchProvider.notifier).clearBatch();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${results.length} scan image(s) saved'),
+          content: Text('${results.length} scan image(s) saved to Gallery'),
           behavior: SnackBarBehavior.floating,
           action: results.isNotEmpty
               ? SnackBarAction(
@@ -247,6 +330,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               : null,
         ),
       );
+      if (mounted) context.go('/tools');
     } catch (error) {
       _showError('Saving failed: $error');
     }
@@ -297,6 +381,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               onAdd: _addPage,
             ),
             _EditorToolbar(
+              onSmartFix: _smartFixPage,
+              onFlatten: _autoFlattenPage,
               onCrop: _openCrop,
               onEnhance: _openFilter,
               onMagicRemove: _openMagicRemove,
@@ -643,6 +729,8 @@ class _EditorToolbar extends StatelessWidget {
   const _EditorToolbar({
     required this.onCrop,
     required this.onEnhance,
+    required this.onSmartFix,
+    required this.onFlatten,
     required this.onMagicRemove,
     required this.onRotate,
     required this.onRetake,
@@ -651,6 +739,8 @@ class _EditorToolbar extends StatelessWidget {
 
   final VoidCallback onCrop;
   final VoidCallback onEnhance;
+  final VoidCallback onSmartFix;
+  final VoidCallback onFlatten;
   final VoidCallback onMagicRemove;
   final VoidCallback onRotate;
   final VoidCallback onRetake;
@@ -675,6 +765,17 @@ class _EditorToolbar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _ToolButton(
+              icon: Icons.auto_mode_rounded,
+              label: 'Smart Fix',
+              color: const Color(0xFF4DA6FF),
+              onTap: onSmartFix,
+            ),
+            _ToolButton(
+              icon: Icons.straighten_rounded,
+              label: 'Flatten',
+              onTap: onFlatten,
+            ),
             _ToolButton(icon: Icons.crop, label: 'Crop', onTap: onCrop),
             _ToolButton(
                 icon: Icons.auto_awesome, label: 'Enhance', onTap: onEnhance),

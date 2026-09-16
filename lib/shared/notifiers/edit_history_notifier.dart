@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -69,6 +71,36 @@ class EditHistoryNotifier extends StateNotifier<List<EditHistoryItem>> {
   void removeEntry(EditHistoryItem item) {
     state = state.where((e) => e != item).toList();
     _save();
+  }
+
+  /// Updates a specific entry in history.
+  void updateEntry(EditHistoryItem oldItem, EditHistoryItem newItem) {
+    state = state.map((e) => e == oldItem ? newItem : e).toList();
+    _save();
+  }
+
+  /// Renames an entry and renames the physical file on disk if it exists.
+  Future<bool> renameEntry(EditHistoryItem item, String newName) async {
+    try {
+      String? newFilePath = item.filePath;
+      if (item.filePath != null && item.filePath!.isNotEmpty) {
+        final oldFile = File(item.filePath!);
+        if (await oldFile.exists()) {
+          final parentDir = oldFile.parent.path;
+          newFilePath = '$parentDir/$newName';
+          await oldFile.rename(newFilePath);
+        }
+      }
+
+      final updatedItem = item.copyWith(
+        fileName: newName,
+        filePath: newFilePath,
+      );
+      updateEntry(item, updatedItem);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Clears all history.

@@ -14,8 +14,9 @@ class DocumentScannerService {
     try {
       final scanner = DocumentScanner(
         options: DocumentScannerOptions(
-          mode: ScannerMode.base,
+          mode: ScannerMode.full,
           isGalleryImport: false,
+          pageLimit: 100,
         ),
       );
 

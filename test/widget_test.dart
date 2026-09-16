@@ -5,23 +5,39 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:pixeltools/core/app/pixeltools_app.dart';
+import 'package:pixeltools/core/settings/app_settings.dart';
 
 void main() {
   testWidgets('Home renders tool grid', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: PixelToolsApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appSettingsProvider.overrideWith(
+            (ref) => AppSettingsNotifier(
+              const AppSettingsState(
+                savePath: '/test/path',
+                hasCompletedOnboarding: true,
+              ),
+            ),
+          ),
+        ],
+        child: const PixelToolsApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('PixelTools: Image & PDF Editor'), findsOneWidget);
-    expect(find.text('Popular tools'), findsOneWidget);
-    expect(find.text('Image Resizer'), findsOneWidget);
-    expect(find.text('PDF Compressor'), findsOneWidget);
-    expect(find.text('Tools'), findsOneWidget);
-    expect(find.text('Images'), findsWidgets);
-    expect(find.text('PDFs'), findsWidgets);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('All Tools'), findsOneWidget);
+    expect(find.text('Fast, Simple & Powerful'), findsOneWidget);
+    expect(find.text('Resize'), findsOneWidget);
+    expect(find.text('Compress'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 }
