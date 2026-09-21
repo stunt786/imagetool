@@ -44,10 +44,108 @@ Uint8List? _isolateApplyMagicColor(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
-  img.Image processed = image;
-  processed = img.adjustColor(processed, contrast: 1.25, saturation: 1.2, brightness: 1.05);
+  // Scanner-grade color: CLAHE on luminance for local contrast plus a gentle
+  // saturation/exposure lift. Unlike a single global adjustColor curve this
+  // recovers text in shadows without blowing out bright paper.
+  img.Image processed = _claheLuminance(image);
+  processed = img.adjustColor(processed, saturation: 1.18, brightness: 1.02);
 
   return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
+}
+
+/// Contrast-Limited Adaptive Histogram Equalization applied to luminance
+/// only (8x8 tiles, clip 2.0), preserving hue via per-pixel RGB rescaling.
+img.Image _claheLuminance(img.Image src) {
+  const tiles = 8;
+  const clip = 2.0;
+  final w = src.width, h = src.height;
+  final lum = List<double>.generate(
+    w * h,
+    (i) {
+      final p = src.getPixel(i % w, i ~/ w);
+      return 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+    },
+  );
+
+  final tileW = (w / tiles).ceil(), tileH = (h / tiles).ceil();
+  // Per-tile clipped CDF LUTs.
+  final luts = <List<int>>[];
+  for (var ty = 0; ty < tiles; ty++) {
+    for (var tx = 0; tx < tiles; tx++) {
+      final hist = List<int>.filled(256, 0);
+      var count = 0;
+      for (var y = ty * tileH; y < math.min((ty + 1) * tileH, h); y++) {
+        for (var x = tx * tileW; x < math.min((tx + 1) * tileW, w); x++) {
+          hist[lum[y * w + x].round().clamp(0, 255)]++;
+          count++;
+        }
+      }
+      if (count == 0) {
+        luts.add(List<int>.generate(256, (i) => i));
+        continue;
+      }
+      final limit = math.max(1, (clip * count / 256).round());
+      var excess = 0;
+      for (var i = 0; i < 256; i++) {
+        if (hist[i] > limit) {
+          excess += hist[i] - limit;
+          hist[i] = limit;
+        }
+      }
+      final redistribute = excess ~/ 256;
+      final remainder = excess % 256;
+      for (var i = 0; i < 256; i++) {
+        hist[i] += redistribute + (i < remainder ? 1 : 0);
+      }
+      final lut = List<int>.filled(256, 0);
+      var cdf = 0;
+      final cdfMin = hist.firstWhere((v) => v > 0, orElse: () => 0);
+      for (var i = 0; i < 256; i++) {
+        cdf += hist[i];
+        lut[i] = count <= cdfMin
+            ? i
+            : (((cdf - cdfMin) / (count - cdfMin)) * 255)
+                .round()
+                .clamp(0, 255);
+      }
+      luts.add(lut);
+    }
+  }
+
+  int sampleLut(double x, double y, int level) {
+    final tx = (x * tiles / w - 0.5).clamp(0.0, tiles - 1.001);
+    final ty = (y * tiles / h - 0.5).clamp(0.0, tiles - 1.001);
+    final x0 = tx.floor(), y0 = ty.floor();
+    final x1 = math.min(x0 + 1, tiles - 1), y1 = math.min(y0 + 1, tiles - 1);
+    final fx = (tx - x0).clamp(0.0, 1.0), fy = (ty - y0).clamp(0.0, 1.0);
+    final v00 = luts[y0 * tiles + x0][level].toDouble();
+    final v10 = luts[y0 * tiles + x1][level].toDouble();
+    final v01 = luts[y1 * tiles + x0][level].toDouble();
+    final v11 = luts[y1 * tiles + x1][level].toDouble();
+    return ((v00 * (1 - fx) + v10 * fx) * (1 - fy) +
+            (v01 * (1 - fx) + v11 * fx) * fy)
+        .round()
+        .clamp(0, 255);
+  }
+
+  final out = src.clone();
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final p = src.getPixel(x, y);
+      final oldL = lum[y * w + x];
+      if (oldL < 1) continue;
+      final newL = sampleLut(x.toDouble(), y.toDouble(), oldL.round().clamp(0, 255));
+      final scale = (newL / oldL).clamp(0.25, 3.0);
+      out.setPixelRgb(
+        x,
+        y,
+        (p.r * scale).round().clamp(0, 255),
+        (p.g * scale).round().clamp(0, 255),
+        (p.b * scale).round().clamp(0, 255),
+      );
+    }
+  }
+  return out;
 }
 
 Uint8List? _isolateApplyBinarization(Map<String, dynamic> params) {
@@ -55,60 +153,54 @@ Uint8List? _isolateApplyBinarization(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
-  img.Image processed = img.grayscale(image);
-
-  // Otsu's thresholding
-  final histogram = List.filled(256, 0);
-  for (var y = 0; y < processed.height; y++) {
-    for (var x = 0; x < processed.width; x++) {
-      final pixel = processed.getPixel(x, y);
-      final l = pixel.r.toInt();
-      histogram[l.clamp(0, 255)]++;
-    }
-  }
-
-  var total = processed.width * processed.height;
-  var sum = 0.0;
-  for (var i = 0; i < 256; i++) {
-    sum += i * histogram[i];
-  }
-
-  var sumB = 0.0;
-  var wB = 0;
-  var wF = 0;
-  var maxVariance = -1.0;
-  var threshold = 128;
-
-  for (var i = 0; i < 256; i++) {
-    wB += histogram[i];
-    if (wB == 0) continue;
-    wF = total - wB;
-    if (wF == 0) break;
-    sumB += i * histogram[i];
-    var mB = sumB / wB;
-    var mF = (sum - sumB) / wF;
-    var between = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
-    if (between > maxVariance) {
-      maxVariance = between;
-      threshold = i;
-    }
-  }
-
-  threshold = threshold.clamp(40, 220);
-
-  for (var y = 0; y < processed.height; y++) {
-    for (var x = 0; x < processed.width; x++) {
-      final pixel = processed.getPixel(x, y);
-      final intensity = pixel.r;
-      if (intensity > threshold) {
-        processed.setPixelRgba(x, y, 255, 255, 255, 255);
-      } else {
-        processed.setPixelRgba(x, y, 0, 0, 0, 255);
-      }
-    }
-  }
+  // Sauvola adaptive thresholding (window 25, k 0.34): unlike global Otsu it
+  // keeps text legible under gradients and hand shadows. Integral images keep
+  // it O(1) per pixel.
+  final processed = _sauvolaBinarize(img.grayscale(image));
 
   return Uint8List.fromList(img.encodeJpg(processed, quality: 95));
+}
+
+img.Image _sauvolaBinarize(img.Image gray, {int window = 25, double k = 0.34}) {
+  final w = gray.width, h = gray.height;
+  final integral = List<double>.filled((w + 1) * (h + 1), 0.0);
+  final integralSq = List<double>.filled((w + 1) * (h + 1), 0.0);
+  for (var y = 0; y < h; y++) {
+    var rowSum = 0.0, rowSumSq = 0.0;
+    for (var x = 0; x < w; x++) {
+      final v = gray.getPixel(x, y).r.toDouble();
+      rowSum += v;
+      rowSumSq += v * v;
+      integral[(y + 1) * (w + 1) + x + 1] =
+          integral[y * (w + 1) + x + 1] + rowSum;
+      integralSq[(y + 1) * (w + 1) + x + 1] =
+          integralSq[y * (w + 1) + x + 1] + rowSumSq;
+    }
+  }
+
+  double rectSum(List<double> ii, int x0, int y0, int x1, int y1) =>
+      ii[y1 * (w + 1) + x1] -
+      ii[y0 * (w + 1) + x1] -
+      ii[y1 * (w + 1) + x0] +
+      ii[y0 * (w + 1) + x0];
+
+  final half = window ~/ 2;
+  final out = img.Image(width: w, height: h);
+  for (var y = 0; y < h; y++) {
+    final y0 = math.max(0, y - half), y1 = math.min(h, y + half + 1);
+    for (var x = 0; x < w; x++) {
+      final x0 = math.max(0, x - half), x1 = math.min(w, x + half + 1);
+      final area = (x1 - x0) * (y1 - y0);
+      final mean = rectSum(integral, x0, y0, x1, y1) / area;
+      final meanSq = rectSum(integralSq, x0, y0, x1, y1) / area;
+      final std = math.sqrt(math.max(0.0, meanSq - mean * mean));
+      final threshold = mean * (1 + k * (std / 128 - 1));
+      final v = gray.getPixel(x, y).r.toDouble();
+      final ink = v <= threshold;
+      out.setPixelRgba(x, y, ink ? 0 : 255, ink ? 0 : 255, ink ? 0 : 255, 255);
+    }
+  }
+  return out;
 }
 
 Uint8List? _isolateApplyShadowRemoval(Map<String, dynamic> params) {
@@ -118,12 +210,45 @@ Uint8List? _isolateApplyShadowRemoval(Map<String, dynamic> params) {
 
   final gray = img.grayscale(image);
 
-  // Fast illumination estimation via downsampled blur
+  // Illumination estimation via morphological closing (dilate then erode) on
+  // a downsampled copy: removes text cleanly without the halo a pure
+  // dilation leaves around dark regions.
   const bgDim = 64;
   final smallW = math.max(16, gray.width ~/ bgDim);
   final smallH = math.max(16, gray.height ~/ bgDim);
   final small = img.copyResize(gray, width: smallW, height: smallH);
-  final blurredSmall = img.gaussianBlur(small, radius: 4);
+  final dilated = img.Image(width: smallW, height: smallH);
+  const k = 2;
+  for (var y = 0; y < smallH; y++) {
+    for (var x = 0; x < smallW; x++) {
+      var maxV = 0;
+      for (var dy = -k; dy <= k; dy++) {
+        final ny = (y + dy).clamp(0, smallH - 1);
+        for (var dx = -k; dx <= k; dx++) {
+          final nx = (x + dx).clamp(0, smallW - 1);
+          final v = small.getPixel(nx, ny).r.toInt();
+          if (v > maxV) maxV = v;
+        }
+      }
+      dilated.setPixelRgba(x, y, maxV, maxV, maxV, 255);
+    }
+  }
+  final closed = img.Image(width: smallW, height: smallH);
+  for (var y = 0; y < smallH; y++) {
+    for (var x = 0; x < smallW; x++) {
+      var minV = 255;
+      for (var dy = -k; dy <= k; dy++) {
+        final ny = (y + dy).clamp(0, smallH - 1);
+        for (var dx = -k; dx <= k; dx++) {
+          final nx = (x + dx).clamp(0, smallW - 1);
+          final v = dilated.getPixel(nx, ny).r.toInt();
+          if (v < minV) minV = v;
+        }
+      }
+      closed.setPixelRgba(x, y, minV, minV, minV, 255);
+    }
+  }
+  final blurredSmall = img.gaussianBlur(closed, radius: 4);
   final bg = img.copyResize(blurredSmall, width: gray.width, height: gray.height);
 
   // Division normalization to flatten uneven shadows into clean document background
@@ -171,10 +296,16 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   if (filterName == 'smartScan') {
     final image = img.decodeImage(bytes);
     if (image == null) return null;
+    // Same gated pipeline as Smart Fix: never alter what is already clean.
     var processed = DocumentEnhancementService.internalAutoFitPaper(image);
-    processed = DocumentEnhancementService.internalAutoFlattenPaper(processed);
-    processed = DocumentEnhancementService.internalAutocorrectAntiLightShadows(processed);
-    processed = DocumentEnhancementService.internalAutoAdjustDarkImage(processed);
+    processed =
+        DocumentEnhancementService.internalAutoFlattenPaper(processed);
+    if (DocumentEnhancementService.internalHasUnevenIllumination(processed)) {
+      processed = DocumentEnhancementService
+          .internalAutocorrectAntiLightShadows(processed);
+    }
+    processed =
+        DocumentEnhancementService.internalAutoAdjustDarkImage(processed);
     return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
   }
 
@@ -244,48 +375,8 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
         brightness: 0.95,
       );
     case 'bwHighContrast':
-      processed = img.grayscale(image);
-      final histogram = List.filled(256, 0);
-      for (var y = 0; y < processed.height; y++) {
-        for (var x = 0; x < processed.width; x++) {
-          final l = processed.getPixel(x, y).r.toInt();
-          histogram[l.clamp(0, 255)]++;
-        }
-      }
-      var total = processed.width * processed.height;
-      var sum = 0.0;
-      for (var i = 0; i < 256; i++) {
-        sum += i * histogram[i];
-      }
-      var sumB = 0.0;
-      var wB = 0;
-      var maxVariance = -1.0;
-      var threshold = 128;
-      for (var i = 0; i < 256; i++) {
-        wB += histogram[i];
-        if (wB == 0) continue;
-        final wF = total - wB;
-        if (wF == 0) break;
-        sumB += i * histogram[i];
-        final mB = sumB / wB;
-        final mF = (sum - sumB) / wF;
-        final between = wB.toDouble() * wF.toDouble() * (mB - mF) * (mB - mF);
-        if (between > maxVariance) {
-          maxVariance = between;
-          threshold = i;
-        }
-      }
-      threshold = threshold.clamp(40, 220);
-      for (var y = 0; y < processed.height; y++) {
-        for (var x = 0; x < processed.width; x++) {
-          final intensity = processed.getPixel(x, y).r;
-          if (intensity > threshold) {
-            processed.setPixelRgba(x, y, 255, 255, 255, 255);
-          } else {
-            processed.setPixelRgba(x, y, 0, 0, 0, 255);
-          }
-        }
-      }
+      processed = _sauvolaBinarize(img.grayscale(image), window: 31, k: 0.28);
+      processed = img.adjustColor(processed, contrast: 1.1);
     default:
       processed = image;
   }

@@ -222,6 +222,9 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                           if (state.selectedFileSize != null)
                             PdfService.formatFileSize(state.selectedFileSize!),
                           '→ ${state.outputFormat.label}',
+                          if (state.outputFormat == ConvertFormat.jpg ||
+                              state.outputFormat == ConvertFormat.png)
+                            '· ${state.dpi.value} DPI',
                           if (state.usePageRange)
                             '· Pages ${state.pageRangeStart}–${state.pageRangeEnd}',
                         ].join(' · '),

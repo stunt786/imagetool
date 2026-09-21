@@ -247,12 +247,17 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   ImageProcessResult encodeAt(int targetWidth, int targetHeight, int quality) {
     final w = targetWidth.clamp(1, 12000);
     final h = targetHeight.clamp(1, 12000);
-    final processed = img.copyResize(
-      image,
-      width: w,
-      height: h,
-      interpolation: img.Interpolation.average,
-    );
+    // Quality probing commonly encodes the original dimensions several times.
+    // Avoid resampling in that case; JPEG/PNG encoding is the only work needed
+    // and this removes the largest repeated allocation in smart compression.
+    final processed = w == image.width && h == image.height
+        ? image
+        : img.copyResize(
+            image,
+            width: w,
+            height: h,
+            interpolation: img.Interpolation.average,
+          );
     final encoded = _encodeImage(processed,
         format: format, quality: quality, settings: settings);
     return ImageProcessResult(
@@ -263,14 +268,21 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     );
   }
 
-  // Tracks the best result that fits within the target budget
+  // Tracks the best result that fits within the target budget, plus the
+  // closest overshoot so the caller never silently returns a far-larger
+  // probe when nothing fits the budget.
   ImageProcessResult? bestUnderTarget;
+  ImageProcessResult? smallestOver;
 
   void consider(ImageProcessResult r) {
     if (r.fileSize <= budgetBytes) {
       if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
         bestUnderTarget = r;
       }
+    } else if (smallestOver == null || r.fileSize < smallestOver!.fileSize) {
+      // Track the closest overshoot so the caller never silently returns a
+      // far-larger probe when nothing fits the budget.
+      smallestOver = r;
     }
   }
 
@@ -372,7 +384,61 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     }
   }
 
-  return bestUnderTarget ?? probe;
+  return bestUnderTarget ?? smallestOver ?? probe;
+}
+
+ImageProcessResult? _isolateResizeEstimate(Map<String, dynamic> params) {
+  final Uint8List bytes = params['bytes'] as Uint8List;
+  final int width = params['width'] as int;
+  final int height = params['height'] as int;
+  final OutputImageFormat format = params['format'] as OutputImageFormat;
+  final int quality = params['quality'] as int;
+
+  final image = img.decodeImage(bytes);
+  if (image == null) return null;
+
+  // Fast live estimate: downscale a proxy with linear interpolation and
+  // encode without watermark/EXIF work. Keeps typing/slider at 60fps while
+  // the final apply still uses the high-quality path.
+  const maxProxy = 800;
+  final scale = math.min(1.0, maxProxy / math.max(image.width, image.height));
+  img.Image proxy = image;
+  if (scale < 1.0) {
+    proxy = img.copyResize(
+      image,
+      width: math.max(1, (image.width * scale).round()),
+      height: math.max(1, (image.height * scale).round()),
+      interpolation: img.Interpolation.linear,
+    );
+  }
+  final safeWidth = width.clamp(1, 12000);
+  final safeHeight = height.clamp(1, 12000);
+  final resized = img.copyResize(
+    proxy,
+    width: (safeWidth * scale).clamp(1, 12000).round(),
+    height: (safeHeight * scale).clamp(1, 12000).round(),
+    interpolation: img.Interpolation.linear,
+  );
+  final clampedQuality = quality.clamp(1, 100);
+  final encoded = switch (format) {
+    OutputImageFormat.jpg =>
+      img.JpegEncoder(quality: clampedQuality).encode(resized),
+    OutputImageFormat.png => img.PngEncoder(
+        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
+      ).encode(resized),
+    OutputImageFormat.webp => img.PngEncoder(
+        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
+      ).encode(resized),
+  };
+  // Scale the proxy byte count back up so the displayed estimate tracks the
+  // full-resolution output instead of the proxy size.
+  final estimated = (encoded.length / math.max(scale, 0.05)).round();
+  return ImageProcessResult(
+    bytes: Uint8List.fromList(encoded),
+    width: safeWidth,
+    height: safeHeight,
+    fileSize: estimated,
+  );
 }
 
 ImageProcessResult? _isolateDecodeInfo(Map<String, dynamic> params) {
@@ -576,5 +642,48 @@ class ImageProcessorService {
         'bytes': bytes,
       }),
     );
+  }
+
+  /// Fast live estimate for the Est. size row: linear interpolation on a
+  /// downscaled proxy, no watermark/EXIF work. The final apply path keeps
+  /// the high-quality encoder.
+  static Future<int?> estimateResizeBytes({
+    required Uint8List bytes,
+    required int width,
+    required int height,
+    required OutputImageFormat format,
+    required int quality,
+  }) async {
+    final result = await Isolate.run<ImageProcessResult?>(
+      () => _isolateResizeEstimate(<String, dynamic>{
+        'bytes': bytes,
+        'width': width,
+        'height': height,
+        'format': format,
+        'quality': quality,
+      }),
+    );
+    return result?.fileSize;
+  }
+
+  static Future<int?> estimatePresetBytes({
+    required Uint8List bytes,
+    required int targetWidth,
+    required int targetHeight,
+    required OutputImageFormat format,
+    required int quality,
+  }) async {
+    // Preset apply uses cover-resize + center-crop, so estimate with the
+    // same worker instead of plain resize to avoid estimate/output mismatch.
+    final result = await Isolate.run<ImageProcessResult?>(
+      () => _isolateResizeToPreset(<String, dynamic>{
+        'bytes': bytes,
+        'targetWidth': targetWidth,
+        'targetHeight': targetHeight,
+        'format': format,
+        'quality': quality,
+      }),
+    );
+    return result?.fileSize;
   }
 }

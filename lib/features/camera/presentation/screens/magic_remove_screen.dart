@@ -33,6 +33,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
   late Uint8List _originalBytes;
   static const int _maxHistory = 5;
   final List<Uint8List> _history = [];
+  final List<Uint8List> _redoHistory = [];
 
   final List<Stroke> _strokes = [];
   Stroke? _activeStroke;
@@ -87,9 +88,70 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
       setState(() => _strokes.removeLast());
     } else if (_history.isNotEmpty) {
       setState(() {
+        _redoHistory.add(_currentBytes);
         _currentBytes = _history.removeLast();
         _decodeDimensions();
       });
+    }
+  }
+
+  void _redoApply() {
+    if (_redoHistory.isEmpty || _strokes.isNotEmpty) return;
+    setState(() {
+      _history.add(_currentBytes);
+      if (_history.length > _maxHistory) {
+        _history.removeAt(0);
+      }
+      _currentBytes = _redoHistory.removeLast();
+      _decodeDimensions();
+    });
+  }
+
+  Future<void> _autoDetect() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final clusters = await MagicRemoveService.detectIntrusions(
+        imageBytes: _currentBytes,
+        canvasWidth: _lastCanvasWidth,
+        canvasHeight: _lastCanvasHeight,
+      );
+      if (!mounted) return;
+      if (clusters.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No border intrusions detected'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        for (final points in clusters) {
+          _strokes.add(Stroke(points: points, radius: _brushRadius));
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${clusters.length} area(s) detected – adjust, then Erase'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Auto-detect failed: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 
@@ -128,6 +190,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
           if (_history.length > _maxHistory) {
             _history.removeAt(0);
           }
+          _redoHistory.clear();
           _currentBytes = result;
           _strokes.clear();
           _decodeDimensions();
@@ -159,13 +222,14 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
   @override
   Widget build(BuildContext context) {
     final canUndo = _strokes.isNotEmpty || _history.isNotEmpty;
+    final canRedo = _strokes.isEmpty && _redoHistory.isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0F),
       body: SafeArea(
         child: Column(
           children: [
-            _buildTopBar(canUndo),
+            _buildTopBar(canUndo, canRedo),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -179,7 +243,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
     );
   }
 
-  Widget _buildTopBar(bool canUndo) {
+  Widget _buildTopBar(bool canUndo, bool canRedo) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: const BoxDecoration(
@@ -212,6 +276,15 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
               size: 22,
             ),
             tooltip: 'Undo',
+          ),
+          IconButton(
+            onPressed: canRedo && !_isBusy ? _redoApply : null,
+            icon: Icon(
+              Icons.redo,
+              color: canRedo ? Colors.white70 : Colors.white24,
+              size: 22,
+            ),
+            tooltip: 'Redo',
           ),
           IconButton(
             onPressed: !_isBusy ? _saveAndExit : null,
@@ -579,6 +652,33 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
           // Action row
           Row(
             children: [
+              if (!_isBusy)
+                GestureDetector(
+                  onTap: _autoDetect,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_rounded,
+                            color: Colors.white70, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Auto-detect',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (!_isBusy) const SizedBox(width: 10),
               if (_strokes.isNotEmpty && !_isBusy)
                 GestureDetector(
                   onTap: _resetMask,

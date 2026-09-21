@@ -35,6 +35,13 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
 
+  void _syncUndoDepths() {
+    state = state.copyWith(
+      undoDepth: _undoStack.length,
+      redoDepth: _redoStack.length,
+    );
+  }
+
   void _recordEdit() {
     if (!state.hasPages) return;
     _undoStack.add(state);
@@ -46,12 +53,14 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     if (!canUndo) return;
     _redoStack.add(state);
     state = _undoStack.removeLast();
+    _syncUndoDepths();
   }
 
   void redo() {
     if (!canRedo) return;
     _undoStack.add(state);
     state = _redoStack.removeLast();
+    _syncUndoDepths();
   }
 
   /// Returns the display bytes of a scanned page, applying global watermark if enabled.
@@ -84,6 +93,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     );
     _undoStack.clear();
     _redoStack.clear();
+    _syncUndoDepths();
   }
 
   Future<void> addPageFromPath(String filePath) async {
@@ -124,7 +134,9 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
       height: null,
     );
 
+    _recordEdit();
     state = state.addPage(page);
+    _syncUndoDepths();
   }
 
   Future<void> removePage(int index) async {
@@ -132,7 +144,9 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     if (page != null && page.path.isNotEmpty) {
       await BatchStorageService.deletePageFile(page.path);
     }
+    _recordEdit();
     state = state.removePage(index);
+    _syncUndoDepths();
   }
 
   Future<void> replacePageFromPath(int index, String filePath) async {
@@ -177,16 +191,21 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
       height: null,
     );
 
+    _recordEdit();
     state = state.updatePage(index, page);
+    _syncUndoDepths();
   }
 
   void reorderPages(int oldIndex, int newIndex) {
+    _recordEdit();
     state = state.reorderPages(oldIndex, newIndex);
+    _syncUndoDepths();
   }
 
   void updatePage(int index, ScannedPage page) {
     _recordEdit();
     state = state.updatePage(index, page);
+    _syncUndoDepths();
   }
 
   /// Updates the in-memory page and persists the edited image in the batch
@@ -198,15 +217,18 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     var persistedPage = page;
     if (state.id.isNotEmpty &&
         state.batchDirectory != null &&
-        page.imageBytes != null) {
+        page.displayBytes.isNotEmpty) {
       final savedPath = await BatchStorageService.savePage(
         batchId: state.id,
         pageIndex: index,
-        imageBytes: page.imageBytes!,
+        // Keep filters non-destructive in the editing state, while writing
+        // exactly the visible edited page for Files/later export.
+        imageBytes: page.displayBytes,
       );
       persistedPage = page.copyWith(path: savedPath);
     }
     state = state.updatePage(index, persistedPage);
+    _syncUndoDepths();
   }
 
   Future<void> applyFilterToPage(int index, FilterType filterType) async {
@@ -216,10 +238,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     Uint8List originalBytes = page.imageBytes!;
 
     if (filterType == FilterType.none) {
-      state = state.updatePage(
-        index,
-        page.copyWith(clearFilter: true),
-      );
+      await updatePageAndPersist(index, page.copyWith(clearFilter: true));
       return;
     }
 
@@ -228,7 +247,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
           await ImageFilterService.applyFilter(originalBytes, filterType);
 
       if (result != null) {
-        state = state.updatePage(
+        await updatePageAndPersist(
           index,
           page.copyWith(
             filteredBytes: result.bytes,

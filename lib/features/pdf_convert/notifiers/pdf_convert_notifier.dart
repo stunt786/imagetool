@@ -42,12 +42,7 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
     }
 
     try {
-      String sandboxPath;
-      if (file.bytes != null) {
-        sandboxPath = await _manager.writeToSandbox(file.bytes!, file.name);
-      } else {
-        sandboxPath = await _manager.copyToSandbox(file.path!);
-      }
+      final sandboxPath = await _manager.importPickedFile(file);
 
       final fileSize = File(sandboxPath).lengthSync();
       final pageCount = await PdfService.instance.getPageCount(sandboxPath);

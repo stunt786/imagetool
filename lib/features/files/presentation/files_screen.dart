@@ -418,6 +418,24 @@ class _FileTile extends StatelessWidget {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _ToolBadge(tool: item.toolUsed),
+                        if (item.pagePaths != null &&
+                            item.pagePaths!.length > 1)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: scheme.secondaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${item.pagePaths!.length} pages',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.onSecondaryContainer,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
                         Text(
                           item.timeAgo,
                           style: theme.textTheme.bodySmall?.copyWith(

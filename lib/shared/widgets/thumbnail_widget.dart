@@ -25,6 +25,26 @@ class HistoryThumbnail extends StatelessWidget {
     final isImage = !item.fileName.toLowerCase().endsWith('.pdf');
     final thumb = item.thumbnailPath;
 
+    // PDFs with a retained source-image thumbnail (image-to-PDF / scan
+    // outputs) render that image so converted documents show real previews.
+    if (thumb != null &&
+        thumb.isNotEmpty &&
+        !thumb.toLowerCase().endsWith('.pdf')) {
+      final file = File(thumb);
+      if (file.existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: Image.file(
+            file,
+            width: width,
+            height: height,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => _buildFallback(isImage),
+          ),
+        );
+      }
+    }
+
     if (thumb != null && thumb.isNotEmpty && isImage) {
       final file = File(thumb);
       return ClipRRect(

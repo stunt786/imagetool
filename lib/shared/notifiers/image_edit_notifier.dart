@@ -392,13 +392,42 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     required OutputImageFormat format,
     required int quality,
   }) async {
-    final preview = await generateResize(
-      width: width,
-      height: height,
-      format: format,
-      quality: quality,
-    );
-    return preview?.fileSize;
+    final sourceBytes = state.currentBytes;
+    if (sourceBytes == null) return null;
+    try {
+      return await ImageProcessorService.estimateResizeBytes(
+        bytes: sourceBytes,
+        width: width,
+        height: height,
+        format: format,
+        quality: quality,
+      );
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+      return null;
+    }
+  }
+
+  Future<int?> estimatePresetBytes({
+    required int targetWidth,
+    required int targetHeight,
+    required OutputImageFormat format,
+    required int quality,
+  }) async {
+    final sourceBytes = state.currentBytes;
+    if (sourceBytes == null) return null;
+    try {
+      return await ImageProcessorService.estimatePresetBytes(
+        bytes: sourceBytes,
+        targetWidth: targetWidth,
+        targetHeight: targetHeight,
+        format: format,
+        quality: quality,
+      );
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+      return null;
+    }
   }
 
   Future<ResizeResult?> compressToTargetSize(
@@ -563,6 +592,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
   void replaceWithResult({
     required ResizeResult result,
     required String fileName,
+    String? sourcePath,
   }) {
     state = state.copyWith(
       currentBytes: result.bytes,
@@ -572,6 +602,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
       fileSize: result.fileSize,
       isLoading: false,
       clearError: true,
+      sourcePath: sourcePath,
     );
   }
 
@@ -748,6 +779,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
       originalBytes: originalBytes,
       currentBytes: originalBytes,
       fileName: state.fileName,
+      sourcePath: state.sourcePath,
       width: image.width,
       height: image.height,
       fileSize: originalBytes.length,

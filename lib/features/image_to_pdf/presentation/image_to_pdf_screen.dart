@@ -253,6 +253,14 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
   Future<void> _generatePdf(
       BuildContext context, ImageToPdfNotifier notifier) async {
+    // Snapshot source image paths before generation clears the queue so the
+    // Files preview can show per-page image thumbnails scoped to this PDF.
+    final sourcePaths = ref
+        .read(imageToPdfProvider)
+        .images
+        .map((item) => item.path)
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
     final pdfPath = await notifier.generatePdf();
 
     if (!context.mounted) return;
@@ -266,6 +274,9 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               editedAt: DateTime.now(),
               toolIcon: Icons.picture_as_pdf_rounded,
               filePath: pdfPath,
+              thumbnailPath:
+                  sourcePaths.isEmpty ? null : sourcePaths.first,
+              pagePaths: sourcePaths.isEmpty ? null : sourcePaths,
             ),
           );
       notifier.clearAll();

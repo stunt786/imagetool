@@ -88,8 +88,10 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
       body: Column(
         children: [
           if (_showSettings)
-            Flexible(
-              flex: 0,
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.42,
+              ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: _SplitSettingsPanel(

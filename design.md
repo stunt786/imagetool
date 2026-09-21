@@ -10,16 +10,6 @@
 
 
 
-#Format Converter
-** Add Format Converter Save to Gallary processing faster with best processinng engine, that shows no laginess to users
-** Merge Convert & Save with single button 'Convert & Save'
-
-#Image to Pdf
-**converted pdf should auto have no margins by default (also in settings), and auto detect the height and width of the image. If image is in ratio 9:16 the PDF page should be with all image height and width with proper ascept ration balanced, if 16:9ratio it should not stretch height only fits to width of page according to height size and vice versa
-**Fix buttom overflow in image to PDF setting preview
-**Fix image watermark opacity not applied to PDF-> output file. (opacity should be text and logo both)
-** Output filename should start with pixeltools after original_name
-
 #PDF Compress
 ** Enhance PDF Compress using latest and best technology methods. Currently PDF compress with any settings not functional and higher size output as imported PDF. Also provide message if compression is at outmost condition and cannot be further compressed
 ** Watermark is not implemented for PDF compress feature. Apply watermark functionality to output file for PDF compress

@@ -14,6 +14,7 @@ import '../../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../models/document_batch.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
+import '../../services/batch_storage_service.dart';
 import '../../services/document_enhancement_service.dart';
 import '../../services/document_scanner_service.dart';
 import '../widgets/enhance_filters_sheet.dart';
@@ -86,7 +87,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       if (decoded == null) return;
       final rotated = img.copyRotate(decoded, angle: 90);
       final bytes = Uint8List.fromList(img.encodeJpg(rotated, quality: 95));
-      ref.read(documentBatchProvider.notifier).updatePage(
+      await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
             _selectedIndex,
             page.copyWith(
               imageBytes: bytes,
@@ -170,14 +171,14 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
     setState(() => _isBusy = true);
     try {
-      final enhancedBytes =
-          await DocumentEnhancementService.smartScanEnhance(page.imageBytes!);
-      if (enhancedBytes != null && mounted) {
-        final decoded = img.decodeImage(enhancedBytes);
+      final result = await DocumentEnhancementService.smartScanEnhanceDetailed(
+          page.imageBytes!);
+      if (result != null && mounted) {
+        final decoded = img.decodeImage(result.bytes);
         await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
               _selectedIndex,
               page.copyWith(
-                imageBytes: enhancedBytes,
+                imageBytes: result.bytes,
                 filteredBytes: null,
                 filterType: FilterType.none,
                 width: decoded?.width ?? page.width,
@@ -186,10 +187,12 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               ),
             );
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Auto-flattened & lighting corrected!'),
+          SnackBar(
+            content: Text(result.stages.isEmpty
+                ? 'Page already looks clean – nothing to fix.'
+                : 'Smart fix applied: ${result.stages.join(', ')}.'),
             behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -208,9 +211,9 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
     setState(() => _isBusy = true);
     try {
+      // Flatten straightens perspective skew and crops to the paper edges.
       final flattenedBytes =
-          await DocumentEnhancementService.autoFlattenBendedPaper(
-              page.imageBytes!);
+          await DocumentEnhancementService.flattenDocument(page.imageBytes!);
       if (flattenedBytes != null && mounted) {
         final decoded = img.decodeImage(flattenedBytes);
         await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
@@ -226,7 +229,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
             );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Paper flattened successfully!'),
+            content: Text('Page straightened & cropped to paper edges.'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 2),
           ),
@@ -251,7 +254,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       final decoded = img.decodeImage(resultBytes);
       final w = decoded?.width ?? page.width;
       final h = decoded?.height ?? page.height;
-      ref.read(documentBatchProvider.notifier).updatePage(
+      await ref.read(documentBatchProvider.notifier).updatePageAndPersist(
             _selectedIndex,
             page.copyWith(
               imageBytes: resultBytes,
@@ -290,10 +293,20 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   }
 
   Future<void> _keepInFiles(List<ScannedPage> pages) async {
-    final paths = pages
-        .map((page) => page.path)
-        .where((path) => path.isNotEmpty)
-        .toList(growable: false);
+    if (pages.isEmpty) {
+      _showError('The scanned pages could not be retained.');
+      return;
+    }
+    final batch = ref.read(documentBatchProvider);
+    // Move pages to persistent storage first: clearing the batch deletes the
+    // temp directory, which would otherwise orphan the history entry.
+    var paths = await BatchStorageService.retainBatch(batch.id);
+    paths = paths.isEmpty
+        ? pages
+            .map((page) => page.path)
+            .where((path) => path.isNotEmpty)
+            .toList(growable: false)
+        : paths;
     if (paths.isEmpty) {
       _showError('The scanned pages could not be retained.');
       return;
@@ -306,6 +319,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
           thumbnailPath: paths.first,
           pagePaths: paths,
         );
+    await ref.read(documentBatchProvider.notifier).clearBatch();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Scan kept in Files for later export.')),
@@ -396,8 +410,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               isBusy: _isBusy,
               onClose: () => _confirmDiscard(batch),
               onDone: _finish,
-              canUndo: ref.read(documentBatchProvider.notifier).canUndo,
-              canRedo: ref.read(documentBatchProvider.notifier).canRedo,
+              canUndo: batch.undoDepth > 0,
+              canRedo: batch.redoDepth > 0,
               onUndo: ref.read(documentBatchProvider.notifier).undo,
               onRedo: ref.read(documentBatchProvider.notifier).redo,
             ),

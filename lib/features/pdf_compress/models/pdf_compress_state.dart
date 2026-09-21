@@ -24,6 +24,7 @@ class PdfCompressState {
     this.isProcessing = false,
     this.progress = 0.0,
     this.errorMessage,
+    this.note,
     this.outputPath,
     this.outputFileSize,
     this.publicExportPath,
@@ -36,6 +37,11 @@ class PdfCompressState {
   final bool isProcessing;
   final double progress;
   final String? errorMessage;
+
+  /// Optional explanation shown after a run, e.g. why the watermark was
+  /// skipped or why no size reduction was possible.
+  final String? note;
+
   final String? outputPath;
   final int? outputFileSize;
   final String? publicExportPath;
@@ -56,6 +62,7 @@ class PdfCompressState {
     bool? isProcessing,
     double? progress,
     String? errorMessage,
+    String? note,
     String? outputPath,
     int? outputFileSize,
     String? publicExportPath,
@@ -68,6 +75,7 @@ class PdfCompressState {
       isProcessing: isProcessing ?? this.isProcessing,
       progress: progress ?? this.progress,
       errorMessage: errorMessage,
+      note: note,
       outputPath: outputPath ?? this.outputPath,
       outputFileSize: outputFileSize ?? this.outputFileSize,
       publicExportPath: publicExportPath ?? this.publicExportPath,

@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../features/image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
@@ -28,6 +30,7 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
   late PageController _pageController;
   late int _currentIndex;
   late List<EditHistoryItem> _items;
+  late bool _isPageGroup;
 
   @override
   void initState() {
@@ -35,21 +38,27 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
     final selected =
         widget.items[widget.initialIndex.clamp(0, widget.items.length - 1)];
     final retainedPages = selected.pagePaths;
-    _items = retainedPages != null && retainedPages.isNotEmpty
-        ? retainedPages
-            .map((path) => EditHistoryItem(
-                  fileName: path.split(Platform.pathSeparator).last,
-                  toolUsed: selected.toolUsed,
-                  editedAt: selected.editedAt,
-                  filePath: path,
-                  thumbnailPath: path,
-                  toolIcon: selected.toolIcon,
-                ))
-            .toList()
-        : List.from(widget.items);
-    _currentIndex = retainedPages != null && retainedPages.isNotEmpty
-        ? 0
-        : widget.initialIndex.clamp(0, _items.length - 1);
+    if (retainedPages != null && retainedPages.isNotEmpty) {
+      // Camera-scan keeps and image-to-PDF outputs: swipe stays scoped to
+      // this file's own pages only, never into the next different file.
+      _isPageGroup = true;
+      _items = retainedPages
+          .map((path) => EditHistoryItem(
+                fileName: path.split(Platform.pathSeparator).last,
+                toolUsed: selected.toolUsed,
+                editedAt: selected.editedAt,
+                filePath: path,
+                thumbnailPath: path,
+                toolIcon: selected.toolIcon,
+              ))
+          .toList();
+      _currentIndex = 0;
+    } else {
+      // Single file scope: preview shows only the opened file.
+      _isPageGroup = false;
+      _items = [selected];
+      _currentIndex = 0;
+    }
     _pageController = PageController(initialPage: _currentIndex);
   }
 
@@ -160,6 +169,12 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
             label: isPdf ? 'Export' : 'Save',
             onTap: _saveOrExportFile,
           ),
+          if (_isPageGroup)
+            _ActionButton(
+              icon: Icons.picture_as_pdf_outlined,
+              label: 'To PDF',
+              onTap: _exportGroupToPdf,
+            ),
           _ActionButton(
             icon: Icons.edit_outlined,
             label: 'Rename',
@@ -241,8 +256,28 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
     }
   }
 
-  Future<void> _saveOrExportFile() async {
-    final item = _currentItem;
+  /// Sends a kept page group (camera scan / image-to-PDF sources) into the
+  /// Image-to-PDF flow so it can be exported later from Files.
+  Future<void> _exportGroupToPdf() async {
+    final notifier = ref.read(imageToPdfProvider.notifier);
+    notifier.clearAll();
+    var added = 0;
+    for (final item in _items) {
+      final path = item.filePath ?? item.thumbnailPath;
+      if (path == null || path.isEmpty) continue;
+      if (!await File(path).exists()) continue;
+      await notifier.addImageFromPath(path);
+      added++;
+    }
+    if (!mounted) return;
+    if (added == 0) {
+      _showSnack('No pages available for PDF export');
+      return;
+    }
+    context.push('/images/to-pdf');
+  }
+
+  Future<void> _saveOrExportFile() async {    final item = _currentItem;
     final isPdf = item.fileName.toLowerCase().endsWith('.pdf');
     final path = item.filePath ?? item.thumbnailPath;
     if (path == null || path.isEmpty) {

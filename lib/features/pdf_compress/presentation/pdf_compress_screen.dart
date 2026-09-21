@@ -223,7 +223,11 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
             LinearProgressIndicator(value: state.progress),
             const SizedBox(height: 8),
             Text(
-              'Compressing... ${(state.progress * 100).toInt()}%',
+              state.progress < 0.1
+                  ? 'Analysing PDF structure...'
+                  : state.progress >= 0.85 && state.progress < 0.9
+                      ? 'Optimising streams...'
+                      : 'Compressing... ${(state.progress * 100).toInt()}%',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -260,14 +264,23 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                   const SizedBox(height: 12),
                   if (state.compressionRatio != null)
                     Text(
-                      state.compressionRatio! >= 0
+                      state.compressionRatio! > 0
                           ? 'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})'
-                          : 'This PDF is already at its practical compression limit. The original-size output was retained to avoid making it larger.',
+                          : 'No size reduction was possible for this PDF (${PdfService.formatFileSize(state.selectedFileSize!)}). The original file was kept; the output is never larger than the input.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSecondaryContainer,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                  if (state.note != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      state.note!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ],
                   if (state.publicExportPath == null) ...[
                     const SizedBox(height: 8),
                     Text(

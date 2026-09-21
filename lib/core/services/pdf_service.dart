@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
+import 'pdf_compression_engine.dart';
 import 'pdf_ocr_service.dart';
 
 /// Core service for all PDF processing operations.
@@ -88,16 +89,26 @@ class PdfService {
 
   // ─── Compress PDF ───────────────────────────────────────────────────
 
-  /// Maps 0.0-1.0 quality to Syncfusion compression level.
-  static syncfusion.PdfCompressionLevel _mapCompressionLevel(double quality) {
-    if (quality >= 0.8) return syncfusion.PdfCompressionLevel.belowNormal;
-    if (quality >= 0.5) return syncfusion.PdfCompressionLevel.normal;
-    if (quality >= 0.3) return syncfusion.PdfCompressionLevel.aboveNormal;
-    return syncfusion.PdfCompressionLevel.best;
+  /// Compresses [inputPath] into [outputPath] on a background isolate using
+  /// the memory-safe PDF compression engine. [outputPath] always receives a
+  /// valid PDF (the compressed document, or a copy of the original when no
+  /// reduction was possible).
+  static Future<PdfCompressionOutcome> compressPdfFile({
+    required String inputPath,
+    required String outputPath,
+    required double quality,
+    void Function(double progress)? onProgress,
+  }) {
+    return PdfCompressionEngine.compressFileInIsolate(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      qualityFactor: quality,
+      onProgress: onProgress,
+    );
   }
 
-  /// Compresses a PDF file by rebuilding with optimized compression.
-  /// [quality] ranges from 0.1 (lowest) to 1.0 (highest / no compression).
+  /// Compresses a PDF file by rebuilding it and re-encoding its embedded
+  /// images. [quality] ranges from 0.1 (smallest) to 1.0 (best quality).
   /// Returns the path to the compressed file.
   Future<String> compressPdf({
     required String inputPath,
@@ -116,57 +127,199 @@ class PdfService {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final outputPath = path.join(saveDir.path, 'pixeltools_$timestamp.pdf');
 
-    onProgress?.call(0.1);
+    await PdfCompressionEngine.compressFile(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      preset: PdfCompressionPreset.forQualityFactor(quality),
+      onProgress: onProgress,
+    );
 
-    final inputBytes = File(inputPath).readAsBytesSync();
-    final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
-    final pageCount = srcDoc.pages.count;
+    if (watermark) {
+      try {
+        final bytes = await File(outputPath).readAsBytes();
+        final watermarked = _watermarkPdfBytes(bytes, <String, dynamic>{
+          'applyWatermark': true,
+          'watermarkText': watermarkText,
+          'watermarkColor': watermarkColorHex,
+          'watermarkOpacity': watermarkOpacity,
+          'watermarkPosition': watermarkPositionIndex,
+          'useWatermarkLogo': useWatermarkLogo,
+          'iconBytes': watermarkIconBytes,
+        });
+        await File(outputPath).writeAsBytes(watermarked, flush: true);
+      } catch (_) {
+        // Watermarking is best-effort; the compressed file stays valid.
+      }
+    }
 
-    onProgress?.call(0.2);
+    return outputPath;
+  }
 
-    final compressionLevel = _mapCompressionLevel(quality);
-    final destDoc = syncfusion.PdfDocument();
-    destDoc.compressionLevel = compressionLevel;
+  /// Last-resort fallback for PDFs whose embedded images use an encoding the
+  /// pure-Dart engine cannot decode (JPEG 2000, JBIG2, CCITT).
+  ///
+  /// Pages are rendered with the platform PDF renderer one at a time, JPEG
+  /// encoded at the level's quality and rebuilt into a new document. This is
+  /// lossy: the text layer is not preserved. The result is validated with
+  /// Syncfusion and returned only when it is valid and smaller than
+  /// [inputLength]; otherwise null is returned and the caller keeps the
+  /// original file.
+  Future<Uint8List?> rasterCompressPdf({
+    required String inputPath,
+    required int inputLength,
+    required double quality,
+    int maxPages = 24,
+    int maxPixelsPerPage = 4000000,
+    void Function(double progress)? onProgress,
+  }) async {
+    final preset = PdfCompressionPreset.forQualityFactor(quality);
+    final dpi = quality >= 0.7
+        ? 150.0
+        : quality >= 0.4
+            ? 120.0
+            : quality >= 0.25
+                ? 100.0
+                : 85.0;
 
-    for (int i = 0; i < pageCount; i++) {
-      final template = srcDoc.pages[i].createTemplate();
-      final page = destDoc.pages.add();
-      page.graphics.drawPdfTemplate(template, ui.Offset.zero);
-      if (watermark) {
-        applyWatermarkToSyncfusionPage(
-          page,
-          iconBytes: watermarkIconBytes,
-          text: watermarkText,
-          colorHex: watermarkColorHex,
-          opacity: watermarkOpacity,
-          positionIndex: watermarkPositionIndex,
-          useAppLogo: useWatermarkLogo,
+    pdfx.PdfDocument? document;
+    try {
+      document = await pdfx.PdfDocument.openFile(inputPath);
+      final pageCount = document.pagesCount;
+      if (pageCount <= 0 || pageCount > maxPages) return null;
+
+      final pages = <PdfRasterPage>[];
+      var accumulated = 0;
+
+      for (var index = 1; index <= pageCount; index++) {
+        pdfx.PdfPage? page;
+        try {
+          page = await document.getPage(index);
+          final pageWidth = page.width;
+          final pageHeight = page.height;
+          if (pageWidth <= 0 || pageHeight <= 0) return null;
+
+          var renderWidth = pageWidth / 72.0 * dpi;
+          var renderHeight = pageHeight / 72.0 * dpi;
+          final pixels = renderWidth * renderHeight;
+          if (pixels > maxPixelsPerPage && pixels > 0) {
+            final factor = math.sqrt(maxPixelsPerPage / pixels);
+            renderWidth *= factor;
+            renderHeight *= factor;
+          }
+          renderWidth = renderWidth.clamp(32.0, 10000.0);
+          renderHeight = renderHeight.clamp(32.0, 10000.0);
+
+          final rendered = await page.render(
+            width: renderWidth,
+            height: renderHeight,
+            format: pdfx.PdfPageImageFormat.png,
+          );
+          if (rendered == null) return null;
+
+          final encoded = await _encodeRasterPage(
+            rendered.bytes,
+            preset.jpegQuality,
+            preset.maxImageLongSide,
+          );
+          if (encoded == null) return null;
+
+          accumulated += encoded.bytes.length;
+          // Bail out as soon as the raster version cannot possibly win.
+          if (accumulated >= inputLength) return null;
+
+          pages.add(
+            PdfRasterPage(
+              jpegBytes: encoded.bytes,
+              imageWidth: encoded.width,
+              imageHeight: encoded.height,
+              pageWidth: pageWidth,
+              pageHeight: pageHeight,
+            ),
+          );
+        } catch (_) {
+          return null;
+        } finally {
+          try {
+            await page?.close();
+          } catch (_) {}
+        }
+        onProgress?.call(index / pageCount);
+      }
+
+      final bytes = PdfRasterWriter.build(pages);
+      if (bytes.length >= inputLength) return null;
+
+      // Independent validation with a second PDF implementation before the
+      // rasterised document replaces the original.
+      final check = syncfusion.PdfDocument(inputBytes: bytes);
+      try {
+        if (check.pages.count != pages.length) return null;
+      } finally {
+        check.dispose();
+      }
+      return bytes;
+    } catch (_) {
+      return null;
+    } finally {
+      try {
+        await document?.close();
+      } catch (_) {}
+    }
+  }
+
+  /// Decodes a rendered page and re-encodes it as JPEG on a background
+  /// isolate so the UI thread stays responsive.
+  static Future<_EncodedRasterPage?> _encodeRasterPage(
+    Uint8List renderedBytes,
+    int quality,
+    int maxLongSide,
+  ) async {
+    try {
+      final result = await compute(_rasterEncodeWorker, <String, dynamic>{
+        'bytes': renderedBytes,
+        'quality': quality,
+        'maxLongSide': maxLongSide,
+      });
+      if (result == null) return null;
+      return _EncodedRasterPage(
+        bytes: result['bytes'] as Uint8List,
+        width: (result['width'] as num).toInt(),
+        height: (result['height'] as num).toInt(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Map<String, dynamic>? _rasterEncodeWorker(Map<String, dynamic> params) {
+    var decoded =
+        img.decodeImage(Uint8List.fromList(List<int>.from(params['bytes'] as List)));
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+      return null;
+    }
+    final maxLongSide = (params['maxLongSide'] as num?)?.toInt() ?? 0;
+    final longSide = math.max(decoded.width, decoded.height);
+    if (maxLongSide > 0 && longSide > maxLongSide) {
+      if (decoded.width >= decoded.height) {
+        decoded = img.copyResize(
+          decoded,
+          width: maxLongSide,
+          interpolation: img.Interpolation.average,
+        );
+      } else {
+        decoded = img.copyResize(
+          decoded,
+          height: maxLongSide,
+          interpolation: img.Interpolation.average,
         );
       }
-      onProgress?.call(0.2 + ((i + 1) / pageCount) * 0.7);
     }
-
-    srcDoc.dispose();
-
-    final bytes = await destDoc.save();
-    destDoc.dispose();
-
-    final Uint8List outputBytes;
-    if (watermark || bytes.length < inputBytes.length) {
-      outputBytes = Uint8List.fromList(bytes);
-    } else {
-      outputBytes = inputBytes;
-    }
-
-    final file = File(outputPath);
-    await file.writeAsBytes(outputBytes, flush: true);
-
-    if (!await file.exists() || (await file.length()) == 0) {
-      throw Exception('Compressed PDF file was not created or is empty');
-    }
-
-    onProgress?.call(1.0);
-    return outputPath;
+    final quality = (params['quality'] as num?)?.toInt() ?? 70;
+    return <String, dynamic>{
+      'bytes': Uint8List.fromList(img.encodeJpg(decoded, quality: quality)),
+      'width': decoded.width,
+      'height': decoded.height,
+    };
   }
 
   // ─── Merge PDFs ─────────────────────────────────────────────────────
@@ -674,13 +827,49 @@ class PdfService {
       params['watermarkPositionIndex'] as int? ??
       4;
 
-  /// Compress worker for background isolate execution.
-  /// Params: inputBytes (Uint8List), quality (double)
-  static Future<Uint8List> isolateCompressWorker(
+  /// Applies the app watermark to an existing PDF on a background isolate.
+  /// Returns null when watermarking failed.
+  static Future<Uint8List?> watermarkPdfBytes({
+    required Uint8List inputBytes,
+    required String text,
+    required int colorHex,
+    required double opacity,
+    required int positionIndex,
+    required bool useAppLogo,
+    Uint8List? iconBytes,
+  }) async {
+    if (text.trim().isEmpty &&
+        (!useAppLogo || iconBytes == null || iconBytes.isEmpty)) {
+      return inputBytes;
+    }
+    try {
+      return await compute(isolateWatermarkWorker, <String, dynamic>{
+        'inputBytes': inputBytes,
+        'applyWatermark': true,
+        'watermarkText': text,
+        'watermarkColor': colorHex,
+        'watermarkOpacity': opacity,
+        'watermarkPosition': positionIndex,
+        'useWatermarkLogo': useAppLogo,
+        'iconBytes': iconBytes,
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Watermark worker for background isolate execution.
+  /// Params: inputBytes (Uint8List) plus the standard watermark parameters.
+  static Future<Uint8List> isolateWatermarkWorker(
       Map<String, dynamic> params) async {
-    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
-    final quality = params['quality'] as double;
-    final applyWatermark = _workerWatermarkEnabled(params);
+    final inputBytes =
+        Uint8List.fromList(List<int>.from(params['inputBytes'] as List));
+    return _watermarkPdfBytes(inputBytes, params);
+  }
+
+  /// Draws the watermark over every page of [inputBytes] using Syncfusion.
+  static Uint8List _watermarkPdfBytes(
+      Uint8List inputBytes, Map<String, dynamic> params) {
     final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
     final colorHex = _workerWatermarkColor(params);
@@ -688,22 +877,17 @@ class PdfService {
     final positionIndex = _workerWatermarkPosition(params);
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
-    final compressionLevel = _mapCompressionLevel(quality);
     final srcDoc = syncfusion.PdfDocument(inputBytes: inputBytes);
-    srcDoc.compressionLevel = compressionLevel;
-
     final pageCount = srcDoc.pages.count;
     final destDoc = syncfusion.PdfDocument();
-    destDoc.compressionLevel = compressionLevel;
-
-    for (int i = 0; i < pageCount; i++) {
-      final template = srcDoc.pages[i].createTemplate();
-      final section = destDoc.sections!.add();
-      section.pageSettings.size = srcDoc.pages[i].size;
-      section.pageSettings.margins.all = 0;
-      final page = section.pages.add();
-      page.graphics.drawPdfTemplate(template, ui.Offset.zero);
-      if (applyWatermark) {
+    try {
+      for (int i = 0; i < pageCount; i++) {
+        final template = srcDoc.pages[i].createTemplate();
+        final section = destDoc.sections!.add();
+        section.pageSettings.size = srcDoc.pages[i].size;
+        section.pageSettings.margins.all = 0;
+        final page = section.pages.add();
+        page.graphics.drawPdfTemplate(template, ui.Offset.zero);
         applyWatermarkToSyncfusionPage(
           page,
           iconBytes: iconBytes,
@@ -714,16 +898,54 @@ class PdfService {
           useAppLogo: useAppLogo,
         );
       }
+      return Uint8List.fromList(destDoc.saveSync());
+    } finally {
+      srcDoc.dispose();
+      destDoc.dispose();
+    }
+  }
+
+  /// Compress worker for background isolate execution.
+  ///
+  /// Runs the memory-safe compression engine (which re-encodes embedded
+  /// images and DEFLATEs uncompressed streams) and optionally applies the app
+  /// watermark afterwards.
+  ///
+  /// Params: `inputPath` (preferred, avoids copying bytes between isolates) or
+  /// `inputBytes`, `quality`, plus the standard watermark parameters.
+  static Future<Uint8List> isolateCompressWorker(
+      Map<String, dynamic> params) async {
+    final inputPath = params['inputPath'] as String?;
+    final Uint8List inputBytes;
+    if (inputPath != null && inputPath.isNotEmpty) {
+      inputBytes = await File(inputPath).readAsBytes();
+    } else {
+      inputBytes =
+          Uint8List.fromList(List<int>.from(params['inputBytes'] as List));
     }
 
-    srcDoc.dispose();
-    final bytes = await destDoc.save();
-    destDoc.dispose();
+    final quality = (params['quality'] as num?)?.toDouble() ?? 0.5;
+    final preset = PdfCompressionPreset.forQualityFactor(quality);
 
-    if (applyWatermark || bytes.length < inputBytes.length) {
-      return Uint8List.fromList(bytes);
+    Uint8List compressed;
+    try {
+      compressed = await PdfCompressionEngine.compressBytes(
+        input: inputBytes,
+        preset: preset,
+      );
+    } catch (_) {
+      compressed = inputBytes;
     }
-    return inputBytes;
+
+    if (!_workerWatermarkEnabled(params)) {
+      return compressed;
+    }
+
+    try {
+      return _watermarkPdfBytes(compressed, params);
+    } catch (_) {
+      return compressed;
+    }
   }
 
   /// Merge worker for background isolate execution.
@@ -1192,6 +1414,19 @@ class PdfService {
     File(filePath).writeAsBytesSync(bytes, flush: true);
     return filePath;
   }
+}
+
+/// A rasterised page encoded for embedding in a rebuilt PDF.
+class _EncodedRasterPage {
+  const _EncodedRasterPage({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
 }
 
 /// Operation types for the PDF pipeline manager.

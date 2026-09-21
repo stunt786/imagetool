@@ -9,12 +9,19 @@ class DocumentBatch {
     required this.pages,
     this.createdAt,
     this.batchDirectory,
+    this.undoDepth = 0,
+    this.redoDepth = 0,
   });
 
   final String id;
   final List<ScannedPage> pages;
   final DateTime? createdAt;
   final String? batchDirectory;
+
+  /// Depths mirror the notifier's undo/redo stacks so the UI can
+  /// reactively enable the Undo/Redo buttons via `ref.watch`.
+  final int undoDepth;
+  final int redoDepth;
 
   int get pageCount => pages.length;
 
@@ -23,12 +30,16 @@ class DocumentBatch {
     List<ScannedPage>? pages,
     DateTime? createdAt,
     String? batchDirectory,
+    int? undoDepth,
+    int? redoDepth,
   }) {
     return DocumentBatch(
       id: id ?? this.id,
       pages: pages ?? this.pages,
       createdAt: createdAt ?? this.createdAt,
       batchDirectory: batchDirectory ?? this.batchDirectory,
+      undoDepth: undoDepth ?? this.undoDepth,
+      redoDepth: redoDepth ?? this.redoDepth,
     );
   }
 

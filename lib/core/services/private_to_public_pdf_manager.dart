@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../../shared/models/picked_file.dart';
+
 /// Orchestrates the two-phase "Sandbox-to-Public" PDF pipeline:
 ///
 /// 1. **Sandbox Phase** — copies picked files into the app's isolated temp
@@ -56,6 +58,36 @@ class PrivateToPublicPdfManager {
     await File(destPath).writeAsBytes(bytes, flush: true);
     _sandboxFiles.add(destPath);
     return destPath;
+  }
+
+  /// Imports a picked file into the sandbox, preferring a filesystem copy
+  /// (constant memory) over buffering bytes. Throws a [StateError] with an
+  /// actionable message when neither a readable path nor bytes exist, instead
+  /// of surfacing a raw PathNotFound/FileSystemException.
+  Future<String> importPickedFile(PickedFile file) async {
+    final sourcePath = file.path;
+    if (sourcePath != null && sourcePath.isNotEmpty) {
+      try {
+        if (await File(sourcePath).exists()) {
+          return copyToSandbox(sourcePath);
+        }
+      } catch (_) {
+        // Fall through to the bytes path below.
+      }
+      if (file.bytes == null) {
+        throw StateError(
+          'Could not read "${file.name}": the source file is no longer '
+          'available. Please pick the file again.',
+        );
+      }
+    }
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      throw StateError(
+        'Could not read "${file.name}". Please pick the file again.',
+      );
+    }
+    return writeToSandbox(bytes, file.name);
   }
 
   /// Exports a single sandbox file to a user-selected public location via SAF.

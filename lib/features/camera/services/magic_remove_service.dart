@@ -41,8 +41,136 @@ class MagicRemoveService {
     });
   }
 
-  static Uint8List? _inpaintInternal({
+  /// Auto-detects likely intrusions (fingers, pens, clips straying in from the
+  /// image borders) and returns scribble point clusters in canvas coordinates
+  /// so the user can refine the mask before erasing. Runs in an isolate.
+  static Future<List<List<Offset>>> detectIntrusions({
     required Uint8List imageBytes,
+    required double canvasWidth,
+    required double canvasHeight,
+  }) async {
+    if (canvasWidth <= 0 || canvasHeight <= 0) return const [];
+    final raw = await Isolate.run(() =>
+        _detectIntrusionsInternal(imageBytes: imageBytes));
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = img.decodeImage(imageBytes);
+    final sw = decoded != null ? 240.0 : canvasWidth;
+    final sh = decoded != null
+        ? 240.0 * decoded.height / decoded.width
+        : canvasHeight;
+    return raw
+        .map((comp) => comp
+            .map((pt) => Offset(
+                  (pt[0] / sw * canvasWidth).clamp(0.0, canvasWidth),
+                  (pt[1] / sh * canvasHeight).clamp(0.0, canvasHeight),
+                ))
+            .toList())
+        .toList();
+  }
+
+  /// Downscaled connected-component intrusion detector. Keeps candidate blobs
+  /// (skin-tone or much darker than the paper) that touch the image border.
+  static List<List<List<double>>>? _detectIntrusionsInternal({
+    required Uint8List imageBytes,
+  }) {
+    try {
+      final decoded = img.decodeImage(imageBytes);
+      if (decoded == null) return null;
+      const sw = 240;
+      final sh = math.max(1, (sw * decoded.height / decoded.width).round());
+      final small = img.copyResize(decoded,
+          width: sw, height: sh, interpolation: img.Interpolation.linear);
+
+      // Paper reference: median luminance of the center region.
+      final samples = <int>[];
+      for (var y = sh ~/ 4; y < sh * 3 ~/ 4; y += 2) {
+        for (var x = sw ~/ 4; x < sw * 3 ~/ 4; x += 2) {
+          final p = small.getPixel(x, y);
+          samples.add((0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round());
+        }
+      }
+      if (samples.isEmpty) return null;
+      samples.sort();
+      final paper = samples[samples.length ~/ 2].toDouble();
+
+      final mask = List<int>.filled(sw * sh, 0);
+      for (var y = 0; y < sh; y++) {
+        for (var x = 0; x < sw; x++) {
+          final p = small.getPixel(x, y);
+          final r = p.r.toDouble(), g = p.g.toDouble(), b = p.b.toDouble();
+          final lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          final isSkin = r > 95 &&
+              g > 40 &&
+              b > 20 &&
+              r > g &&
+              r > b &&
+              (r - g).abs() < 110 &&
+              (r - b).abs() < 140;
+          final isDarkObject = lum < paper - 60 && lum < 110;
+          if (isSkin || isDarkObject) mask[y * sw + x] = 1;
+        }
+      }
+
+      // Connected components via flood fill.
+      final seen = List<int>.filled(sw * sh, 0);
+      final results = <List<List<double>>>[];
+      for (var i = 0; i < sw * sh; i++) {
+        if (mask[i] != 1 || seen[i] == 1) continue;
+        var minX = sw, minY = sh, maxX = 0, maxY = 0, count = 0;
+        var touchesBorder = false;
+        var sumY = 0;
+        final stack = <int>[i];
+        seen[i] = 1;
+        while (stack.isNotEmpty) {
+          final cur = stack.removeLast();
+          final cx = cur % sw, cy = cur ~/ sw;
+          count++;
+          sumY += cy;
+          if (cx < minX) minX = cx;
+          if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy;
+          if (cy > maxY) maxY = cy;
+          if (cx == 0 || cy == 0 || cx == sw - 1 || cy == sh - 1) {
+            touchesBorder = true;
+          }
+          if (cx > 0 && mask[cur - 1] == 1 && seen[cur - 1] == 0) {
+            seen[cur - 1] = 1;
+            stack.add(cur - 1);
+          }
+          if (cx < sw - 1 && mask[cur + 1] == 1 && seen[cur + 1] == 0) {
+            seen[cur + 1] = 1;
+            stack.add(cur + 1);
+          }
+          if (cy > 0 && mask[cur - sw] == 1 && seen[cur - sw] == 0) {
+            seen[cur - sw] = 1;
+            stack.add(cur - sw);
+          }
+          if (cy < sh - 1 && mask[cur + sw] == 1 && seen[cur + sw] == 0) {
+            seen[cur + sw] = 1;
+            stack.add(cur + sw);
+          }
+        }
+        if (!touchesBorder || count < 40 || count > 12000) continue;
+        // Scribble across the component's middle band.
+        final midY = (sumY / count).round().clamp(minY, maxY).toDouble();
+        final pts = <List<double>>[];
+        final steps = 10;
+        for (var s = 0; s <= steps; s++) {
+          pts.add([
+            (minX + (maxX - minX) * s / steps).toDouble(),
+            midY,
+          ]);
+        }
+        results.add(pts);
+        if (results.length >= 6) break;
+      }
+      return results;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Uint8List? _inpaintInternal({    required Uint8List imageBytes,
     required List<double> rawPoints,
     required double brushRadius,
     required double imageWidth,

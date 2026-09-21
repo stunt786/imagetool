@@ -76,6 +76,8 @@ Future<ImageSaveResult> saveImageBytesImpl(
 }) async {
   // FilePicker supplies a writable path on native platforms. Respect an
   // explicit replacement request instead of silently creating a new export.
+  // A fallback here made the UI claim an original had been replaced when it
+  // had not, which is worse than a clear save error.
   if (replacePath != null && replacePath.isNotEmpty) {
     final original = File(replacePath);
     if (await original.exists()) {
@@ -83,6 +85,7 @@ Future<ImageSaveResult> saveImageBytesImpl(
       return ImageSaveResult(
           fileName: path.basename(original.path), path: original.path);
     }
+    throw StateError('The original image is no longer available to replace.');
   }
   final safeName = fileName.trim().isEmpty ? 'image.jpg' : fileName.trim();
   final prefixed = 'pixeltools_$safeName';

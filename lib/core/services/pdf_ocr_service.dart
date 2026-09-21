@@ -6,6 +6,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
+import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
 class PdfOcrService {
   PdfOcrService._();
@@ -21,17 +22,26 @@ class PdfOcrService {
     required String outputPath,
     void Function(double progress)? onProgress,
   }) async {
-    final pages = await _ocrAllPages(
-      inputPath: inputPath,
-      dpi: _defaultDpi,
-      onProgress: onProgress,
-    );
-
     final buffer = StringBuffer();
-    for (int i = 0; i < pages.length; i++) {
-      if (i > 0) buffer.writeln();
-      buffer.writeln('--- Page ${i + 1} ---');
-      buffer.writeln(pages[i].text.trim());
+    final nativePages = await _extractNativeTextPages(inputPath);
+    if (_hasUsableNativeText(nativePages)) {
+      for (int i = 0; i < nativePages.length; i++) {
+        if (i > 0) buffer.writeln();
+        buffer.writeln('--- Page ${i + 1} ---');
+        buffer.writeln(nativePages[i].trim());
+        onProgress?.call((i + 1) / nativePages.length);
+      }
+    } else {
+      final pages = await _ocrAllPages(
+        inputPath: inputPath,
+        dpi: _defaultDpi,
+        onProgress: onProgress,
+      );
+      for (int i = 0; i < pages.length; i++) {
+        if (i > 0) buffer.writeln();
+        buffer.writeln('--- Page ${i + 1} ---');
+        buffer.writeln(pages[i].text.trim());
+      }
     }
 
     await File(outputPath).writeAsString(buffer.toString());
@@ -46,13 +56,24 @@ class PdfOcrService {
     required String outputPath,
     void Function(double progress)? onProgress,
   }) async {
-    final pages = await _ocrAllPages(
-      inputPath: inputPath,
-      dpi: _defaultDpi,
-      onProgress: onProgress,
-    );
-
-    final documentXml = _buildDocxDocument(pages);
+    final nativePages = await _extractNativeTextPages(inputPath);
+    final String documentXml;
+    if (_hasUsableNativeText(nativePages)) {
+      // Embedded PDF text retains its original Unicode code points. In
+      // particular, this avoids asking the Latin-only mobile OCR recognizer
+      // to guess Devanagari or other non-Latin scripts.
+      documentXml = _buildDocxDocumentFromText(nativePages);
+      for (int i = 0; i < nativePages.length; i++) {
+        onProgress?.call((i + 1) / nativePages.length);
+      }
+    } else {
+      final pages = await _ocrAllPages(
+        inputPath: inputPath,
+        dpi: _defaultDpi,
+        onProgress: onProgress,
+      );
+      documentXml = _buildDocxDocument(pages);
+    }
 
     final archive = Archive();
     archive.addFile(ArchiveFile(
@@ -66,6 +87,16 @@ class PdfOcrService {
       _relsXml.codeUnits,
     ));
     archive.addFile(ArchiveFile(
+      'word/_rels/document.xml.rels',
+      _documentRelsXml.codeUnits.length,
+      _documentRelsXml.codeUnits,
+    ));
+    archive.addFile(ArchiveFile(
+      'word/styles.xml',
+      _stylesXml.codeUnits.length,
+      _stylesXml.codeUnits,
+    ));
+    archive.addFile(ArchiveFile(
       'word/document.xml',
       documentXml.codeUnits.length,
       documentXml.codeUnits,
@@ -77,6 +108,10 @@ class PdfOcrService {
   }
 
   /// OCR all pages of a PDF using ML Kit.
+  /// Runs the Latin recognizer first and retries sparse pages with the
+  /// Devanagari recognizer, keeping the richer result per page. This keeps
+  /// Latin documents fast while fixing scanned Devanagari documents that the
+  /// Latin-only model mistranscribes.
   Future<List<RecognizedText>> _ocrAllPages({
     required String inputPath,
     int dpi = _defaultDpi,
@@ -88,36 +123,98 @@ class PdfOcrService {
     final scale = dpi / 72.0;
     final tempDir = await getTemporaryDirectory();
 
-    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    final latin = TextRecognizer(script: TextRecognitionScript.latin);
+    // NOTE: this package spells the enum value `devanagiri`.
+    final devanagari =
+        TextRecognizer(script: TextRecognitionScript.devanagiri);
 
-    for (int i = 1; i <= pageCount; i++) {
-      final page = await pdfDoc.getPage(i);
-      final pageImage = await page.render(
-        width: page.width * scale,
-        height: page.height * scale,
-        format: pdfx.PdfPageImageFormat.png,
-      );
-      await page.close();
+    try {
+      for (int i = 1; i <= pageCount; i++) {
+        final page = await pdfDoc.getPage(i);
+        final pageImage = await page.render(
+          width: page.width * scale,
+          height: page.height * scale,
+          format: pdfx.PdfPageImageFormat.png,
+        );
+        await page.close();
 
-      if (pageImage != null) {
-        final tempFile = File(path.join(tempDir.path, 'ocr_page_$i.png'));
-        await tempFile.writeAsBytes(pageImage.bytes);
+        if (pageImage != null) {
+          final tempFile = File(path.join(tempDir.path, 'ocr_page_$i.png'));
+          await tempFile.writeAsBytes(pageImage.bytes);
 
-        final inputImage = InputImage.fromFile(tempFile);
-        final recognizedText = await recognizer.processImage(inputImage);
-        results.add(recognizedText);
+          final inputImage = InputImage.fromFile(tempFile);
+          final latinResult = await latin.processImage(inputImage);
+          var best = latinResult;
+          if (_needsDevanagariRetry(latinResult.text)) {
+            try {
+              final devResult = await devanagari.processImage(inputImage);
+              if (_recognizedLength(devResult.text) >
+                  _recognizedLength(latinResult.text)) {
+                best = devResult;
+              }
+            } catch (_) {}
+          }
+          results.add(best);
 
-        await tempFile.delete();
-      } else {
-        results.add(RecognizedText(text: '', blocks: []));
+          await tempFile.delete();
+        } else {
+          results.add(RecognizedText(text: '', blocks: []));
+        }
+
+        onProgress?.call(i / pageCount);
       }
-
-      onProgress?.call(i / pageCount);
+    } finally {
+      await latin.close();
+      await devanagari.close();
+      await pdfDoc.close();
     }
-
-    await recognizer.close();
-    await pdfDoc.close();
     return results;
+  }
+
+  int _recognizedLength(String text) =>
+      text.replaceAll(RegExp(r'\s+'), '').runes.length;
+
+  bool _containsDevanagari(String text) => RegExp(
+        '[\u0900-\u097F]',
+      ).hasMatch(text);
+
+  /// Retry with the Devanagari model when Latin OCR produced almost nothing
+  /// (typical for scanned Hindi/Marathi documents) or produced Latin gibberish
+  /// where the page likely contains Indic scripts.
+  bool _needsDevanagariRetry(String latinText) {
+    if (_containsDevanagari(latinText)) return false;
+    return _recognizedLength(latinText) < 12;
+  }
+
+  /// Uses the PDF's text layer before falling back to OCR. This is both faster
+  /// and more faithful for digital documents, where OCR would lose Unicode
+  /// glyphs, reading order, and often punctuation.
+  Future<List<String>> _extractNativeTextPages(String inputPath) async {
+    try {
+      final document = syncfusion.PdfDocument(
+        inputBytes: await File(inputPath).readAsBytes(),
+      );
+      try {
+        final extractor = syncfusion.PdfTextExtractor(document);
+        return List<String>.generate(
+          document.pages.count,
+          (index) => extractor.extractText(
+            startPageIndex: index,
+            endPageIndex: index,
+          ),
+          growable: false,
+        );
+      } finally {
+        document.dispose();
+      }
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  bool _hasUsableNativeText(List<String> pages) {
+    final nonWhitespace = pages.join().replaceAll(RegExp(r'\s+'), '');
+    return nonWhitespace.runes.length >= 4;
   }
 
   /// Builds the word/document.xml content from OCR results.
@@ -159,6 +256,109 @@ class PdfOcrService {
     return buf.toString();
   }
 
+  String _buildDocxDocumentFromText(List<String> pages) {
+    final buf = StringBuffer();
+    buf.writeln('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    buf.writeln(
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+    );
+    buf.writeln('<w:body>');
+    for (int pageIndex = 0; pageIndex < pages.length; pageIndex++) {
+      _writePageHeading(buf, pageIndex + 1);
+      // Digital PDFs lose table structure when flattened to paragraphs.
+      // Re-infer whitespace-aligned columns so tables survive conversion.
+      final lines = pages[pageIndex]
+          .split(RegExp(r'\r?\n'))
+          .map((l) => l.replaceAll('\t', '    '))
+          .toList();
+      var i = 0;
+      while (i < lines.length) {
+        if (lines[i].trim().isEmpty) {
+          i++;
+          continue;
+        }
+        final run = _collectTableRun(lines, i);
+        if (run != null) {
+          _writeStringTable(buf, run);
+          i += run.length;
+        } else {
+          _writeParagraph(buf, lines[i].trim());
+          i++;
+        }
+      }
+    }
+    buf.writeln('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>');
+    buf.writeln('</w:body>');
+    buf.writeln('</w:document>');
+    return buf.toString();
+  }
+
+  /// Splits a line into columns on runs of 2+ spaces (Syncfusion preserves
+  /// inter-column gaps as multiple spaces in extracted text).
+  List<String> _splitColumns(String line) => line
+      .split(RegExp(r'\s{2,}'))
+      .map((c) => c.trim())
+      .where((c) => c.isNotEmpty)
+      .toList(growable: false);
+
+  /// Collects a run of >= 2 consecutive lines sharing the same column count
+  /// (>= 2 columns). Returns null when line [start] does not begin a table.
+  List<List<String>>? _collectTableRun(List<String> lines, int start) {
+    final first = _splitColumns(lines[start]);
+    if (first.length < 2) return null;
+    final run = <List<String>>[first];
+    var i = start + 1;
+    while (i < lines.length) {
+      if (lines[i].trim().isEmpty) break;
+      final cols = _splitColumns(lines[i]);
+      if (cols.length != first.length) break;
+      run.add(cols);
+      i++;
+    }
+    return run.length >= 2 ? run : null;
+  }
+
+  void _writeStringTable(StringBuffer buf, List<List<String>> rows) {
+    buf.writeln('<w:tbl>');
+    buf.writeln(
+      '<w:tblPr>'
+      '<w:tblW w:w="5000" w:type="pct"/>'
+      '<w:tblBorders>'
+      '<w:top w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '<w:left w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '<w:right w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="999999"/>'
+      '</w:tblBorders>'
+      '</w:tblPr>',
+    );
+    for (int r = 0; r < rows.length; r++) {
+      buf.writeln(
+        '<w:tr><w:trPr>'
+        '<w:tblHeader w:val="${r == 0 ? "1" : "0"}"/>'
+        '</w:trPr>',
+      );
+      for (final cell in rows[r]) {
+        final text = _escapeXml(cell);
+        buf.writeln(
+          '<w:tc>'
+          '<w:p><w:r><w:rPr>${_fontRunProps()}</w:rPr>'
+          '<w:t xml:space="preserve">$text</w:t></w:r></w:p>'
+          '</w:tc>',
+        );
+      }
+      buf.writeln('</w:tr>');
+    }
+    buf.writeln('</w:tbl>');
+  }
+
+  /// Font run keeps Latin text on Calibri while complex scripts
+  /// (Devanagari etc.) fall back to Noto Sans Devanagari when present.
+  String _fontRunProps() =>
+      '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Noto Sans Devanagari"/>'
+      '<w:sz w:val="22"/><w:szCs w:val="22"/>';
+
   void _writePageHeading(StringBuffer buf, int pageNumber) {
     buf.writeln(
       '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
@@ -174,7 +374,8 @@ class PdfOcrService {
     if (block.lines.length == 1) {
       _writeParagraph(buf, text);
     } else {
-      final lines = block.lines.map((l) => l.text.trim()).where((t) => t.isNotEmpty);
+      final lines =
+          block.lines.map((l) => l.text.trim()).where((t) => t.isNotEmpty);
       for (final line in lines) {
         _writeParagraph(buf, line);
       }
@@ -184,7 +385,8 @@ class PdfOcrService {
   void _writeParagraph(StringBuffer buf, String text) {
     final escaped = _escapeXml(text);
     buf.writeln(
-      '<w:p><w:r><w:t xml:space="preserve">$escaped</w:t></w:r></w:p>',
+      '<w:p><w:r><w:rPr>${_fontRunProps()}</w:rPr>'
+      '<w:t xml:space="preserve">$escaped</w:t></w:r></w:p>',
     );
   }
 
@@ -246,7 +448,8 @@ class PdfOcrService {
     for (final item in items) {
       bool added = false;
       for (final row in rows) {
-        if ((item.$1.boundingBox.top - row.first.boundingBox.top).abs() < rowThreshold) {
+        if ((item.$1.boundingBox.top - row.first.boundingBox.top).abs() <
+            rowThreshold) {
           row.add(item.$1);
           added = true;
           break;
@@ -277,8 +480,10 @@ class PdfOcrService {
       final tableRow = <TextBlock>[];
       for (int c = 0; c < colCount && c < row.length; c++) {
         final colX = row[c].boundingBox.left;
-        if (r == 0 || (table.isNotEmpty && c < table[0].length &&
-            (table[0][c].boundingBox.left - colX).abs() < colTolerance)) {
+        if (r == 0 ||
+            (table.isNotEmpty &&
+                c < table[0].length &&
+                (table[0][c].boundingBox.left - colX).abs() < colTolerance)) {
           tableRow.add(row[c]);
         }
       }
@@ -298,15 +503,44 @@ class PdfOcrService {
         .replaceAll('"', '&quot;');
   }
 
-  static const String _contentTypesXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  static const String _contentTypesXml =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>''';
 
-  static const String _relsXml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  static const String _relsXml =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>''';
+
+  static const String _documentRelsXml =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>''';
+
+  static const String _stylesXml =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Noto Sans Devanagari"/>
+      <w:sz w:val="22"/><w:szCs w:val="22"/>
+    </w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:name w:val="heading 1"/>
+    <w:basedOn w:val="Normal"/>
+    <w:rPr>
+      <w:b/><w:bCs/>
+      <w:sz w:val="32"/><w:szCs w:val="32"/>
+    </w:rPr>
+  </w:style>
+</w:styles>''';
 }

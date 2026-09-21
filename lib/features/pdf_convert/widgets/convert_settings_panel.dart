@@ -161,14 +161,26 @@ class _ConvertSettingsPanelState extends State<ConvertSettingsPanel> {
               children: ConvertDpi.values.map((dpi) {
                 final isSelected = dpi == widget.state.dpi;
                 return ChoiceChip(
-                  label: Text(dpi.label),
+                  label: Text(
+                    dpi.label,
+                    style: TextStyle(
+                      color: isSelected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
                   selected: isSelected,
                   showCheckmark: false,
-                  selectedColor: theme.colorScheme.primaryContainer,
+                  selectedColor: theme.colorScheme.primary,
+                  backgroundColor:
+                      theme.colorScheme.surfaceContainerHighest,
                   side: BorderSide(
                     color: isSelected
                         ? theme.colorScheme.primary
                         : theme.colorScheme.outlineVariant,
+                    width: isSelected ? 2 : 1,
                   ),
                   onSelected: (_) => widget.onDpiChanged(dpi),
                 );

@@ -10,6 +10,14 @@ import 'package:image/image.dart' as img;
 /// 2. Auto-flattening bended/curved paper (dewarping page curls)
 /// 3. Auto-adjusting brightness & contrast for dark/underexposed images
 /// 4. Autocorrecting shadows from antilights, harsh overhead lights, and hands
+/// Result of a smart enhancement pass with the stages that actually ran.
+class SmartEnhanceResult {
+  const SmartEnhanceResult({required this.bytes, required this.stages});
+
+  final Uint8List bytes;
+  final List<String> stages;
+}
+
 class DocumentEnhancementService {
   /// Auto-fits the document to the full paper size by cropping out surrounding table/margins.
   static Future<Uint8List?> autoFitToPaper(Uint8List bytes) async {
@@ -51,26 +59,60 @@ class DocumentEnhancementService {
     });
   }
 
-  /// All-in-one smart scan enhancement:
-  /// Auto-fit paper + Auto-flatten curvature + Correct antilight shadows + Auto-adjust brightness/contrast
-  static Future<Uint8List?> smartScanEnhance(Uint8List bytes) async {
+  /// All-in-one smart scan enhancement with per-stage detection gating.
+  /// Only stages that actually detect a problem run; the returned [stages]
+  /// list names exactly what was applied so the UI never claims work it
+  /// did not do.
+  static Future<SmartEnhanceResult?> smartScanEnhanceDetailed(
+    Uint8List bytes,
+  ) async {
     return Isolate.run(() {
       final image = img.decodeImage(bytes);
       if (image == null) return null;
 
-      // Step 1: Auto fit paper boundary if excess border exists
-      img.Image processed = internalAutoFitPaper(image);
+      final stages = <String>[];
+      img.Image processed = image;
 
-      // Step 2: Auto flatten bended paper if curvature is detected
-      processed = internalAutoFlattenPaper(processed);
+      final fitted = internalAutoFitPaper(processed);
+      if (!identical(fitted, processed)) stages.add('Auto-crop');
+      processed = fitted;
 
-      // Step 3: Autocorrect antilight shadows and uneven illumination
-      processed = internalAutocorrectAntiLightShadows(processed);
+      final flat = internalAutoFlattenPaper(processed);
+      if (!identical(flat, processed)) stages.add('Flatten');
+      processed = flat;
 
-      // Step 4: Auto adjust brightness & contrast if dark
-      processed = internalAutoAdjustDarkImage(processed);
+      if (internalHasUnevenIllumination(processed)) {
+        processed = internalAutocorrectAntiLightShadows(processed);
+        stages.add('Shadow removal');
+      }
 
-      return Uint8List.fromList(img.encodeJpg(processed, quality: 95));
+      final brightened = internalAutoAdjustDarkImage(processed);
+      if (!identical(brightened, processed)) stages.add('Brightness');
+      processed = brightened;
+
+      return SmartEnhanceResult(
+        bytes: Uint8List.fromList(img.encodeJpg(processed, quality: 95)),
+        stages: stages,
+      );
+    });
+  }
+
+  /// All-in-one smart scan enhancement:
+  /// Auto-fit paper + Auto-flatten curvature + Correct antilight shadows + Auto-adjust brightness/contrast
+  static Future<Uint8List?> smartScanEnhance(Uint8List bytes) async {
+    final result = await smartScanEnhanceDetailed(bytes);
+    return result?.bytes;
+  }
+
+  /// Flatten = straighten + auto-crop to the paper bounds (NOT a curvature
+  /// dewarp). Warps a skewed paper quad into a rectangle, then crops to the
+  /// detected paper edges. Flat pages pass through untouched.
+  static Future<Uint8List?> flattenDocument(Uint8List bytes) async {
+    return Isolate.run(() {
+      final image = img.decodeImage(bytes);
+      if (image == null) return null;
+      final flattened = internalFlattenStraighten(image);
+      return Uint8List.fromList(img.encodeJpg(flattened, quality: 95));
     });
   }
 
@@ -239,15 +281,34 @@ class DocumentEnhancementService {
       }
     }
 
-    final avgOffset = detectedOffsets.reduce((a, b) => a + b) / numSlices;
-    final relativeDips = detectedOffsets.map((y) => y - avgOffset).toList();
+    // A text-heavy column can shift its dark-pixel centre independently of
+    // neighbouring columns.  Treating those local shifts as paper curvature
+    // was the cause of the previous wavy result. Keep only the broad, smooth
+    // component before considering a dewarp.
+    final smoothedOffsets = List<double>.filled(numSlices, 0.0);
+    for (var i = 0; i < numSlices; i++) {
+      var weightedSum = 0.0;
+      var weight = 0.0;
+      for (var j = math.max(0, i - 3);
+          j <= math.min(numSlices - 1, i + 3);
+          j++) {
+        final w = 4.0 - (i - j).abs();
+        weightedSum += detectedOffsets[j] * w;
+        weight += w;
+      }
+      smoothedOffsets[i] = weightedSum / weight;
+    }
+
+    final avgOffset = smoothedOffsets.reduce((a, b) => a + b) / numSlices;
+    final relativeDips = smoothedOffsets.map((y) => y - avgOffset).toList();
 
     final maxDip = relativeDips.reduce(math.max);
     final minDip = relativeDips.reduce(math.min);
     final curveAmplitude = maxDip - minDip;
 
-    // If curvature is negligible (< 0.8% of height), page is already flat
-    if (curveAmplitude < (h * 0.008)) {
+    // Be conservative: a scanner should preserve a flat page rather than
+    // inventing a warp from normal paragraph/table layout.
+    if (curveAmplitude < (h * 0.015) || curveAmplitude > (h * 0.12)) {
       return src;
     }
 
@@ -288,7 +349,8 @@ class DocumentEnhancementService {
     var sumLum = 0.0;
 
     for (final p in src) {
-      final lum = (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round().clamp(0, 255);
+      final lum =
+          (0.299 * p.r + 0.587 * p.g + 0.114 * p.b).round().clamp(0, 255);
       histogram[lum]++;
       sumLum += lum;
     }
@@ -325,9 +387,8 @@ class DocumentEnhancementService {
     for (var i = 0; i < 256; i++) {
       final v = i.toDouble() * gain;
       final norm = (v / 255.0).clamp(0.0, 1.0);
-      final boosted = norm < 0.5
-          ? 2 * norm * norm
-          : 1 - 2 * (1 - norm) * (1 - norm);
+      final boosted =
+          norm < 0.5 ? 2 * norm * norm : 1 - 2 * (1 - norm) * (1 - norm);
       final blended = norm * 0.4 + boosted * 0.6;
       lut[i] = (blended * 255.0).round().clamp(0, 255);
     }
@@ -388,14 +449,199 @@ class DocumentEnhancementService {
         final bgG = math.max(25.0, bg.g.toDouble());
         final bgB = math.max(25.0, bg.b.toDouble());
 
-        final newR = ((p.r.toDouble() / bgR) * targetBg).clamp(0.0, 255.0).toInt();
-        final newG = ((p.g.toDouble() / bgG) * targetBg).clamp(0.0, 255.0).toInt();
-        final newB = ((p.b.toDouble() / bgB) * targetBg).clamp(0.0, 255.0).toInt();
+        final newR =
+            ((p.r.toDouble() / bgR) * targetBg).clamp(0.0, 255.0).toInt();
+        final newG =
+            ((p.g.toDouble() / bgG) * targetBg).clamp(0.0, 255.0).toInt();
+        final newB =
+            ((p.b.toDouble() / bgB) * targetBg).clamp(0.0, 255.0).toInt();
 
         result.setPixelRgb(x, y, newR, newG, newB);
       }
     }
 
     return result;
+  }
+
+  /// Cheap uneven-illumination probe: stddev of a 12x12 luminance map.
+  /// Gates shadow correction so evenly lit pages are never altered.
+  static bool internalHasUnevenIllumination(img.Image src) {
+    const cells = 12;
+    final values = <double>[];
+    for (var gy = 0; gy < cells; gy++) {
+      for (var gx = 0; gx < cells; gx++) {
+        final x0 = (gx * src.width / cells).floor();
+        final x1 = (((gx + 1) * src.width / cells).floor())
+            .clamp(0, src.width);
+        final y0 = (gy * src.height / cells).floor();
+        final y1 = (((gy + 1) * src.height / cells).floor())
+            .clamp(0, src.height);
+        var sum = 0.0;
+        var count = 0;
+        for (var y = y0; y < y1; y += 4) {
+          for (var x = x0; x < x1; x += 4) {
+            final p = src.getPixel(x, y);
+            sum += 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+            count++;
+          }
+        }
+        if (count > 0) values.add(sum / count);
+      }
+    }
+    if (values.isEmpty) return false;
+    final mean = values.reduce((a, b) => a + b) / values.length;
+    final variance = values
+            .map((v) => (v - mean) * (v - mean))
+            .reduce((a, b) => a + b) /
+        values.length;
+    return math.sqrt(variance) > 12.0;
+  }
+
+  /// Straighten + auto-crop: warps a skewed paper quad to a rectangle and
+  /// crops to the paper bounds. Near-rectangular detections fall back to the
+  /// axis-aligned fit so flat pages are never warped.
+  static img.Image internalFlattenStraighten(img.Image src) {
+    final corners = internalDetectPaperCorners(src);
+    final w = src.width.toDouble();
+    final h = src.height.toDouble();
+    final tl = Offset(corners[0].dx * w, corners[0].dy * h);
+    final tr = Offset(corners[1].dx * w, corners[1].dy * h);
+    final br = Offset(corners[2].dx * w, corners[2].dy * h);
+    final bl = Offset(corners[3].dx * w, corners[3].dy * h);
+
+    final topSlope = (tr.dy - tl.dy) / math.max(1.0, tr.dx - tl.dx);
+    final bottomSlope = (br.dy - bl.dy) / math.max(1.0, br.dx - bl.dx);
+    final leftSlope = (bl.dx - tl.dx) / math.max(1.0, bl.dy - tl.dy);
+    final rightSlope = (br.dx - tr.dx) / math.max(1.0, br.dy - tr.dy);
+
+    final isNearRectangular = topSlope.abs() < 0.06 &&
+        bottomSlope.abs() < 0.06 &&
+        leftSlope.abs() < 0.06 &&
+        rightSlope.abs() < 0.06;
+
+    if (isNearRectangular) {
+      return internalAutoFitPaper(src);
+    }
+
+    final outW = math
+        .max(
+          _dist(tl, tr),
+          _dist(bl, br),
+        )
+        .round()
+        .clamp(1, src.width);
+    final outH = math
+        .max(
+          _dist(tl, bl),
+          _dist(tr, br),
+        )
+        .round()
+        .clamp(1, src.height);
+    if (outW < 80 || outH < 80) return internalAutoFitPaper(src);
+
+    final dst = [
+      const Offset(0, 0),
+      Offset(outW.toDouble(), 0),
+      Offset(outW.toDouble(), outH.toDouble()),
+      Offset(0, outH.toDouble()),
+    ];
+    final matrix = _homography([tl, tr, br, bl], dst);
+    if (matrix == null) return internalAutoFitPaper(src);
+
+    final result = img.Image(width: outW, height: outH);
+    for (var y = 0; y < outH; y++) {
+      for (var x = 0; x < outW; x++) {
+        final denom =
+            matrix[6] * x + matrix[7] * y + matrix[8];
+        if (denom.abs() < 1e-8) {
+          result.setPixelRgb(x, y, 255, 255, 255);
+          continue;
+        }
+        final srcX = (matrix[0] * x + matrix[1] * y + matrix[2]) / denom;
+        final srcY = (matrix[3] * x + matrix[4] * y + matrix[5]) / denom;
+        if (srcX < 0 || srcY < 0 || srcX > w - 1 || srcY > h - 1) {
+          result.setPixelRgb(x, y, 255, 255, 255);
+          continue;
+        }
+        final x0 = srcX.floor().clamp(0, src.width - 1);
+        final y0 = srcY.floor().clamp(0, src.height - 1);
+        final x1 = (x0 + 1).clamp(0, src.width - 1);
+        final y1 = (y0 + 1).clamp(0, src.height - 1);
+        final fx = (srcX - x0).clamp(0.0, 1.0);
+        final fy = (srcY - y0).clamp(0.0, 1.0);
+        final p00 = src.getPixel(x0, y0);
+        final p10 = src.getPixel(x1, y0);
+        final p01 = src.getPixel(x0, y1);
+        final p11 = src.getPixel(x1, y1);
+        result.setPixelRgb(
+          x,
+          y,
+          _bilinear(p00.r.toDouble(), p10.r.toDouble(), p01.r.toDouble(),
+              p11.r.toDouble(), fx, fy),
+          _bilinear(p00.g.toDouble(), p10.g.toDouble(), p01.g.toDouble(),
+              p11.g.toDouble(), fx, fy),
+          _bilinear(p00.b.toDouble(), p10.b.toDouble(), p01.b.toDouble(),
+              p11.b.toDouble(), fx, fy),
+        );
+      }
+    }
+    return result;
+  }
+
+  static double _dist(Offset a, Offset b) =>
+      math.sqrt((a.dx - b.dx) * (a.dx - b.dx) +
+          (a.dy - b.dy) * (a.dy - b.dy));
+
+  static int _bilinear(
+      double v00, double v10, double v01, double v11, double fx, double fy) {
+    return ((v00 * (1 - fx) + v10 * fx) * (1 - fy) +
+            (v01 * (1 - fx) + v11 * fx) * fy)
+        .round()
+        .clamp(0, 255);
+  }
+
+  /// Solves the 3x3 projective homography mapping [src] to [dst] (4 points
+  /// each) via Gaussian elimination. Returns row-major h11..h33 or null.
+  static List<double>? _homography(List<Offset> src, List<Offset> dst) {
+    final a = List<List<double>>.generate(8, (_) => List.filled(9, 0.0));
+    for (var i = 0; i < 4; i++) {
+      final x = src[i].dx, y = src[i].dy;
+      final u = dst[i].dx, v = dst[i].dy;
+      a[i * 2][0] = x;
+      a[i * 2][1] = y;
+      a[i * 2][2] = 1;
+      a[i * 2][6] = -u * x;
+      a[i * 2][7] = -u * y;
+      a[i * 2][8] = u;
+      a[i * 2 + 1][3] = x;
+      a[i * 2 + 1][4] = y;
+      a[i * 2 + 1][5] = 1;
+      a[i * 2 + 1][6] = -v * x;
+      a[i * 2 + 1][7] = -v * y;
+      a[i * 2 + 1][8] = v;
+    }
+    for (var col = 0; col < 8; col++) {
+      var pivot = col;
+      for (var row = col; row < 8; row++) {
+        if (a[row][col].abs() > a[pivot][col].abs()) pivot = row;
+      }
+      if (a[pivot][col].abs() < 1e-10) return null;
+      final tmp = a[col];
+      a[col] = a[pivot];
+      a[pivot] = tmp;
+      for (var row = 0; row < 8; row++) {
+        if (row == col) continue;
+        final factor = a[row][col] / a[col][col];
+        for (var k = col; k < 9; k++) {
+          a[row][k] -= factor * a[col][k];
+        }
+      }
+    }
+    final h = List<double>.filled(9, 0.0);
+    for (var i = 0; i < 8; i++) {
+      h[i] = a[i][8] / a[i][i];
+    }
+    h[8] = 1.0;
+    return h;
   }
 }

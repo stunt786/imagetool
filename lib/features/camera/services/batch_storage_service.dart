@@ -69,8 +69,45 @@ class BatchStorageService {
     }
   }
 
-  static Future<void> deletePageFile(String filePath) async {
+  /// Moves a finished batch out of the temp area into persistent storage so
+  /// "Keep in Files" pages survive batch cleanup and app restarts.
+  /// Returns the retained page paths in order (empty when nothing to keep).
+  static Future<List<String>> retainBatch(String batchId) async {
+    final root = await _batchRootDir;
+    final batchDir = Directory(p.join(root.path, batchId));
+    if (!await batchDir.exists()) return const [];
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final keptRoot = Directory(p.join(appDir.path, 'kept_scans', batchId));
+    if (!await keptRoot.exists()) {
+      await keptRoot.create(recursive: true);
+    }
+
+    final files = await batchDir.list().toList();
+    files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+    final retained = <String>[];
+    for (final entity in files) {
+      if (entity is! File || !entity.path.endsWith('.jpg')) continue;
+      final dest = p.join(keptRoot.path, p.basename(entity.path));
+      try {
+        final moved = await entity.rename(dest);
+        retained.add(moved.path);
+      } catch (_) {
+        try {
+          final copied = await entity.copy(dest);
+          retained.add(copied.path);
+        } catch (_) {}
+      }
+    }
     try {
+      if (await batchDir.exists()) {
+        await batchDir.delete(recursive: true);
+      }
+    } catch (_) {}
+    return retained;
+  }
+
+  static Future<void> deletePageFile(String filePath) async {    try {
       final file = File(filePath);
       if (await file.exists()) {
         await file.delete();

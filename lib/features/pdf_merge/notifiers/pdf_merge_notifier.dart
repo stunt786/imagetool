@@ -35,14 +35,7 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     final newFiles = <MergePdfItem>[];
     for (final file in picked) {
       try {
-        String sandboxPath;
-        if (file.bytes != null) {
-          sandboxPath = await _manager.writeToSandbox(file.bytes!, file.name);
-        } else if (file.path != null) {
-          sandboxPath = await _manager.copyToSandbox(file.path!);
-        } else {
-          continue;
-        }
+        final sandboxPath = await _manager.importPickedFile(file);
 
         newFiles.add(MergePdfItem(
           path: sandboxPath,
@@ -186,7 +179,8 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     try {
       final resultPath = await _manager.exportSingleFile(
         sandboxPath: state.outputPath!,
-        suggestedName: 'pixeltools_merged.pdf',
+        suggestedName:
+            'pixeltools_${_pdfBaseName(state.files.first.name)}_merged.pdf',
       );
 
       if (resultPath != null) {
@@ -211,5 +205,10 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
   /// Clears only the error message.
   void clearError() {
     state = state.copyWith(errorMessage: null);
+  }
+
+  String _pdfBaseName(String name) {
+    final dot = name.lastIndexOf('.');
+    return dot > 0 ? name.substring(0, dot) : name;
   }
 }
