@@ -66,10 +66,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (_) {}
   }
 
-  void _disposeCamera() {
-    _controller?.dispose();
+  Future<void> _disposeCamera() async {
+    final controller = _controller;
     _controller = null;
     _isCameraInitialized = false;
+    if (controller != null) {
+      await controller.dispose();
+    }
   }
 
   @override
@@ -145,7 +148,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _launchMlKitScanner() async {
     if (_isScanningDocument) return;
     setState(() => _isScanningDocument = true);
-    _disposeCamera();
+    await _disposeCamera();
+    await Future<void>.delayed(const Duration(milliseconds: 200));
 
     try {
       final result = await DocumentScannerService.scanDocument();

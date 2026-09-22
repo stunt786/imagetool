@@ -275,21 +275,27 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => _ExportSheet(
         onPdf: () {
           Navigator.pop(context);
-          _openPdfExport(pages);
+          _navigateAfterCamera(() => _openPdfExport(pages));
         },
         onImages: () {
           Navigator.pop(context);
-          _saveAsImages(pages);
+          _navigateAfterCamera(() => _saveAsImages(pages));
         },
         onKeep: () {
           Navigator.pop(context);
-          _keepInFiles(pages);
+          _navigateAfterCamera(() => _keepInFiles(pages));
         },
       ),
     );
+  }
+
+  Future<void> _navigateAfterCamera(VoidCallback action) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (mounted) action();
   }
 
   Future<void> _keepInFiles(List<ScannedPage> pages) async {
@@ -969,8 +975,13 @@ class _ExportSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.5,
+      ),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, bottomPadding + 20),
       decoration: const BoxDecoration(
         color: Color(0xFF25262A),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -995,26 +1006,36 @@ class _ExportSheet extends StatelessWidget {
                     fontSize: 20,
                     fontWeight: FontWeight.w700)),
           ),
-          const SizedBox(height: 16),
-          _ExportOption(
-            icon: Icons.picture_as_pdf_outlined,
-            title: 'Save as PDF',
-            subtitle: 'Combine pages into one document',
-            onTap: onPdf,
-          ),
-          const SizedBox(height: 10),
-          _ExportOption(
-            icon: Icons.photo_library_outlined,
-            title: 'Save as images',
-            subtitle: 'Save each scanned page separately',
-            onTap: onImages,
-          ),
-          const SizedBox(height: 10),
-          _ExportOption(
-            icon: Icons.bookmark_add_outlined,
-            title: 'Keep in Files',
-            subtitle: 'Finish now and export these pages later',
-            onTap: onKeep,
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _ExportButton(
+                  icon: Icons.photo_library_outlined,
+                  label: 'Save Image',
+                  color: const Color(0xFF4DA6FF),
+                  onTap: onImages,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ExportButton(
+                  icon: Icons.picture_as_pdf_outlined,
+                  label: 'Save PDF',
+                  color: const Color(0xFF34C759),
+                  onTap: onPdf,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ExportButton(
+                  icon: Icons.check_circle_outline,
+                  label: 'Done',
+                  color: const Color(0xFFFF9500),
+                  onTap: onKeep,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1022,31 +1043,47 @@ class _ExportSheet extends StatelessWidget {
   }
 }
 
-class _ExportOption extends StatelessWidget {
-  const _ExportOption({
+class _ExportButton extends StatelessWidget {
+  const _ExportButton({
     required this.icon,
-    required this.title,
-    required this.subtitle,
+    required this.label,
+    required this.color,
     required this.onTap,
   });
 
   final IconData icon;
-  final String title;
-  final String subtitle;
+  final String label;
+  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return GestureDetector(
       onTap: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      tileColor: Colors.white10,
-      leading: Icon(icon, color: Colors.white, size: 30),
-      title: Text(title,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.white60)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.white60),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
