@@ -1,16 +1,21 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:intl/intl.dart';
 
-import '../../../core/services/pdf_service.dart';
-import '../../../shared/models/edit_history_item.dart';
-import '../../../shared/notifiers/edit_history_notifier.dart';
-import 'file_preview_screen.dart';
+import '../../../core/models/operation_folder.dart';
+import '../notifiers/operation_library_notifier.dart';
+import '../services/file_actions.dart';
+import '../widgets/file_thumbnail.dart';
+import '../widgets/selection_action_bar.dart';
+import 'operation_folder_screen.dart';
 
-enum FileCategoryTab { all, images, pdfs, scanned }
-
+/// Files: a metadata-backed file manager over the operation folders.
+///
+/// Layout follows the `files.jpg` / `history.jpg` references — a filter header
+/// with sort / view / select controls, a search field, and one row per
+/// operation showing a thumbnail, name, date and item count.
 class FilesScreen extends ConsumerStatefulWidget {
   const FilesScreen({super.key});
 
@@ -19,732 +24,716 @@ class FilesScreen extends ConsumerStatefulWidget {
 }
 
 class _FilesScreenState extends ConsumerState<FilesScreen> {
-  FileCategoryTab _selectedTab = FileCategoryTab.all;
+  final TextEditingController _searchController = TextEditingController();
+  final Set<String> _selected = <String>{};
 
-  bool _isImageItem(EditHistoryItem item) {
-    final name = item.fileName.toLowerCase();
-    final tool = item.toolUsed.toLowerCase();
-    return name.endsWith('.jpg') ||
-        name.endsWith('.jpeg') ||
-        name.endsWith('.png') ||
-        name.endsWith('.webp') ||
-        tool.contains('resize') ||
-        tool.contains('format') ||
-        tool.contains('collage');
+  FileFilter _filter = FileFilter.all;
+  FileSortOrder _sort = FileSortOrder.newestFirst;
+  String _query = '';
+  bool _gridView = false;
+  bool _busy = false;
+  Timer? _searchDebounce;
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
-  bool _isPdfItem(EditHistoryItem item) {
-    final name = item.fileName.toLowerCase();
-    final tool = item.toolUsed.toLowerCase();
-    return name.endsWith('.pdf') ||
-        tool.contains('pdf') ||
-        tool.contains('merge') ||
-        tool.contains('split') ||
-        tool.contains('compress');
+  void _onSearchChanged(String value) {
+    // Debounced so typing never triggers a filter pass per keystroke.
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      setState(() => _query = value);
+    });
   }
 
-  bool _isScannedItem(EditHistoryItem item) {
-    final tool = item.toolUsed.toLowerCase();
-    final name = item.fileName.toLowerCase();
-    return tool.contains('scan') || tool.contains('camera') || name.contains('scan');
+  List<OperationFolder> _visibleOperations(OperationLibrary library) {
+    // Filtering and sorting happen in the store, from metadata only.
+    return ref.read(operationStoreProvider).queryOperations(
+          search: _query,
+          filter: _filter,
+          sort: _sort,
+        );
   }
 
-  List<EditHistoryItem> _filterItems(List<EditHistoryItem> items) {
-    switch (_selectedTab) {
-      case FileCategoryTab.all:
-        return items;
-      case FileCategoryTab.images:
-        return items.where(_isImageItem).toList();
-      case FileCategoryTab.pdfs:
-        return items.where(_isPdfItem).toList();
-      case FileCategoryTab.scanned:
-        return items.where(_isScannedItem).toList();
+  List<AppFileItem> _filesOf(String operationId) {
+    return ref
+        .read(operationStoreProvider)
+        .filesFor(operationId)
+        .toList(growable: false);
+  }
+
+  bool get _isSelecting => _selected.isNotEmpty;
+
+  void _clearSelection() {
+    if (!mounted) return;
+    setState(_selected.clear);
+  }
+
+  List<OperationFolder> _selectedOperations() {
+    final library = ref.read(operationLibraryProvider);
+    return library.operations
+        .where((operation) => _selected.contains(operation.id))
+        .toList();
+  }
+
+  List<AppFileItem> _filesForOperations(List<OperationFolder> operations) {
+    return [
+      for (final operation in operations) ..._filesOf(operation.id),
+    ];
+  }
+
+  Future<void> _run(
+    Future<void> Function(List<OperationFolder> items) action,
+  ) async {
+    if (_busy) return;
+    final operations = _selectedOperations();
+    if (operations.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await action(operations);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _showRenameDialog(EditHistoryItem item) async {
-    final controller = TextEditingController(text: item.fileName);
-    final formKey = GlobalKey<FormState>();
+  Future<void> _deleteSelected() async {
+    final operations = _selectedOperations();
+    if (operations.isEmpty) return;
+    final fileCount = _filesForOperations(operations).length;
+    final confirmed = await FileActions.confirmDelete(
+      context,
+      title: operations.length == 1
+          ? 'Delete this operation?'
+          : 'Delete ${operations.length} operations?',
+      message: '$fileCount file(s) will be removed from this app. '
+          'Copies you saved to the gallery are not affected.',
+    );
+    if (!confirmed) return;
+    await _run((items) async {
+      final notifier = ref.read(operationLibraryProvider.notifier);
+      for (final operation in items) {
+        await notifier.deleteOperation(operation.id);
+      }
+    });
+    _clearSelection();
+  }
 
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename File'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'File Name',
-              border: OutlineInputBorder(),
-            ),
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Please enter a valid file name';
-              }
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() == true) {
-                Navigator.of(ctx).pop(controller.text.trim());
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
+  Future<void> _openOperation(OperationFolder operation) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OperationFolderScreen(operationId: operation.id),
       ),
     );
-
-    if (newName != null && newName.isNotEmpty && newName != item.fileName) {
-      final success =
-          await ref.read(editHistoryProvider.notifier).renameEntry(item, newName);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Renamed to "$newName"' : 'Failed to rename file'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
   }
 
-  Future<void> _shareFile(EditHistoryItem item) async {
-    final path = item.filePath ?? item.thumbnailPath;
-    if (path == null || path.isEmpty) return;
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        await Share.shareXFiles([XFile(path)], subject: item.fileName);
+  Future<void> _renameOperation(OperationFolder operation) async {
+    final name = await FileActions.promptForName(
+      context,
+      title: 'Rename operation',
+      initialValue: operation.displayName,
+    );
+    if (name == null) return;
+    final ok = await ref
+        .read(operationLibraryProvider.notifier)
+        .renameOperation(operation.id, name);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _deleteOperation(OperationFolder operation) async {
+    final confirmed = await FileActions.confirmDelete(
+      context,
+      title: 'Delete this operation?',
+      message: '"${operation.displayName}" and its ${operation.itemCount} '
+          'file(s) will be removed from this app.',
+    );
+    if (!confirmed) return;
+    await ref
+        .read(operationLibraryProvider.notifier)
+        .deleteOperation(operation.id);
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selected.contains(id)) {
+        _selected.remove(id);
+      } else {
+        _selected.add(id);
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Could not share: $e'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final topPadding = MediaQuery.of(context).padding.top + 72;
-    final bottomPadding = MediaQuery.of(context).padding.bottom + 96;
-    final allFiles = ref.watch(editHistoryProvider);
-    final filteredFiles = _filterItems(allFiles);
+    final library = ref.watch(operationLibraryProvider);
+    final operations = _visibleOperations(library);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [scheme.surface, scheme.surfaceContainer, scheme.surface]
-              : [const Color(0xFFF8FAFF), const Color(0xFFFCFAFF), const Color(0xFFFFFCF8)],
-        ),
-      ),
-      child: Stack(
-        children: [
-          if (!isDark) ...[
-            const Positioned(
-              top: -70,
-              left: -30,
-              child: _AmbientOrb(
-                size: 220,
-                colors: [Color(0xFFE0DEFF), Color(0x00E0DEFF)],
+    return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildHeader(theme, library),
+            _buildSearchField(theme),
+            if (library.isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: LinearProgressIndicator(minHeight: 2),
               ),
-            ),
-            const Positioned(
-              top: 260,
-              right: -50,
-              child: _AmbientOrb(
-                size: 200,
-                colors: [Color(0xFFD8F6F4), Color(0x00D8F6F4)],
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref
+                    .read(operationLibraryProvider.notifier)
+                    .reload(pruneMissing: true),
+                child: operations.isEmpty
+                    ? _buildEmptyState(theme)
+                    : _gridView
+                        ? _buildGrid(theme, operations)
+                        : _buildList(theme, operations),
               ),
             ),
           ],
-          CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPadding),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate.fixed([
-                    Row(
-                      children: [
-                        Text(
-                          'My Files',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            color: scheme.primaryContainer,
-                          ),
-                          child: Text(
-                            '${filteredFiles.length}',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.primary,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (allFiles.isNotEmpty)
-                          TextButton(
-                            onPressed: () => ref.read(editHistoryProvider.notifier).clear(),
-                            child: const Text('Clear'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildCategoryTabs(allFiles, scheme),
-                    const SizedBox(height: 16),
-                    if (filteredFiles.isEmpty)
-                      _EmptyFiles(scheme: scheme, theme: theme, tab: _selectedTab)
-                    else
-                      ...List.generate(filteredFiles.length, (i) {
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: i < filteredFiles.length - 1 ? 14 : 0),
-                          child: _FileTile(
-                            item: filteredFiles[i],
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => FilePreviewScreen(
-                                  items: filteredFiles,
-                                  initialIndex: i,
-                                ),
-                              ),
-                            ),
-                            onRename: () => _showRenameDialog(filteredFiles[i]),
-                            onShare: () => _shareFile(filteredFiles[i]),
-                            onDelete: () =>
-                                ref.read(editHistoryProvider.notifier).removeEntry(filteredFiles[i]),
-                          ),
-                        );
-                      }),
-                  ]),
+        ),
+      ),
+      bottomNavigationBar: _isSelecting
+          ? SelectionActionBar(
+              actions: [
+                SelectionAction(
+                  icon: Icons.share_outlined,
+                  label: 'Share',
+                  onTap: _busy
+                      ? null
+                      : () => _run((items) => FileActions.share(
+                            context,
+                            _filesForOperations(items),
+                          )),
                 ),
+                SelectionAction(
+                  icon: Icons.download_outlined,
+                  label: 'Save',
+                  onTap: _busy
+                      ? null
+                      : () => _run((items) => FileActions.save(
+                            context,
+                            _filesForOperations(items),
+                          )),
+                ),
+                SelectionAction(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  destructive: true,
+                  onTap: _busy ? null : _deleteSelected,
+                ),
+              ],
+            )
+          : null,
+    );
+  }
+
+  Widget _buildHeader(ThemeData theme, OperationLibrary library) {
+    final scheme = theme.colorScheme;
+    final total = library.operations.length;
+
+    // The title shrinks and the actions use compact density so the header
+    // never overflows on a 320 dp phone.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 4, 0),
+      child: Row(
+        children: [
+          // `All (92) ▾` filter control from the reference.
+          Expanded(
+            child: PopupMenuButton<FileFilter>(
+              tooltip: 'Filter files',
+              initialValue: _filter,
+              onSelected: (value) => setState(() => _filter = value),
+              itemBuilder: (context) => [
+                for (final filter in FileFilter.values)
+                  PopupMenuItem(
+                    value: filter,
+                    child: Text(
+                      '${filter.label} (${_countFor(filter)})',
+                    ),
+                  ),
+              ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      '${_filter.label} ($total)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.arrow_drop_down_rounded, color: scheme.onSurface),
+                ],
               ),
-            ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Sort',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.sort_rounded),
+            onPressed: _showSortMenu,
+          ),
+          IconButton(
+            tooltip: _gridView ? 'List view' : 'Grid view',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              _gridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
+            ),
+            onPressed: () => setState(() => _gridView = !_gridView),
+          ),
+          IconButton(
+            tooltip: _isSelecting ? 'Clear selection' : 'Select items',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
+              _isSelecting
+                  ? Icons.check_box_rounded
+                  : Icons.check_box_outline_blank_rounded,
+            ),
+            onPressed: () {
+              if (_isSelecting) {
+                _clearSelection();
+              } else {
+                setState(() {
+                  _selected.addAll(
+                    _visibleOperations(ref.read(operationLibraryProvider))
+                        .map((operation) => operation.id),
+                  );
+                });
+              }
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryTabs(List<EditHistoryItem> allItems, ColorScheme scheme) {
-    final tabs = [
-      (FileCategoryTab.all, 'All', allItems.length),
-      (FileCategoryTab.images, 'Images', allItems.where(_isImageItem).length),
-      (FileCategoryTab.pdfs, 'PDFs', allItems.where(_isPdfItem).length),
-      (FileCategoryTab.scanned, 'Scanned', allItems.where(_isScannedItem).length),
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: tabs.map((t) {
-          final isSelected = _selectedTab == t.$1;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              selected: isSelected,
-              showCheckmark: false,
-              label: Text('${t.$2} (${t.$3})'),
-              labelStyle: TextStyle(
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-                fontSize: 13,
-              ),
-              backgroundColor: scheme.surfaceContainerLowest,
-              selectedColor: scheme.primaryContainer,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: isSelected ? scheme.primary : scheme.outlineVariant,
-                ),
-              ),
-              onSelected: (_) {
-                setState(() => _selectedTab = t.$1);
-              },
+  void _showSortMenu() {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    showMenu<FileSortOrder>(
+      context: context,
+      position: RelativeRect.fromLTRB(overlay.size.width - 8, 120, 8, 0),
+      items: [
+        for (final order in FileSortOrder.values)
+          PopupMenuItem(
+            value: order,
+            child: Row(
+              children: [
+                if (order == _sort)
+                  const Icon(Icons.check_rounded, size: 18)
+                else
+                  const SizedBox(width: 18),
+                const SizedBox(width: 8),
+                Text(order.label),
+              ],
             ),
-          );
-        }).toList(),
+          ),
+      ],
+    ).then((value) {
+      if (value != null && mounted) setState(() => _sort = value);
+    });
+  }
+
+  int _countFor(FileFilter filter) {
+    return ref.read(operationStoreProvider).queryOperations(filter: filter).length;
+  }
+
+  Widget _buildSearchField(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search files and operations',
+          prefixIcon: const Icon(Icons.search_rounded),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () {
+                    _searchController.clear();
+                    _searchDebounce?.cancel();
+                    setState(() => _query = '');
+                  },
+                ),
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 4),
+        ),
       ),
     );
   }
-}
 
-class _EmptyFiles extends StatelessWidget {
-  const _EmptyFiles({
-    required this.scheme,
-    required this.theme,
-    required this.tab,
-  });
-
-  final ColorScheme scheme;
-  final ThemeData theme;
-  final FileCategoryTab tab;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (tab) {
-      FileCategoryTab.all => 'No files yet',
-      FileCategoryTab.images => 'No image files yet',
-      FileCategoryTab.pdfs => 'No PDF files yet',
-      FileCategoryTab.scanned => 'No scanned files yet',
-    };
-
-    final subtitle = switch (tab) {
-      FileCategoryTab.all => 'Edited images and PDFs will appear here.',
-      FileCategoryTab.images => 'Images saved from resize, format converter, or collage appear here.',
-      FileCategoryTab.pdfs => 'PDFs saved from merge, split, compress, or convert appear here.',
-      FileCategoryTab.scanned => 'Documents scanned from camera appear here.',
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
-        border: Border.all(color: scheme.outlineVariant),
+  Widget _buildList(ThemeData theme, List<OperationFolder> operations) {
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+      itemCount: operations.length,
+      separatorBuilder: (_, __) => Divider(
+        height: 1,
+        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
       ),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: scheme.primaryContainer,
-            ),
-            child: Icon(Icons.folder_open_rounded, color: scheme.primary, size: 28),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            label,
+      itemBuilder: (context, index) {
+        final operation = operations[index];
+        return _OperationRow(
+          operation: operation,
+          thumbnailPath: _thumbnailFor(operation),
+          selected: _selected.contains(operation.id),
+          onTap: () => _isSelecting
+              ? _toggleSelection(operation.id)
+              : _openOperation(operation),
+          onLongPress: () => _toggleSelection(operation.id),
+          onToggleSelected: () => _toggleSelection(operation.id),
+          onRename: () => _renameOperation(operation),
+          onShare: () => FileActions.share(context, _filesOf(operation.id)),
+          onDelete: () => _deleteOperation(operation),
+        );
+      },
+    );
+  }
+
+  Widget _buildGrid(ThemeData theme, List<OperationFolder> operations) {
+    return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 200,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 14,
+        childAspectRatio: 0.82,
+      ),
+      itemCount: operations.length,
+      itemBuilder: (context, index) {
+        final operation = operations[index];
+        return _OperationCard(
+          operation: operation,
+          thumbnailPath: _thumbnailFor(operation),
+          selected: _selected.contains(operation.id),
+          onTap: () => _isSelecting
+              ? _toggleSelection(operation.id)
+              : _openOperation(operation),
+          onLongPress: () => _toggleSelection(operation.id),
+        );
+      },
+    );
+  }
+
+  String? _thumbnailFor(OperationFolder operation) {
+    if (operation.thumbnailPath != null) return operation.thumbnailPath;
+    final files = _filesOf(operation.id);
+    return files.isEmpty ? null : files.first.path;
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final searching = _query.trim().isNotEmpty;
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(height: MediaQuery.sizeOf(context).height * 0.10),
+        Icon(
+          searching ? Icons.search_off_rounded : Icons.folder_open_outlined,
+          size: 64,
+          color: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: Text(
+            searching ? 'No files match "$_query"' : 'No files yet',
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Text(
+            searching
+                ? 'Try a different name, extension or operation.'
+                : 'Your processed images and PDFs will appear here, grouped by '
+                    'the tool that created them.',
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _FileTile extends StatelessWidget {
-  const _FileTile({
-    required this.item,
+class _OperationRow extends StatelessWidget {
+  const _OperationRow({
+    required this.operation,
+    required this.thumbnailPath,
+    required this.selected,
     required this.onTap,
+    required this.onLongPress,
+    required this.onToggleSelected,
     required this.onRename,
     required this.onShare,
     required this.onDelete,
   });
 
-  final EditHistoryItem item;
+  final OperationFolder operation;
+  final String? thumbnailPath;
+  final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onToggleSelected;
   final VoidCallback onRename;
   final VoidCallback onShare;
   final VoidCallback onDelete;
+
+  static bool looksLikePdf(OperationFolder operation) =>
+      operation.kind == OperationKind.imageToPdf ||
+      operation.kind == OperationKind.pdfMerge ||
+      operation.kind == OperationKind.pdfSplit ||
+      operation.kind == OperationKind.pdfCompress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final isImage = !item.fileName.toLowerCase().endsWith('.pdf');
+    final dateLabel = DateFormat('MM/dd/yyyy HH:mm').format(operation.createdAt);
 
-    return Material(
-      color: scheme.surfaceContainerLowest.withValues(alpha: 0.84),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              _ThumbnailPreview(item: item, isImage: isImage),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.fileName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        color:
+            selected ? scheme.secondaryContainer.withValues(alpha: 0.35) : null,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            FileThumbnail(
+              path: thumbnailPath ?? '',
+              isPdf: looksLikePdf(operation),
+              size: 56,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    operation.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _ToolBadge(tool: item.toolUsed),
-                        if (item.pagePaths != null &&
-                            item.pagePaths!.length > 1)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: scheme.secondaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              '${item.pagePaths!.length} pages',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onSecondaryContainer,
-                                fontSize: 9,
-                              ),
-                            ),
-                          ),
-                        Text(
-                          item.timeAgo,
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          dateLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
                           ),
                         ),
-                        if (item.compressionLevel != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: scheme.tertiaryContainer,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              item.compressionLevel!,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: scheme.onTertiaryContainer,
-                                fontSize: 9,
-                              ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.description_outlined,
+                        size: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${operation.itemCount}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (operation.isIncomplete) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.errorContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            operation.status.name,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: scheme.onErrorContainer,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 4),
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert_rounded, color: scheme.onSurfaceVariant, size: 20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                onSelected: (val) {
-                  if (val == 'rename') onRename();
-                  if (val == 'share') onShare();
-                  if (val == 'delete') onDelete();
-                },
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem(
-                    value: 'rename',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined, size: 18),
-                        SizedBox(width: 10),
-                        Text('Rename'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'share',
-                    child: Row(
-                      children: [
-                        Icon(isImage ? Icons.share_rounded : Icons.file_upload_outlined, size: 18),
-                        const SizedBox(width: 10),
-                        Text(isImage ? 'Share' : 'Export / Share'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                        SizedBox(width: 10),
-                        Text('Delete', style: TextStyle(color: Colors.red)),
-                      ],
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ThumbnailPreview extends StatefulWidget {
-  const _ThumbnailPreview({required this.item, required this.isImage});
-
-  final EditHistoryItem item;
-  final bool isImage;
-
-  @override
-  State<_ThumbnailPreview> createState() => _ThumbnailPreviewState();
-}
-
-class _ThumbnailPreviewState extends State<_ThumbnailPreview> {
-  String? _pdfThumbPath;
-  bool _isLoadingPdfThumb = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPdfThumbIfNeeded();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ThumbnailPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.filePath != widget.item.filePath ||
-        oldWidget.item.thumbnailPath != widget.item.thumbnailPath) {
-      _loadPdfThumbIfNeeded();
-    }
-  }
-
-  Future<void> _loadPdfThumbIfNeeded() async {
-    if (widget.isImage) return;
-
-    final existingThumb = widget.item.thumbnailPath;
-    if (existingThumb != null &&
-        existingThumb.isNotEmpty &&
-        File(existingThumb).existsSync() &&
-        !existingThumb.toLowerCase().endsWith('.pdf')) {
-      if (mounted) setState(() => _pdfThumbPath = existingThumb);
-      return;
-    }
-
-    final pdfPath = widget.item.filePath;
-    if (pdfPath != null &&
-        pdfPath.toLowerCase().endsWith('.pdf') &&
-        File(pdfPath).existsSync()) {
-      setState(() => _isLoadingPdfThumb = true);
-      final thumb = await PdfService.instance.renderPdfThumbnail(pdfPath);
-      if (mounted) {
-        setState(() {
-          _pdfThumbPath = thumb;
-          _isLoadingPdfThumb = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final thumb = widget.item.thumbnailPath;
-    final filePath = widget.item.filePath;
-
-    if (widget.isImage) {
-      final imageSource = (thumb != null && thumb.isNotEmpty)
-          ? thumb
-          : (filePath != null && filePath.isNotEmpty) ? filePath : null;
-
-      if (imageSource != null && File(imageSource).existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(
-            File(imageSource),
-            width: 90,
-            height: 75,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _buildFallback(isImage: true),
-          ),
-        );
-      }
-    } else {
-      final displayThumb = _pdfThumbPath ??
-          ((thumb != null && thumb.isNotEmpty && !thumb.toLowerCase().endsWith('.pdf'))
-              ? thumb
-              : null);
-
-      if (displayThumb != null && File(displayThumb).existsSync()) {
-        return Stack(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                width: 90,
-                height: 75,
-                color: Colors.white,
-                child: Image.file(
-                  File(displayThumb),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildPdfFallback(),
-                ),
-              ),
             ),
-            Positioned(
-              right: 4,
-              bottom: 4,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'PDF',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+            PopupMenuButton<String>(
+              tooltip: 'Actions',
+              icon: Icon(
+                Icons.more_vert_rounded,
+                color: scheme.onSurfaceVariant,
+              ),
+              onSelected: (value) {
+                switch (value) {
+                  case 'open':
+                    onTap();
+                    break;
+                  case 'rename':
+                    onRename();
+                    break;
+                  case 'share':
+                    onShare();
+                    break;
+                  case 'delete':
+                    onDelete();
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'open', child: Text('Open')),
+                PopupMenuItem(value: 'rename', child: Text('Rename')),
+                PopupMenuItem(value: 'share', child: Text('Share')),
+                PopupMenuItem(value: 'delete', child: Text('Delete')),
+              ],
+            ),
+            Checkbox(
+              value: selected,
+              onChanged: (_) => onToggleSelected(),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
           ],
-        );
-      }
+        ),
+      ),
+    );
+  }
+}
 
-      if (_isLoadingPdfThumb) {
-        return Container(
-          width: 90,
-          height: 75,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: Colors.black12,
-          ),
-          child: const Center(
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+class _OperationCard extends StatelessWidget {
+  const _OperationCard({
+    required this.operation,
+    required this.thumbnailPath,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final OperationFolder operation;
+  final String? thumbnailPath;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected
+                            ? scheme.secondary
+                            : scheme.outlineVariant,
+                        width: selected ? 3 : 1,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: FileThumbnail(
+                        path: thumbnailPath ?? '',
+                        isPdf: _OperationRow.looksLikePdf(operation),
+                        size: 180,
+                        borderRadius: 10,
+                      ),
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: scheme.secondary,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: 16,
+                        color: scheme.onSecondary,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-        );
-      }
-
-      return _buildPdfFallback();
-    }
-
-    return _buildFallback(isImage: widget.isImage);
-  }
-
-  Widget _buildPdfFallback() {
-    return Container(
-      width: 90,
-      height: 75,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF5B4DFF), Color(0xFF0F9D9A)],
-        ),
-      ),
-      child: const Center(
-        child: Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 28),
-      ),
-    );
-  }
-
-  Widget _buildFallback({required bool isImage}) {
-    final gradient = isImage
-        ? const [Color(0xFF4F9CFF), Color(0xFF7BD5FF)]
-        : const [Color(0xFF5B4DFF), Color(0xFF0F9D9A)];
-    final icon = isImage ? Icons.image_outlined : Icons.picture_as_pdf_rounded;
-
-    return Container(
-      width: 90,
-      height: 75,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: gradient,
-        ),
-      ),
-      child: Center(child: Icon(icon, color: Colors.white, size: 28)),
-    );
-  }
-}
-
-class _ToolBadge extends StatelessWidget {
-  const _ToolBadge({required this.tool});
-
-  final String tool;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        tool,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: scheme.onPrimaryContainer,
-        ),
-      ),
-    );
-  }
-}
-
-class _AmbientOrb extends StatelessWidget {
-  const _AmbientOrb({required this.size, required this.colors});
-
-  final double size;
-  final List<Color> colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: colors),
-        ),
+          const SizedBox(height: 6),
+          Text(
+            operation.displayName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '${operation.itemCount} file(s)',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -321,7 +321,17 @@ class CollageNotifier extends Notifier<CollageState> {
     state = state.copyWith(textLayers: layers);
   }
 
-  void updateTextLayer(String id, {String? text, Color? color, double? fontSize, String? fontFamily}) {
+  void updateTextLayer(
+    String id, {
+    String? text,
+    Color? color,
+    double? fontSize,
+    String? fontFamily,
+    bool? bold,
+    bool? italic,
+    double? opacity,
+    TextAlign? alignment,
+  }) {
     final layers = <CollageTextLayer>[];
     for (final layer in state.textLayers) {
       if (layer.id == id) {
@@ -330,6 +340,10 @@ class CollageNotifier extends Notifier<CollageState> {
           color: color,
           fontSize: fontSize,
           fontFamily: fontFamily,
+          bold: bold,
+          italic: italic,
+          opacity: opacity,
+          alignment: alignment,
         ));
       } else {
         layers.add(layer);
@@ -475,19 +489,25 @@ class CollageNotifier extends Notifier<CollageState> {
         final effectiveFontSize = layer.fontSize * layer.scale;
         final canvasFontSize = effectiveFontSize * (state.canvasWidth / 360.0);
         final fontFamily = layer.fontFamily == 'Roboto' ? null : layer.fontFamily;
-        final fontWeight =
-            layer.fontFamily == 'Impact' || layer.fontFamily == 'sans-serif'
+        final FontWeight fontWeight = layer.bold
+            ? (layer.fontFamily == 'Impact' ||
+                    layer.fontFamily == 'sans-serif'
                 ? FontWeight.w900
-                : FontWeight.bold;
+                : FontWeight.bold)
+            : FontWeight.w400;
 
-        final uiTextAlign = TextAlign.center;
+        final uiTextAlign = layer.alignment;
         final uiFontWeight = fontWeight;
         final uiFontFamily = fontFamily;
+        final uiFontStyle =
+            layer.italic ? FontStyle.italic : FontStyle.normal;
+        final alpha = (layer.opacity.clamp(0.05, 1.0) * 255).round();
 
         final measureBuilder = ui.ParagraphBuilder(
           ui.ParagraphStyle(
             fontSize: canvasFontSize,
             fontWeight: uiFontWeight,
+            fontStyle: uiFontStyle,
             fontFamily: uiFontFamily,
             textAlign: uiTextAlign,
           ),
@@ -495,6 +515,7 @@ class CollageNotifier extends Notifier<CollageState> {
             color: ui.Color(0xFFFFFFFF),
             fontSize: canvasFontSize,
             fontWeight: uiFontWeight,
+            fontStyle: uiFontStyle,
             fontFamily: uiFontFamily,
           ))
           ..addText(text);
@@ -512,7 +533,7 @@ class CollageNotifier extends Notifier<CollageState> {
         textY = textY.clamp(10.0, (state.canvasHeight - textHeight - 10).clamp(10.0, state.canvasHeight.toDouble()));
 
         final mainColor = ui.Color.fromARGB(
-          255,
+          alpha,
           (layer.color.r * 255).round().clamp(0, 255),
           (layer.color.g * 255).round().clamp(0, 255),
           (layer.color.b * 255).round().clamp(0, 255),
@@ -540,13 +561,15 @@ class CollageNotifier extends Notifier<CollageState> {
             ui.ParagraphStyle(
               fontSize: canvasFontSize,
               fontWeight: uiFontWeight,
+              fontStyle: uiFontStyle,
               fontFamily: uiFontFamily,
               textAlign: uiTextAlign,
             ),
           )..pushStyle(ui.TextStyle(
-              color: const ui.Color(0xCC000000),
+              color: ui.Color(0xCC000000),
               fontSize: canvasFontSize,
               fontWeight: uiFontWeight,
+              fontStyle: uiFontStyle,
               fontFamily: uiFontFamily,
             ))
             ..addText(text);

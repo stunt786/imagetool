@@ -69,37 +69,65 @@ class PdfPageSettings {
 @immutable
 class ImageToPdfItem {
   const ImageToPdfItem({
+    required this.id,
     required this.path,
     required this.name,
     required this.sizeBytes,
     this.imageBytes,
+    this.previewBytes,
     this.width,
     this.height,
+    this.isLoading = false,
+    this.errorMessage,
   });
+
+  /// Stable identity used for asynchronous updates while the list is being
+  /// reordered or edited.
+  final String id;
 
   final String path;
   final String name;
   final int sizeBytes;
+
+  /// Full source bytes. Only kept in memory when the picker supplied bytes
+  /// without a readable path; otherwise the file is read on demand.
   final Uint8List? imageBytes;
+
+  /// Downscaled preview used by the thumbnail grid.
+  final Uint8List? previewBytes;
+
   final int? width;
   final int? height;
+  final bool isLoading;
+  final String? errorMessage;
 
   bool get isLoaded => imageBytes != null;
+
   bool get hasDimensions => width != null && height != null;
+
   double get aspectRatio => hasDimensions ? width! / height! : 1.0;
 
   ImageToPdfItem copyWith({
     Uint8List? imageBytes,
+    Uint8List? previewBytes,
     int? width,
     int? height,
+    int? sizeBytes,
+    bool? isLoading,
+    String? errorMessage,
+    bool clearError = false,
   }) {
     return ImageToPdfItem(
+      id: id,
       path: path,
       name: name,
-      sizeBytes: sizeBytes,
+      sizeBytes: sizeBytes ?? this.sizeBytes,
       imageBytes: imageBytes ?? this.imageBytes,
+      previewBytes: previewBytes ?? this.previewBytes,
       width: width ?? this.width,
       height: height ?? this.height,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 }
@@ -110,7 +138,13 @@ class ImageToPdfState {
     required this.images,
     required this.pageSettings,
     this.isGenerating = false,
+    this.isLoadingImages = false,
     this.progress = 0.0,
+    this.loadProgress = 0.0,
+    this.loadedCount = 0,
+    this.loadTotal = 0,
+    this.statusText,
+    this.canCancel = false,
     this.errorMessage,
     this.generatedPdfPath,
   });
@@ -118,25 +152,61 @@ class ImageToPdfState {
   final List<ImageToPdfItem> images;
   final PdfPageSettings pageSettings;
   final bool isGenerating;
+
+  /// True while previews and dimensions are being prepared.
+  final bool isLoadingImages;
+
   final double progress;
+  final double loadProgress;
+  final int loadedCount;
+  final int loadTotal;
+
+  /// Human readable step, e.g. `Adding image 7 of 12`.
+  final String? statusText;
+
+  final bool canCancel;
   final String? errorMessage;
   final String? generatedPdfPath;
+
+  bool get isEmpty => images.isEmpty;
+
+  int get loadedImages => images.where((i) => i.previewBytes != null).length;
+
+  int get failedImages =>
+      images.where((i) => i.errorMessage != null).length;
 
   ImageToPdfState copyWith({
     List<ImageToPdfItem>? images,
     PdfPageSettings? pageSettings,
     bool? isGenerating,
+    bool? isLoadingImages,
     double? progress,
+    double? loadProgress,
+    int? loadedCount,
+    int? loadTotal,
+    String? statusText,
+    bool? canCancel,
     String? errorMessage,
+    bool clearError = false,
+    bool clearStatus = false,
     String? generatedPdfPath,
+    bool clearGeneratedPath = false,
   }) {
     return ImageToPdfState(
       images: images ?? this.images,
       pageSettings: pageSettings ?? this.pageSettings,
       isGenerating: isGenerating ?? this.isGenerating,
+      isLoadingImages: isLoadingImages ?? this.isLoadingImages,
       progress: progress ?? this.progress,
-      errorMessage: errorMessage,
-      generatedPdfPath: generatedPdfPath ?? this.generatedPdfPath,
+      loadProgress: loadProgress ?? this.loadProgress,
+      loadedCount: loadedCount ?? this.loadedCount,
+      loadTotal: loadTotal ?? this.loadTotal,
+      statusText: clearStatus ? null : (statusText ?? this.statusText),
+      canCancel: canCancel ?? this.canCancel,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      generatedPdfPath: clearGeneratedPath
+          ? null
+          : (generatedPdfPath ?? this.generatedPdfPath),
     );
   }
 
@@ -169,5 +239,11 @@ class ImageToPdfState {
     final newImages = List<ImageToPdfItem>.from(images);
     newImages[index] = item;
     return copyWith(images: newImages);
+  }
+
+  ImageToPdfState replaceImageById(String id, ImageToPdfItem item) {
+    final index = images.indexWhere((i) => i.id == id);
+    if (index == -1) return this;
+    return updateImage(index, item);
   }
 }

@@ -56,7 +56,8 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
         }
 
         return Center(
-          child: Listener(
+          child: RepaintBoundary(
+            child: Listener(
             key: _canvasKey,
             onPointerMove: _dragStartIndex != null ? _handlePointerMove : null,
             child: Container(
@@ -115,6 +116,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
                 ),
               ),
             ),
+          ),
           ),
         );
       },
@@ -212,22 +214,36 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     final clampedOffsetX = pixelOffsetX.clamp(-maxOffsetX, maxOffsetX);
     final clampedOffsetY = pixelOffsetY.clamp(-maxOffsetY, maxOffsetY);
 
+    // Decode the preview at the size it is actually drawn: a 12 MP photo
+    // otherwise costs a full-resolution texture that has to be resampled on
+    // every gesture frame.
+    final devicePixelRatio =
+        MediaQuery.devicePixelRatioOf(context).clamp(1.0, 3.0);
+    final cacheWidth = (width * devicePixelRatio).round().clamp(64, 2048);
+    final cacheHeight = (height * devicePixelRatio).round().clamp(64, 2048);
+
     return Stack(
       children: [
         Positioned.fill(
-          child: Transform(
-            transform: Matrix4.identity()
-              ..translateByVector3(vec.Vector3(clampedOffsetX, clampedOffsetY, 0))
-              ..scaleByDouble(scale, scale, 1.0, 1.0),
-            alignment: Alignment.center,
-            child: Image.memory(
-              slot.imageBytes!,
-              fit: slot.fitMode == ImageFitMode.cover
-                  ? BoxFit.cover
-                  : slot.fitMode == ImageFitMode.contain
-                      ? BoxFit.contain
-                      : BoxFit.fill,
-              gaplessPlayback: true,
+          child: RepaintBoundary(
+            child: Transform(
+              transform: Matrix4.identity()
+                ..translateByVector3(
+                    vec.Vector3(clampedOffsetX, clampedOffsetY, 0))
+                ..scaleByDouble(scale, scale, 1.0, 1.0),
+              alignment: Alignment.center,
+              child: Image.memory(
+                slot.imageBytes!,
+                fit: slot.fitMode == ImageFitMode.cover
+                    ? BoxFit.cover
+                    : slot.fitMode == ImageFitMode.contain
+                        ? BoxFit.contain
+                        : BoxFit.fill,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.low,
+              ),
             ),
           ),
         ),
@@ -309,6 +325,9 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
                   child: Image.memory(
                     dragSlot.imageBytes!,
                     fit: BoxFit.cover,
+                    cacheWidth: 240,
+                    cacheHeight: 240,
+                    filterQuality: FilterQuality.low,
                     opacity: const AlwaysStoppedAnimation(0.7),
                   ),
                 )
@@ -486,12 +505,15 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     final centerY = offset.dy * height;
 
     final textStyle = TextStyle(
-      color: layer.color,
+      color: layer.color.withValues(alpha: layer.opacity.clamp(0.05, 1.0)),
       fontSize: layer.fontSize * scale,
       fontFamily: fontFamily == 'Roboto' ? null : fontFamily,
-      fontWeight: fontFamily == 'Impact' || fontFamily == 'sans-serif'
-          ? FontWeight.w900
-          : FontWeight.bold,
+      fontWeight: layer.bold
+          ? (fontFamily == 'Impact' || fontFamily == 'sans-serif'
+              ? FontWeight.w900
+              : FontWeight.bold)
+          : FontWeight.w400,
+      fontStyle: layer.italic ? FontStyle.italic : FontStyle.normal,
       shadows: [
         Shadow(
           offset: const Offset(1, 1),
@@ -563,10 +585,13 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Text(
-                    text,
-                    textAlign: TextAlign.center,
-                    style: textStyle,
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: width * 0.9),
+                    child: Text(
+                      text,
+                      textAlign: layer.alignment,
+                      style: textStyle,
+                    ),
                   ),
                   if (isActive) ...[
                     // Top 360° Rotation Handle with stalk

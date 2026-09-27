@@ -14,6 +14,10 @@ class CollageTextLayer {
     this.normalizedOffset = const Offset(0.5, 0.85),
     this.scale = 1.0,
     this.rotation = 0.0,
+    this.bold = true,
+    this.italic = false,
+    this.opacity = 1.0,
+    this.alignment = TextAlign.center,
   });
 
   final String id;
@@ -25,6 +29,13 @@ class CollageTextLayer {
   final double scale;
   final double rotation;
 
+  /// Text styling. Defaults match the previous hard-coded rendering (bold,
+  /// fully opaque, centred) so existing projects look unchanged.
+  final bool bold;
+  final bool italic;
+  final double opacity;
+  final TextAlign alignment;
+
   bool get isEmpty => text.trim().isEmpty;
 
   CollageTextLayer copyWith({
@@ -35,6 +46,10 @@ class CollageTextLayer {
     Offset? normalizedOffset,
     double? scale,
     double? rotation,
+    bool? bold,
+    bool? italic,
+    double? opacity,
+    TextAlign? alignment,
   }) {
     return CollageTextLayer(
       id: id,
@@ -45,6 +60,10 @@ class CollageTextLayer {
       normalizedOffset: normalizedOffset ?? this.normalizedOffset,
       scale: scale ?? this.scale,
       rotation: rotation ?? this.rotation,
+      bold: bold ?? this.bold,
+      italic: italic ?? this.italic,
+      opacity: opacity ?? this.opacity,
+      alignment: alignment ?? this.alignment,
     );
   }
 }
@@ -116,6 +135,34 @@ class CollageLayout {
   final String name;
   final int slotCount;
   final List<Rect> slotRects;
+
+  /// Builds an evenly divided [rows] x [columns] grid.
+  ///
+  /// Layouts are described by normalised rectangles instead of being
+  /// hard-coded, so new grid shapes need no bespoke maths.
+  factory CollageLayout.grid({
+    required int rows,
+    required int columns,
+    required String id,
+    required String name,
+  }) {
+    assert(rows > 0 && columns > 0, 'Grid must have at least one cell');
+    return CollageLayout(
+      id: id,
+      name: name,
+      slotCount: rows * columns,
+      slotRects: [
+        for (var row = 0; row < rows; row++)
+          for (var column = 0; column < columns; column++)
+            Rect.fromLTRB(
+              column / columns,
+              row / rows,
+              (column + 1) / columns,
+              (row + 1) / rows,
+            ),
+      ],
+    );
+  }
 
   static List<CollageLayout> get all => [
     CollageLayout(
@@ -208,6 +255,18 @@ class CollageLayout {
         Rect.fromLTRB(0.333, 0.5, 0.666, 1),
         Rect.fromLTRB(0.666, 0.5, 1, 1),
       ],
+    ),
+    CollageLayout.grid(
+      rows: 3,
+      columns: 3,
+      id: 'grid_3x3',
+      name: '3x3 Grid',
+    ),
+    CollageLayout.grid(
+      rows: 3,
+      columns: 1,
+      id: 'vertical_3',
+      name: '3 Vertical',
     ),
   ];
 

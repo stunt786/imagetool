@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/models/operation_folder.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -152,6 +155,13 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       if (!await file.exists() || await file.length() == 0) {
         throw Exception('Merged PDF file was not created or is empty');
       }
+
+      // Group the output in Files.
+      await recordCompletedOperation(
+        ref.read(operationStoreProvider),
+        OperationKind.pdfMerge,
+        [outputPath],
+      );
 
       state = state.copyWith(
         isProcessing: false,

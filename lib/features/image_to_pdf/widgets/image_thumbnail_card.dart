@@ -16,6 +16,7 @@ class ImageThumbnailCard extends StatelessWidget {
     this.onDragStart,
     this.onDragEnd,
     this.isDragging = false,
+    this.isLoading = false,
   });
 
   final int index;
@@ -29,6 +30,9 @@ class ImageThumbnailCard extends StatelessWidget {
   final VoidCallback? onDragStart;
   final VoidCallback? onDragEnd;
   final bool isDragging;
+
+  /// True while the preview is still being generated.
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -57,20 +61,29 @@ class ImageThumbnailCard extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-                    child: Image.memory(
-                      imageBytes,
-                      fit: BoxFit.cover,
-                      cacheWidth: 180,
-                      cacheHeight: 240,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Center(
-                          child: Icon(
-                            Icons.broken_image,
-                            color: theme.colorScheme.onSurfaceVariant,
+                    child: (isLoading && imageBytes.isEmpty)
+                        ? const Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : Image.memory(
+                            imageBytes,
+                            fit: BoxFit.cover,
+                            cacheWidth: 180,
+                            cacheHeight: 240,
+                            gaplessPlayback: true,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Icon(
+                                  Icons.broken_image,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
                   ),
                   Positioned(
                     top: 6,

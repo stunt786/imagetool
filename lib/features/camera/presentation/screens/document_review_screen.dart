@@ -39,10 +39,14 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     if (_isBusy) return;
     setState(() => _isBusy = true);
     try {
-      final result = await DocumentScannerService.scanDocument();
-      if (result == null || result.files.isEmpty || !mounted) return;
+      final outcome = await DocumentScannerService.scanDocument();
+      if (outcome.isUnavailable && mounted) {
+        _showError('The document scanner is not available on this device.');
+        return;
+      }
+      if (!outcome.isSuccess || !mounted) return;
       final notifier = ref.read(documentBatchProvider.notifier);
-      for (final file in result.files) {
+      for (final file in outcome.files) {
         await notifier.addPageFromPath(file.path);
       }
       if (mounted) {
@@ -62,11 +66,15 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     if (_selectedIndex >= batch.pages.length) return;
     setState(() => _isBusy = true);
     try {
-      final result = await DocumentScannerService.scanDocument();
-      if (result != null && result.files.isNotEmpty) {
+      final outcome = await DocumentScannerService.scanDocument();
+      if (outcome.isUnavailable && mounted) {
+        _showError('The document scanner is not available on this device.');
+        return;
+      }
+      if (outcome.isSuccess) {
         await ref.read(documentBatchProvider.notifier).replacePageFromPath(
               _selectedIndex,
-              result.files.first.path,
+              outcome.files.first.path,
             );
       }
     } catch (error) {
@@ -125,7 +133,10 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       );
       if (shouldExit == true && mounted) {
         await ref.read(documentBatchProvider.notifier).clearBatch();
-        if (mounted) context.go('/tools');
+        if (mounted) {
+          final shell = StatefulNavigationShell.of(context);
+          shell.goBranch(0, initialLocation: shell.currentIndex == 0);
+        }
       }
       return;
     }
@@ -380,7 +391,10 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               : null,
         ),
       );
-      if (mounted) context.go('/tools');
+      if (mounted) {
+        final shell = StatefulNavigationShell.of(context);
+        shell.goBranch(0, initialLocation: shell.currentIndex == 0);
+      }
     } catch (error) {
       _showError('Saving failed: $error');
     }
@@ -487,7 +501,10 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     );
     if (discard == true && mounted) {
       await ref.read(documentBatchProvider.notifier).clearBatch();
-      if (mounted) context.go('/tools');
+      if (mounted) {
+        final shell = StatefulNavigationShell.of(context);
+        shell.goBranch(0, initialLocation: shell.currentIndex == 0);
+      }
     }
   }
 

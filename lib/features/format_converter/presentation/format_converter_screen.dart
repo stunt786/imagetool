@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
@@ -83,6 +86,22 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         return (bytes: image.convertedBytes!, fileName: outputName);
       }).toList();
 
+      // 1) Keep the app's own copy inside an operation folder so Files can
+      //    group the run and manage its outputs.
+      try {
+        final session = await OperationRecorder(
+          ref.read(operationStoreProvider),
+        ).start(OperationKind.convert, expectedItems: items.length);
+        for (final item in items) {
+          await session.saveBytes(item.bytes, item.fileName);
+        }
+        await session.complete();
+      } catch (_) {
+        // Grouping in Files is best effort; exporting to the gallery below
+        // must still succeed.
+      }
+
+      // 2) Export to the device gallery, as before.
       final results = await saveMultipleImages(items);
 
       if (mounted) {
@@ -109,7 +128,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(
-                'Saved ${results.length} file${results.length > 1 ? 's' : ''} to gallery'),
+                'Saved ${results.length} file${results.length > 1 ? 's' : ''} to the gallery and Files'),
             backgroundColor: Colors.green,
           ),
         );
@@ -162,15 +181,24 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   Widget _buildEmptyState(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
+    // Scrollable and size-aware so the empty state never overflows on a small
+    // phone or in landscape.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final badgeSize = (constraints.maxHeight * 0.24).clamp(64.0, 120.0);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 48).clamp(0.0, 2000.0),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: badgeSize,
+                  height: badgeSize,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -231,9 +259,11 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
               ),
               textAlign: TextAlign.center,
             ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -288,7 +318,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
   Widget _buildQualitySlider(BuildContext context, FormatConverterState state) {
     final theme = Theme.of(context);
-    final showQuality = state.selectedFormat == ConvertFormat.jpg;
+    final showQuality = state.selectedFormat.isJpeg;
 
     if (!showQuality) return const SizedBox.shrink();
 
@@ -462,6 +492,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             ),
             const SizedBox(width: 8),
             if (image.status == ConvertStatus.pending ||
+                image.status == ConvertStatus.ready ||
                 image.status == ConvertStatus.failed)
               IconButton(
                 icon: const Icon(Icons.close, size: 20),
@@ -484,6 +515,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   }
 
   Widget _buildThumbnail(ConvertibleImage image) {
+    final preview = image.previewBytes ?? image.bytes;
     return Container(
       width: 56,
       height: 56,
@@ -501,9 +533,9 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                     color: Colors.red[300],
                     size: 32,
                   )
-                : image.bytes != null
+                : preview != null
                     ? Image.memory(
-                        image.bytes!,
+                        preview,
                         width: 56,
                         height: 56,
                         fit: BoxFit.cover,
@@ -565,24 +597,96 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (state.isConverting) ...[
+            if (state.isLoading) ...[
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    state.convertingStatusText ??
-                        'Converting file ${state.currentConvertingIndex} of ${state.totalToConvert}...',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.primary,
+                  Expanded(
+                    child: Text(
+                      'Loading images ${state.loadedCount} of ${state.loadTotal}...',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.secondary,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${state.loadProgress.toInt()}%',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: state.loadProgress / 100,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (state.infoMessage != null) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      state.infoMessage!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (state.isConverting) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      state.convertingStatusText ??
+                          'Converting image ${state.currentConvertingIndex} of ${state.totalToConvert}...',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     '${state.progress.toInt()}%',
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
                     ),
+                  ),
+                  TextButton(
+                    onPressed: () => ref
+                        .read(formatConverterProvider.notifier)
+                        .cancelConversion(),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Cancel'),
                   ),
                 ],
               ),

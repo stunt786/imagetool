@@ -13,8 +13,14 @@ import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
+import '../../../core/models/operation_folder.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
+import '../models/batch_policy.dart';
+import '../models/crop_geometry.dart';
 import '../models/social_presets.dart';
 import '../services/image_processor_service.dart';
+import '../widgets/crop_overlay.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -258,6 +264,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
 
     final appSettings = ref.read(appSettingsProvider);
+    // One operation for the whole batch, recorded lazily on the first output.
+    OperationSession? batchSession;
     final progressNotifier = ValueNotifier<({int current, int total})>(
       (current: 1, total: _batchFiles.length),
     );
@@ -385,6 +393,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           );
           final saveResult =
               await saveImageBytes(result.bytes, fileName: fileName);
+          // Keep an app-owned copy so the batch appears as one operation in
+          // Files (the gallery export above is unchanged).
+          try {
+            batchSession ??= await OperationRecorder(
+              ref.read(operationStoreProvider),
+            ).start(OperationKind.resize, expectedItems: _batchFiles.length);
+            await batchSession.saveBytes(result.bytes, fileName);
+          } catch (_) {
+            // Grouping is best effort; the gallery export already succeeded.
+          }
           firstSavedPath ??= saveResult.path;
           successCount++;
         }
@@ -398,6 +416,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
     }
+
+    try {
+      await batchSession?.complete();
+    } catch (_) {}
 
     if (mounted && successCount > 0) {
       ref.read(editHistoryProvider.notifier).addGroup(
@@ -807,6 +829,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
+      await _recordEditedOutput(
+        result.bytes,
+        fileName,
+        OperationKind.resize,
+      );
       final saveResult = await saveImageBytes(
         result.bytes,
         fileName: fileName,
@@ -909,6 +936,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _flipPreviewV = false;
     });
     try {
+      await _recordEditedOutput(
+        result.bytes,
+        fileName,
+        OperationKind.imageEdit,
+      );
       final saveResult = await saveImageBytes(
         result.bytes,
         fileName: fileName,
@@ -979,6 +1011,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
     _pushUndoState(result.bytes);
     try {
+      await _recordEditedOutput(
+        result.bytes,
+        fileName,
+        OperationKind.imageEdit,
+      );
       final saveResult = await saveImageBytes(
         result.bytes,
         fileName: fileName,
@@ -1045,6 +1082,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
+      await _recordEditedOutput(
+        result.bytes,
+        fileName,
+        OperationKind.imageEdit,
+      );
       final saveResult = await saveImageBytes(
         result.bytes,
         fileName: fileName,
@@ -1289,6 +1331,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
     setState(() {});
     try {
+      await _recordEditedOutput(
+        result.bytes,
+        fileName,
+        OperationKind.imageEdit,
+      );
       final saveResult = await saveImageBytes(
         result.bytes,
         fileName: fileName,
@@ -1498,6 +1545,23 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
   }
 
+  /// Keeps an app-owned copy of an edited image inside an operation folder so
+  /// it shows up in Files. Never blocks the gallery save that follows.
+  Future<void> _recordEditedOutput(
+    Uint8List bytes,
+    String fileName,
+    OperationKind kind,
+  ) async {
+    try {
+      final session = await OperationRecorder(ref.read(operationStoreProvider))
+          .start(kind, expectedItems: 1);
+      await session.saveBytes(bytes, fileName);
+      await session.complete();
+    } catch (_) {
+      // Best effort: the user-visible export still happens separately.
+    }
+  }
+
   String _buildSaveFileName({
     required String baseName,
     required OutputImageFormat format,
@@ -1562,31 +1626,72 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     };
   }
 
+  /// True when the active panel should run over every selected image.
+  bool get _toolProcessesWholeBatch => BatchPolicy.processesWholeBatch(
+        isResizeTool: _activePanel == _EditorPanel.resize,
+        batchCount: _batchFiles.length,
+      );
+
   Future<void> _applyAndSave() async {
-    if (_isBatchMode && _batchFiles.length > 1) {
+    // Batch processing belongs to the Resize panel only. Crop and Rotate always
+    // act on the single image currently being edited, even when the user
+    // selected several images.
+    if (_toolProcessesWholeBatch) {
       await _processBatchResize();
       return;
     }
-    if (_activePanel == _EditorPanel.resize) {
-      await _resizeImage();
-    } else {
-      await _applyActiveTool();
-    }
+    await _applyActiveTool();
+  }
+
+  /// Index of the batch image currently loaded in the editor, or -1.
+  int get _currentBatchIndex {
+    if (_batchFiles.isEmpty) return -1;
+    final name = ref.read(imageEditProvider).fileName;
+    return _batchFiles.indexWhere((file) => file.name == name);
   }
 
   String get _applyButtonLabel {
-    if (_isBatchMode && _batchFiles.length > 1) {
+    if (_toolProcessesWholeBatch) {
       return 'Resize ${_batchFiles.length} Images';
     }
-    if (_activePanel == _EditorPanel.resize &&
-        _mode == _ResizeMode.smartCompress) {
-      return 'Apply Compression & Save';
-    }
-    return switch (_activePanel) {
-      _EditorPanel.resize => 'Apply Resize & Save',
+
+    final base = switch (_activePanel) {
+      _EditorPanel.resize => _mode == _ResizeMode.smartCompress
+          ? 'Apply Compression & Save'
+          : 'Apply Resize & Save',
       _EditorPanel.crop => 'Apply Crop & Save',
       _EditorPanel.rotate => 'Apply Rotation & Save',
     };
+
+    // Make it obvious that crop/rotate only touch the current image.
+    if (BatchPolicy.editsSingleImage(
+      isResizeTool: _activePanel == _EditorPanel.resize,
+      batchCount: _batchFiles.length,
+    )) {
+      return '$base (${BatchPolicy.positionLabel(index: _currentBatchIndex, batchCount: _batchFiles.length)})';
+    }
+    return base;
+  }
+
+  /// Loads the batch image at [index] into the editor (used by the compact
+  /// previous/next control shown for Crop and Rotate).
+  Future<void> _selectBatchIndex(int index) async {
+    if (index < 0 || index >= _batchFiles.length) return;
+    final file = _batchFiles[index];
+    if (file.bytes == null) return;
+
+    await ref.read(imageEditProvider.notifier).loadImage(
+          file.bytes!,
+          file.name,
+          sourcePath: file.path,
+        );
+    if (!mounted) return;
+    _syncInputsFromImage(
+      ref.read(imageEditProvider).width,
+      ref.read(imageEditProvider).height,
+    );
+    _resetCropValues();
+    setState(() {});
   }
 
   @override
@@ -1731,8 +1836,18 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                   _ErrorBanner(message: state.errorMessage!),
                   const SizedBox(height: 8),
                 ],
-                if (_isBatchMode || _batchFiles.length > 1) ...[
+                // The Resize panel is a batch tool, so it keeps the full
+                // filmstrip. Crop and Rotate edit one image at a time and use
+                // a compact stepper instead.
+                if (_activePanel == _EditorPanel.resize &&
+                    (_isBatchMode || _batchFiles.length > 1)) ...[
                   _buildBatchFilmstrip(),
+                ],
+                if (BatchPolicy.editsSingleImage(
+                  isResizeTool: _activePanel == _EditorPanel.resize,
+                  batchCount: _batchFiles.length,
+                )) ...[
+                  _buildCurrentImageStepper(),
                 ],
                 _buildImageCard(state),
                 const SizedBox(height: 10),
@@ -1742,6 +1857,71 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// Compact "which image am I editing" control for Crop and Rotate.
+  Widget _buildCurrentImageStepper() {
+    final scheme = Theme.of(context).colorScheme;
+    final index = _currentBatchIndex;
+    final position = index >= 0 ? index + 1 : 1;
+    final name = index >= 0 ? _batchFiles[index].name : '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Previous image',
+            visualDensity: VisualDensity.compact,
+            onPressed: index > 0 ? () => _selectBatchIndex(index - 1) : null,
+            icon: const Icon(Icons.chevron_left_rounded),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Editing image $position of ${_batchFiles.length}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                if (name.isNotEmpty)
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Next image',
+            visualDensity: VisualDensity.compact,
+            onPressed: index >= 0 && index < _batchFiles.length - 1
+                ? () => _selectBatchIndex(index + 1)
+                : null,
+            icon: const Icon(Icons.chevron_right_rounded),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1921,21 +2101,25 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               _buildImageMeta(state),
             ],
           ),
-          Positioned(
-            top: 0,
-            left: 0,
-            child: SizedBox(
-              width: 36,
-              height: 36,
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                iconSize: 20,
-                icon: const Icon(Icons.add),
-                onPressed: _pickImage,
-                tooltip: 'Add image',
+          // The crop and rotate workspaces edit the selected image only, so
+          // the "add another image" affordance is hidden there. It stays
+          // available for the resize panel where batching is expected.
+          if (_activePanel == _EditorPanel.resize)
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 20,
+                  icon: const Icon(Icons.add),
+                  onPressed: _pickImage,
+                  tooltip: 'Add image',
+                ),
               ),
             ),
-          ),
           Positioned(
             top: 0,
             right: 0,
@@ -3548,16 +3732,42 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                       SizedBox(
                         width: maxWidth,
                         height: basePreviewHeight,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: imageDisplayWidth,
-                              height: imageDisplayHeight,
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  Transform.scale(
+                        child: widget.activePanel == _EditorPanel.crop
+                            ? CropOverlay(
+                                imageBytes: widget.imageBytes,
+                                imageWidth: widget.imageWidth,
+                                imageHeight: widget.imageHeight,
+                                crop: CropRect(
+                                  left: widget.cropX.toDouble(),
+                                  top: widget.cropY.toDouble(),
+                                  right: (widget.cropX + widget.cropWidth)
+                                      .toDouble(),
+                                  bottom: (widget.cropY + widget.cropHeight)
+                                      .toDouble(),
+                                ),
+                                aspectRatio: widget.cropAspectRatio,
+                                flipH: widget.flipH,
+                                flipV: widget.flipV,
+                                onCropChanged: (crop) => widget.onCropUpdate(
+                                  x: crop.left.round(),
+                                  y: crop.top.round(),
+                                  width: crop.width.round(),
+                                  height: crop.height.round(),
+                                  rebuild: false,
+                                ),
+                                onCropCommitted: (crop) => widget.onCropUpdate(
+                                  x: crop.left.round(),
+                                  y: crop.top.round(),
+                                  width: crop.width.round(),
+                                  height: crop.height.round(),
+                                  rebuild: true,
+                                ),
+                              )
+                            : Center(
+                                child: SizedBox(
+                                  width: imageDisplayWidth,
+                                  height: imageDisplayHeight,
+                                  child: Transform.scale(
                                     scaleX: widget.flipH ? -1.0 : 1.0,
                                     scaleY: widget.flipV ? -1.0 : 1.0,
                                     child: Image.memory(
@@ -3571,22 +3781,8 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                                       filterQuality: FilterQuality.low,
                                     ),
                                   ),
-                                  if (widget.activePanel == _EditorPanel.crop)
-                                    _InteractiveCropOverlay(
-                                      cropX: widget.cropX,
-                                      cropY: widget.cropY,
-                                      cropWidth: widget.cropWidth,
-                                      cropHeight: widget.cropHeight,
-                                      imageWidth: widget.imageWidth,
-                                      imageHeight: widget.imageHeight,
-                                      cropAspectRatio: widget.cropAspectRatio,
-                                      onCropEnd: widget.onCropUpdate,
-                                    ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
                       )
                     else
                       Transform.rotate(
@@ -3642,456 +3838,5 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
         );
       },
     );
-  }
-}
-
-class _InteractiveCropOverlay extends StatefulWidget {
-  const _InteractiveCropOverlay({
-    required this.cropX,
-    required this.cropY,
-    required this.cropWidth,
-    required this.cropHeight,
-    required this.imageWidth,
-    required this.imageHeight,
-    required this.cropAspectRatio,
-    required this.onCropEnd,
-  });
-
-  final int cropX;
-  final int cropY;
-  final int cropWidth;
-  final int cropHeight;
-  final int imageWidth;
-  final int imageHeight;
-  final double? cropAspectRatio;
-  final void Function({
-    required int x,
-    required int y,
-    required int width,
-    required int height,
-    bool rebuild,
-  }) onCropEnd;
-
-  @override
-  State<_InteractiveCropOverlay> createState() =>
-      _InteractiveCropOverlayState();
-}
-
-class _InteractiveCropOverlayState extends State<_InteractiveCropOverlay> {
-  double _cropX = 0;
-  double _cropY = 0;
-  double _cropWidth = 0;
-  double _cropHeight = 0;
-  String? _draggingHandle;
-  Offset? _dragStartPosition;
-  Rect? _dragStartRect;
-  Size _layoutSize = Size.zero;
-  int? _activePointerId;
-
-  static const double _minCropSize = 20;
-  static const double _touchRadius = 40;
-
-  @override
-  void initState() {
-    super.initState();
-    _cropX = widget.cropX.toDouble();
-    _cropY = widget.cropY.toDouble();
-    _cropWidth = widget.cropWidth.toDouble();
-    _cropHeight = widget.cropHeight.toDouble();
-  }
-
-  @override
-  void didUpdateWidget(_InteractiveCropOverlay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (_draggingHandle == null) {
-      _cropX = widget.cropX.toDouble();
-      _cropY = widget.cropY.toDouble();
-      _cropWidth = widget.cropWidth.toDouble();
-      _cropHeight = widget.cropHeight.toDouble();
-    }
-  }
-
-  String _hitTestHandle(Offset pos, Size container) {
-    if (container.width <= 0 || container.height <= 0) return '';
-    final sx = container.width / widget.imageWidth;
-    final sy = container.height / widget.imageHeight;
-
-    double hx(double v) => v * sx;
-    double hy(double v) => v * sy;
-
-    final handles = <String, Offset>{
-      'tl': Offset(hx(_cropX), hy(_cropY)),
-      'tr': Offset(hx(_cropX + _cropWidth), hy(_cropY)),
-      'bl': Offset(hx(_cropX), hy(_cropY + _cropHeight)),
-      'br': Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight)),
-      't': Offset(hx(_cropX + _cropWidth / 2), hy(_cropY)),
-      'b': Offset(hx(_cropX + _cropWidth / 2), hy(_cropY + _cropHeight)),
-      'l': Offset(hx(_cropX), hy(_cropY + _cropHeight / 2)),
-      'r': Offset(hx(_cropX + _cropWidth), hy(_cropY + _cropHeight / 2)),
-    };
-
-    for (final id in ['tl', 'tr', 'bl', 'br', 't', 'b', 'l', 'r']) {
-      if ((pos - handles[id]!).distance <= _touchRadius) return id;
-    }
-
-    final r = Rect.fromLTWH(
-      hx(_cropX),
-      hy(_cropY),
-      hx(_cropX + _cropWidth) - hx(_cropX),
-      hy(_cropY + _cropHeight) - hy(_cropY),
-    );
-    if (r.contains(pos)) return 'move';
-
-    return '';
-  }
-
-  void _onDragStart(Offset position, String handle) {
-    _draggingHandle = handle;
-    _dragStartPosition = position;
-    _dragStartRect = Rect.fromLTWH(_cropX, _cropY, _cropWidth, _cropHeight);
-  }
-
-  void _onDragUpdate(Offset position) {
-    if (_draggingHandle == null) return;
-    final container = _layoutSize;
-    final startPosition = _dragStartPosition;
-    final startRect = _dragStartRect;
-    if (container.width <= 0 ||
-        container.height <= 0 ||
-        startPosition == null ||
-        startRect == null) {
-      return;
-    }
-    final sx = widget.imageWidth / container.width;
-    final sy = widget.imageHeight / container.height;
-    final dx = (position.dx - startPosition.dx) * sx;
-    final dy = (position.dy - startPosition.dy) * sy;
-
-    double left = startRect.left, top = startRect.top;
-    double right = startRect.right, bottom = startRect.bottom;
-
-    switch (_draggingHandle) {
-      case 'move':
-        left += dx;
-        top += dy;
-        right += dx;
-        bottom += dy;
-        left = left.clamp(0.0, (widget.imageWidth - _cropWidth).toDouble());
-        top = top.clamp(0.0, (widget.imageHeight - _cropHeight).toDouble());
-        right = left + _cropWidth;
-        bottom = top + _cropHeight;
-        break;
-      case 'tl':
-        left += dx;
-        top += dy;
-        break;
-      case 'tr':
-        right += dx;
-        top += dy;
-        break;
-      case 'bl':
-        left += dx;
-        bottom += dy;
-        break;
-      case 'br':
-        right += dx;
-        bottom += dy;
-        break;
-      case 't':
-        top += dy;
-        break;
-      case 'b':
-        bottom += dy;
-        break;
-      case 'l':
-        left += dx;
-        break;
-      case 'r':
-        right += dx;
-        break;
-    }
-
-    left = left.clamp(0.0, widget.imageWidth.toDouble());
-    right = right.clamp(0.0, widget.imageWidth.toDouble());
-    top = top.clamp(0.0, widget.imageHeight.toDouble());
-    bottom = bottom.clamp(0.0, widget.imageHeight.toDouble());
-
-    if (right - left < _minCropSize) {
-      if (_draggingHandle == 'l' ||
-          _draggingHandle == 'tl' ||
-          _draggingHandle == 'bl') {
-        left = (right - _minCropSize).clamp(0.0, widget.imageWidth.toDouble());
-      } else {
-        right = (left + _minCropSize).clamp(0.0, widget.imageWidth.toDouble());
-      }
-    }
-    if (bottom - top < _minCropSize) {
-      if (_draggingHandle == 't' ||
-          _draggingHandle == 'tl' ||
-          _draggingHandle == 'tr') {
-        top =
-            (bottom - _minCropSize).clamp(0.0, widget.imageHeight.toDouble());
-      } else {
-        bottom =
-            (top + _minCropSize).clamp(0.0, widget.imageHeight.toDouble());
-      }
-    }
-
-    final ratio = widget.cropAspectRatio;
-    if (ratio != null && _draggingHandle != 'move') {
-      final handle = _draggingHandle!;
-      final changesLeft = handle.contains('l');
-      final changesRight = handle.contains('r');
-      final changesTop = handle.contains('t');
-      final changesBottom = handle.contains('b');
-      final isCorner =
-          (changesLeft || changesRight) && (changesTop || changesBottom);
-
-      final anchorX = changesLeft ? right : left;
-      final anchorY = changesTop ? bottom : top;
-      final maxWidth =
-          changesLeft ? anchorX : widget.imageWidth - anchorX;
-      final maxHeight =
-          changesTop ? anchorY : widget.imageHeight - anchorY;
-
-      double w;
-      double h;
-      if (isCorner) {
-        final widthFromDrag = math.max(_minCropSize, right - left);
-        final heightFromDrag = math.max(_minCropSize, bottom - top);
-        final widthFromHeight = heightFromDrag * ratio;
-        final heightFromWidth = widthFromDrag / ratio;
-        if ((widthFromHeight - widthFromDrag).abs() <
-            (heightFromWidth - heightFromDrag).abs()) {
-          w = widthFromDrag;
-          h = widthFromHeight;
-        } else {
-          w = heightFromWidth;
-          h = heightFromDrag;
-        }
-      } else if (changesLeft || changesRight) {
-        w = math.max(_minCropSize, right - left);
-        h = w / ratio;
-      } else {
-        h = math.max(_minCropSize, bottom - top);
-        w = h * ratio;
-      }
-
-      final scale = math.min(
-        maxWidth / math.max(w, 1),
-        maxHeight / math.max(h, 1),
-      );
-      w = math.max(_minCropSize, w * scale);
-      h = math.max(_minCropSize, w / ratio);
-      if (h > maxHeight) {
-        h = math.max(_minCropSize, maxHeight);
-        w = math.max(_minCropSize, h * ratio);
-      }
-
-      left = changesLeft ? anchorX - w : anchorX;
-      right = left + w;
-      top = changesTop ? anchorY - h : anchorY;
-      bottom = top + h;
-    }
-
-    left = left.clamp(0.0, (widget.imageWidth - 1).toDouble());
-    top = top.clamp(0.0, (widget.imageHeight - 1).toDouble());
-    right = right.clamp(left + 1, widget.imageWidth.toDouble());
-    bottom = bottom.clamp(top + 1, widget.imageHeight.toDouble());
-
-    _cropX = left;
-    _cropY = top;
-    _cropWidth = right - left;
-    _cropHeight = bottom - top;
-    setState(() {});
-  }
-
-  void _onDragEnd() {
-    if (_draggingHandle != null) {
-      widget.onCropEnd(
-        x: _cropX.round(),
-        y: _cropY.round(),
-        width: _cropWidth.round(),
-        height: _cropHeight.round(),
-        rebuild: true,
-      );
-    }
-    _draggingHandle = null;
-    _dragStartPosition = null;
-    _dragStartRect = null;
-    _activePointerId = null;
-  }
-
-  void _onDragCancel() {
-    _draggingHandle = null;
-    _dragStartPosition = null;
-    _dragStartRect = null;
-    _activePointerId = null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _layoutSize = constraints.biggest;
-        return Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: (event) {
-            final handle =
-                _hitTestHandle(event.localPosition, _layoutSize);
-            if (handle.isNotEmpty) {
-              _activePointerId = event.pointer;
-              _onDragStart(event.localPosition, handle);
-            }
-          },
-          onPointerMove: (event) {
-            if (event.pointer == _activePointerId) {
-              _onDragUpdate(event.localPosition);
-            }
-          },
-          onPointerUp: (event) {
-            if (event.pointer == _activePointerId) {
-              _onDragEnd();
-            }
-          },
-          onPointerCancel: (event) {
-            if (event.pointer == _activePointerId) {
-              _onDragCancel();
-            }
-          },
-          child: RepaintBoundary(
-            child: CustomPaint(
-              size: constraints.biggest,
-              painter: _CropPainter(
-                x: _cropX,
-                y: _cropY,
-                width: _cropWidth,
-                height: _cropHeight,
-                imageWidth: widget.imageWidth,
-                imageHeight: widget.imageHeight,
-                containerSize: constraints.biggest,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CropPainter extends CustomPainter {
-  _CropPainter({
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
-    required this.imageWidth,
-    required this.imageHeight,
-    required this.containerSize,
-  });
-
-  final double x, y, width, height;
-  final int imageWidth, imageHeight;
-  final Size containerSize;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final sx = containerSize.width / imageWidth;
-    final sy = containerSize.height / imageHeight;
-
-    final cropRect = Rect.fromLTWH(x * sx, y * sy, width * sx, height * sy);
-    final fullRect = Offset.zero & containerSize;
-
-    // Dimmed overlay
-    canvas.drawPath(
-      Path.combine(
-        PathOperation.difference,
-        Path()..addRect(fullRect),
-        Path()..addRect(cropRect),
-      ),
-      Paint()..color = Colors.black.withValues(alpha: 0.45),
-    );
-
-    // White border
-    canvas.drawRect(
-      cropRect,
-      Paint()
-        ..color = Colors.white
-        ..strokeWidth = 2.5
-        ..style = PaintingStyle.stroke,
-    );
-
-    // Rule-of-thirds grid
-    final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.4)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    for (final fx in [cropRect.width / 3, 2 * cropRect.width / 3]) {
-      canvas.drawLine(
-        Offset(cropRect.left + fx, cropRect.top),
-        Offset(cropRect.left + fx, cropRect.bottom),
-        grid,
-      );
-    }
-    for (final fy in [cropRect.height / 3, 2 * cropRect.height / 3]) {
-      canvas.drawLine(
-        Offset(cropRect.left, cropRect.top + fy),
-        Offset(cropRect.right, cropRect.top + fy),
-        grid,
-      );
-    }
-
-    // Corner circles
-    final corners = [
-      cropRect.topLeft,
-      cropRect.topRight,
-      cropRect.bottomLeft,
-      cropRect.bottomRight,
-    ];
-    for (final c in corners) {
-      canvas.drawCircle(c, 14, Paint()..color = Colors.white);
-      canvas.drawCircle(
-        c,
-        14,
-        Paint()
-          ..color = const Color(0xFF8B1BFF)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3,
-      );
-    }
-
-    // Edge bars
-    final edgeData = [
-      (cropRect.center.dx, cropRect.top, 48.0, 20.0),
-      (cropRect.center.dx, cropRect.bottom, 48.0, 20.0),
-      (cropRect.left, cropRect.center.dy, 20.0, 48.0),
-      (cropRect.right, cropRect.center.dy, 20.0, 48.0),
-    ];
-    for (final (cx, cy, ew, eh) in edgeData) {
-      final r = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy), width: ew, height: eh),
-        const Radius.circular(8),
-      );
-      canvas.drawRRect(r, Paint()..color = Colors.white);
-      canvas.drawRRect(
-        r,
-        Paint()
-          ..color = const Color(0xFF8B1BFF)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CropPainter oldDelegate) {
-    return x != oldDelegate.x ||
-        y != oldDelegate.y ||
-        width != oldDelegate.width ||
-        height != oldDelegate.height ||
-        imageWidth != oldDelegate.imageWidth ||
-        imageHeight != oldDelegate.imageHeight ||
-        containerSize != oldDelegate.containerSize;
   }
 }

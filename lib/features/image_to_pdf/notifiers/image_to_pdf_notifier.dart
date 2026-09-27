@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +9,12 @@ import 'package:path/path.dart' as path;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../../core/models/operation_folder.dart';
+import '../../../core/services/image_isolate_service.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/image_to_pdf_state.dart';
@@ -19,14 +25,34 @@ final imageToPdfProvider =
 );
 
 class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
+  int _idSeed = 0;
+  bool _cancelRequested = false;
+  bool _disposed = false;
+
+  /// Aggregated load counters so that adding files one at a time still shows
+  /// honest "Loading images X of Y" progress.
+  int _loadTotal = 0;
+  int _loadCompleted = 0;
+
   @override
   ImageToPdfState build() {
+    _disposed = false;
+    ref.onDispose(() => _disposed = true);
     return const ImageToPdfState(
       images: [],
       pageSettings: PdfPageSettings.defaults,
     );
   }
 
+  /// Writes state only while the provider is alive; background work may finish
+  /// after the screen is gone.
+  void _emit(ImageToPdfState next) {
+    if (_disposed) return;
+    state = next;
+  }
+
+  /// Picks images and registers them immediately, then prepares previews and
+  /// dimensions in the background so the list appears instantly.
   Future<void> pickImages(BuildContext context) async {
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
@@ -37,59 +63,64 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
     if (picked.isEmpty) return;
 
-    final newImages = <ImageToPdfItem>[];
+    final newItems = <ImageToPdfItem>[];
     for (final file in picked) {
-      if (file.bytes == null) continue;
+      final hasPath = (file.path ?? '').isNotEmpty;
+      final hasBytes = file.bytes != null && file.bytes!.isNotEmpty;
+      if (!hasPath && !hasBytes) continue;
 
-      int? width;
-      int? height;
-      try {
-        final decoded = await compute(_decodeImageDimensions, file.bytes!);
-        if (decoded != null) {
-          width = decoded[0];
-          height = decoded[1];
-        }
-      } catch (_) {}
-
-      newImages.add(ImageToPdfItem(
-        path: file.path ?? '',
-        name: file.name,
-        sizeBytes: file.sizeBytes,
-        imageBytes: file.bytes,
-        width: width,
-        height: height,
-      ));
+      newItems.add(
+        ImageToPdfItem(
+          id: _nextId(),
+          path: file.path ?? '',
+          name: file.name,
+          sizeBytes: file.sizeBytes,
+          // Only hold bytes when we cannot re-read the file later.
+          imageBytes: hasPath ? null : file.bytes,
+          isLoading: true,
+        ),
+      );
     }
 
-    if (newImages.isEmpty) return;
+    if (newItems.isEmpty) {
+      state = state.copyWith(
+        errorMessage: 'None of the selected files could be read.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
 
     state = state.copyWith(
-      images: [...state.images, ...newImages],
-      errorMessage: null,
-      generatedPdfPath: null,
+      images: [...state.images, ...newItems],
+      clearError: true,
+      clearGeneratedPath: true,
     );
+
+    unawaited(_loadItems(newItems));
   }
 
   Future<void> addImageFromPath(String path) async {
     final file = File(path);
-    if (!await file.exists()) return;
-
     final name = path.split(Platform.pathSeparator).last;
-    final sizeBytes = await file.length();
+    final exists = await file.exists();
+    final sizeBytes = exists ? await file.length() : 0;
 
     final newItem = ImageToPdfItem(
+      id: _nextId(),
       path: path,
       name: name,
       sizeBytes: sizeBytes,
+      isLoading: exists,
+      errorMessage: exists ? null : 'The file could not be found.',
     );
 
     state = state.copyWith(
       images: [...state.images, newItem],
-      errorMessage: null,
-      generatedPdfPath: null,
+      clearError: true,
+      clearGeneratedPath: true,
     );
 
-    await _loadImage(state.images.length - 1);
+    if (exists) unawaited(_loadItems([newItem]));
   }
 
   Future<void> addImageFromBytes({
@@ -97,72 +128,113 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     required String name,
     String? path,
   }) async {
-    int? width;
-    int? height;
-    try {
-      final decoded = await compute(_decodeImageDimensions, bytes);
-      if (decoded != null) {
-        width = decoded[0];
-        height = decoded[1];
-      }
-    } catch (_) {}
-
+    final hasPath = (path ?? '').isNotEmpty;
     final newItem = ImageToPdfItem(
+      id: _nextId(),
       path: path ?? '',
       name: name,
       sizeBytes: bytes.length,
-      imageBytes: bytes,
-      width: width,
-      height: height,
+      imageBytes: hasPath ? null : bytes,
+      isLoading: true,
     );
 
     state = state.copyWith(
       images: [...state.images, newItem],
-      errorMessage: null,
-      generatedPdfPath: null,
+      clearError: true,
+      clearGeneratedPath: true,
     );
+
+    unawaited(_loadItems([newItem]));
   }
 
-  Future<void> _loadImage(int index) async {
-    if (index < 0 || index >= state.images.length) return;
+  /// Reads, probes and previews [items] with bounded concurrency so picking
+  /// twenty photos cannot freeze the app or blow up memory.
+  Future<void> _loadItems(List<ImageToPdfItem> items) async {
+    if (items.isEmpty) return;
 
-    final item = state.images[index];
-    if (item.isLoaded) return;
+    // Start a fresh counter only once the previous work has drained.
+    if (_loadCompleted >= _loadTotal) {
+      _loadTotal = 0;
+      _loadCompleted = 0;
+    }
+    _loadTotal += items.length;
 
-    try {
-      final file = File(item.path);
-      final bytes = await file.readAsBytes();
+    _emit(state.copyWith(
+      isLoadingImages: true,
+      loadTotal: _loadTotal,
+      loadedCount: _loadCompleted,
+      loadProgress:
+          _loadTotal == 0 ? 0 : (_loadCompleted / _loadTotal) * 100,
+    ));
 
-      int? width;
-      int? height;
-      try {
-        final decoded = await compute(_decodeImageDimensions, bytes);
-        if (decoded != null) {
-          width = decoded[0];
-          height = decoded[1];
+    await ImageIsolateService.mapConcurrent<ImageToPdfItem, void>(
+      items,
+      (item, index) async {
+        final bytes = await _readItemBytes(item);
+        if (bytes == null || bytes.isEmpty) {
+          _updateItem(
+            item.id,
+            item.copyWith(
+              isLoading: false,
+              errorMessage: 'The file could not be read.',
+            ),
+          );
+          return;
         }
-      } catch (_) {}
 
-      final updatedItem = item.copyWith(
-        imageBytes: bytes,
-        width: width,
-        height: height,
-      );
-      state = state.updateImage(index, updatedItem);
-    } catch (e) {
-      state =
-          state.copyWith(errorMessage: 'Failed to load image: ${item.name}');
+        final probe = await ImageIsolateService.probe(bytes);
+        final preview = await ImageIsolateService.thumbnail(bytes, maxSide: 320);
+
+        _updateItem(
+          item.id,
+          item.copyWith(
+            previewBytes: preview,
+            width: probe.isValid ? probe.width : null,
+            height: probe.isValid ? probe.height : null,
+            sizeBytes: bytes.length,
+            isLoading: false,
+            clearError: probe.isValid,
+            errorMessage: probe.isValid
+                ? null
+                : 'The image may be corrupted or unsupported.',
+          ),
+        );
+      },
+      concurrency: ImageIsolateService.defaultConcurrency,
+      onProgress: (completed, total) {
+        _loadCompleted++;
+        _emit(state.copyWith(
+          loadedCount: _loadCompleted,
+          loadTotal: _loadTotal,
+          loadProgress: _loadTotal == 0
+              ? 100
+              : (_loadCompleted / _loadTotal * 100).clamp(0, 100),
+        ));
+      },
+    );
+
+    if (_loadCompleted >= _loadTotal) {
+      _emit(state.copyWith(isLoadingImages: false, loadProgress: 100));
     }
   }
 
-  static List<int>? _decodeImageDimensions(Uint8List bytes) {
+  String _nextId() => 'img_pdf_${_idSeed++}';
+
+  Future<Uint8List?> _readItemBytes(ImageToPdfItem item) async {
+    final inMemory = item.imageBytes;
+    if (inMemory != null && inMemory.isNotEmpty) return inMemory;
+    if (item.path.isEmpty) return null;
     try {
-      final image = img.decodeImage(bytes);
-      if (image != null) {
-        return [image.width, image.height];
-      }
-    } catch (_) {}
-    return null;
+      final file = File(item.path);
+      if (!await file.exists()) return null;
+      return await file.readAsBytes();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _updateItem(String id, ImageToPdfItem replacement) {
+    _emit(state.replaceImageById(id, replacement));
   }
 
   void removeImage(int index) {
@@ -182,57 +254,91 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
   }
 
   void clearAll() {
+    _cancelRequested = false;
     state = const ImageToPdfState(
       images: [],
       pageSettings: PdfPageSettings.defaults,
     );
   }
 
+  /// Requests cancellation of an in-flight PDF build.
+  ///
+  /// Nothing is written to disk until every page has been prepared, so
+  /// cancelling can never leave a partial PDF behind.
+  void cancelGeneration() {
+    if (!state.isGenerating) return;
+    _cancelRequested = true;
+    state = state.copyWith(statusText: 'Cancelling...', canCancel: false);
+  }
+
+  /// Builds the PDF, preparing each page on a background isolate and reporting
+  /// real per-image progress.
   Future<String?> generatePdf() async {
     if (state.images.isEmpty) {
       state = state.copyWith(errorMessage: 'No images selected');
       return null;
     }
+    if (state.isLoadingImages) {
+      state = state.copyWith(
+        errorMessage: 'Please wait for the images to finish loading.',
+      );
+      return null;
+    }
+
+    _cancelRequested = false;
+    final settings = state.pageSettings;
+    final appSettings = ref.read(appSettingsProvider);
+    final items = List<ImageToPdfItem>.from(state.images);
+    final total = items.length;
+
+    // Every run is one operation, so its outputs stay grouped in Files.
+    OperationSession? session;
+    try {
+      session = await OperationRecorder(ref.read(operationStoreProvider))
+          .start(OperationKind.imageToPdf, expectedItems: 1);
+    } catch (_) {
+      session = null;
+    }
 
     state = state.copyWith(
       isGenerating: true,
+      canCancel: true,
       progress: 0.0,
-      errorMessage: null,
-      generatedPdfPath: null,
+      statusText: 'Preparing images...',
+      clearError: true,
+      clearGeneratedPath: true,
     );
 
     try {
-      final pdf = pw.Document();
-      final settings = state.pageSettings;
-      final appSettings = ref.read(appSettingsProvider);
       if (WatermarkHelper.cachedIconBytes == null) {
         await WatermarkHelper.loadIconBytes();
       }
 
-      for (int i = 0; i < state.images.length; i++) {
-        final item = state.images[i];
+      final pdf = pw.Document();
+      var addedPages = 0;
 
-        if (!item.isLoaded) {
-          await _loadImage(i);
-        }
+      for (var i = 0; i < total; i++) {
+        if (_cancelRequested) break;
 
-        final currentItem = state.images[i];
-        if (!currentItem.isLoaded || currentItem.imageBytes == null) {
-          continue;
-        }
+        _emit(state.copyWith(
+          statusText: 'Adding image ${i + 1} of $total',
+          progress: (i / total) * 0.9,
+        ));
 
-        final imageBytes = currentItem.imageBytes!;
-        img.Image? decodedImage;
-        try {
-          decodedImage = img.decodeImage(imageBytes);
-        } catch (_) {
-          continue;
-        }
+        final item = items[i];
+        final source = await _readItemBytes(item);
+        if (source == null || source.isEmpty) continue;
 
-        if (decodedImage == null) continue;
+        // Decoding and re-encoding happens off the UI isolate.
+        final prepared = await compute(_preparePageWorker, <String, Object?>{
+          'bytes': source,
+          'optimized': settings.quality == PdfQuality.optimized,
+          'quality': 90,
+        });
+        if (prepared == null) continue;
 
-        final imageWidth = decodedImage.width;
-        final imageHeight = decodedImage.height;
+        final imageWidth = prepared.width;
+        final imageHeight = prepared.height;
         final isImageLandscape = imageWidth > imageHeight;
 
         PdfPageFormat pageFormat;
@@ -250,7 +356,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
             pageFormat = PdfPageFormat.legal;
             break;
           case PdfPageSize.matchImage:
-            final pointsPerPixel = 72.0 / 150.0;
+            const pointsPerPixel = 72.0 / 150.0;
             pageFormat = PdfPageFormat(
               imageWidth * pointsPerPixel,
               imageHeight * pointsPerPixel,
@@ -280,24 +386,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           pageFormat.height - marginTop - marginBottom,
         );
 
-        Uint8List processedBytes;
-        if (settings.quality == PdfQuality.optimized) {
-          final jpegBytes = img.encodeJpg(decodedImage, quality: 90);
-          processedBytes = Uint8List.fromList(jpegBytes);
-        } else {
-          if (decodedImage.hasAlpha) {
-            final flattened = img.Image(
-                width: decodedImage.width, height: decodedImage.height);
-            img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
-            img.compositeImage(flattened, decodedImage);
-            final pngBytes = img.encodePng(flattened);
-            processedBytes = Uint8List.fromList(pngBytes);
-          } else {
-            processedBytes = imageBytes;
-          }
-        }
-
-        final pdfImage = pw.MemoryImage(processedBytes);
+        final pdfImage = pw.MemoryImage(prepared.bytes);
 
         pdf.addPage(
           pw.Page(
@@ -311,8 +400,13 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
                   right: marginRight,
                   bottom: marginBottom,
                 ),
-                child: _buildImageWidget(pdfImage, settings.fitMode,
-                    availableFormat, imageWidth, imageHeight),
+                child: _buildImageWidget(
+                  pdfImage,
+                  settings.fitMode,
+                  availableFormat,
+                  imageWidth,
+                  imageHeight,
+                ),
               );
 
               if (appSettings.enableGlobalWatermark) {
@@ -335,39 +429,79 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           ),
         );
 
-        state = state.copyWith(progress: (i + 1) / state.images.length);
+        addedPages++;
+        _emit(state.copyWith(progress: ((i + 1) / total) * 0.9));
       }
+
+      if (_cancelRequested) {
+        await session?.cancel();
+        state = state.copyWith(
+          isGenerating: false,
+          canCancel: false,
+          progress: 0,
+          statusText: 'Cancelled',
+        );
+        return null;
+      }
+
+      if (addedPages == 0) {
+        throw StateError('None of the selected images could be read.');
+      }
+
+      state = state.copyWith(
+        statusText: 'Saving PDF...',
+        progress: 0.95,
+        canCancel: false,
+      );
 
       final pdfBytes = await pdf.save();
 
-      final saveDir =
-          await ref.read(appSettingsProvider.notifier).getSaveDirectory();
-
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final firstName = state.images.first.name;
+      final firstName = items.first.name;
       final dot = firstName.lastIndexOf('.');
       final baseName = dot > 0 ? firstName.substring(0, dot) : firstName;
-      final fileName = 'pixeltools_${baseName}_$timestamp.pdf';
-      final outputPath = path.join(saveDir.path, fileName);
+      final fileName = '${baseName}_$timestamp.pdf';
 
-      final file = File(outputPath);
-      await file.writeAsBytes(pdfBytes, flush: true);
+      String outputPath;
+      if (session != null) {
+        // Saving inside the operation folder keeps Files grouped and never
+        // overwrites a previous result.
+        final target = await ref
+            .read(operationStoreProvider)
+            .resolveOutputPath(session.directory, fileName);
+        final file = File(target);
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(pdfBytes, flush: true);
+        outputPath = target;
+        await session.recordFile(target, pageCount: addedPages);
+        await session.complete();
+      } else {
+        // Fallback: keep the previous behaviour if the store is unavailable.
+        final saveDir =
+            await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+        outputPath = path.join(saveDir.path, 'pixeltools_$fileName');
+        await File(outputPath).writeAsBytes(pdfBytes, flush: true);
+      }
 
-      final fileSize = await file.length();
-      if (!await file.exists() || fileSize == 0) {
+      final fileSize = await File(outputPath).length();
+      if (!await File(outputPath).exists() || fileSize == 0) {
         throw Exception('PDF file was not created or is empty');
       }
 
       state = state.copyWith(
         isGenerating: false,
         progress: 1.0,
+        statusText: 'Completed',
         generatedPdfPath: outputPath,
       );
 
       return outputPath;
     } catch (e) {
+      await session?.fail('Image to PDF failed: $e');
       state = state.copyWith(
         isGenerating: false,
+        canCancel: false,
+        clearStatus: true,
         errorMessage: 'Failed to generate PDF: $e',
       );
       return null;
@@ -417,4 +551,54 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
         );
     }
   }
+}
+
+/// A page image that has been decoded, normalised and is ready to embed.
+@immutable
+class _PreparedPage {
+  const _PreparedPage({
+    required this.bytes,
+    required this.width,
+    required this.height,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+}
+
+/// Decodes an image and returns embeddable bytes plus its real dimensions.
+///
+/// Runs in a background isolate. Normalising here also removes a latent bug
+/// where WebP/BMP/TIFF sources were passed straight to `pw.MemoryImage`.
+_PreparedPage? _preparePageWorker(Map<String, Object?> params) {
+  final source = params['bytes'] as Uint8List;
+  final optimized = params['optimized'] as bool? ?? true;
+  final quality = (params['quality'] as num?)?.toInt() ?? 90;
+
+  final decoded = img.decodeImage(source);
+  if (decoded == null) return null;
+
+  final format = FileTypeDetector.imageFormatFromSignature(source);
+  Uint8List output;
+
+  if (optimized) {
+    output = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+  } else if (format == 'jpg' || format == 'png') {
+    // Already embeddable at full quality — never re-encode.
+    output = source;
+  } else if (decoded.hasAlpha) {
+    final flattened = img.Image(width: decoded.width, height: decoded.height);
+    img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(flattened, decoded);
+    output = Uint8List.fromList(img.encodePng(flattened));
+  } else {
+    output = Uint8List.fromList(img.encodePng(decoded));
+  }
+
+  return _PreparedPage(
+    bytes: output,
+    width: decoded.width,
+    height: decoded.height,
+  );
 }

@@ -19,6 +19,7 @@ import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
 import '../../features/files/presentation/files_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
+import '../../features/pdf_viewer/presentation/pdf_viewer_screen.dart';
 import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 // import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
 import '../../features/settings/presentation/settings_screen.dart';
@@ -175,6 +176,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) =>
             const _MaterialPage(child: ImageToPdfScreen()),
       ),
+      // In-app PDF viewer. The file is passed through `extra` so any screen can
+      // deep-link into it without a second lookup.
+      GoRoute(
+        path: '/pdf/viewer',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) {
+          final extra = state.extra;
+          final args = extra is Map ? extra : const <String, dynamic>{};
+          return _MaterialPage(
+            child: PdfViewerScreen(
+              filePath: args['path'] as String? ?? '',
+              title: args['title'] as String?,
+              initialPage: (args['page'] as num?)?.toInt() ?? 1,
+            ),
+          );
+        },
+      ),
+
       // TODO: Re-enable premium route in upcoming version with premium features
       // GoRoute(
       //   path: '/premium',

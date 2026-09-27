@@ -4,10 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
+import '../models/collage_palette.dart';
 import '../notifiers/collage_notifier.dart';
 
 class CollageToolbar extends ConsumerWidget {
@@ -197,53 +201,123 @@ class CollageToolbar extends ConsumerWidget {
   }
 
   void _showColorPicker(BuildContext context, WidgetRef ref) {
-    final colors = [
-      const Color(0xFFE8EAF6),
-      Colors.white,
-      Colors.black,
-      const Color(0xFFFFF3E0),
-      const Color(0xFFE8F5E9),
-      const Color(0xFFE3F2FD),
-      const Color(0xFFFCE4EC),
-      const Color(0xFFF3E5F5),
-    ];
+    final current = ref.read(collageProvider).backgroundColor;
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Background Color',
-              style: Theme.of(context).textTheme.titleMedium,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              // Never taller than the screen; scrolls when the palette or the
+              // font scale needs more room.
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.62,
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: colors.map((color) {
-                return GestureDetector(
-                  onTap: () {
-                    ref
-                        .read(collageProvider.notifier)
-                        .setBackgroundColor(color);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.grey.shade300),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Background Color',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                );
-              }).toList(),
+                ),
+                const SizedBox(height: 10),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final group in CollagePalette.groups) ...[
+                          Text(
+                            group.label,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              for (final color in group.colors)
+                                _buildColorSwatch(
+                                  sheetContext,
+                                  ref,
+                                  color,
+                                  current,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildColorSwatch(
+    BuildContext context,
+    WidgetRef ref,
+    Color color,
+    Color current,
+  ) {
+    final theme = Theme.of(context);
+    final selected = color == current;
+    return Semantics(
+      label: 'Background colour',
+      button: true,
+      selected: selected,
+      child: Tooltip(
+        message: 'Use this background',
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            ref.read(collageProvider.notifier).setBackgroundColor(color);
+            Navigator.pop(context);
+          },
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outlineVariant,
+                width: selected ? 3 : 1,
+              ),
+            ),
+            child: selected
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 20,
+                    color: CollagePalette.isLight(color)
+                        ? Colors.black87
+                        : Colors.white,
+                  )
+                : null,
+          ),
         ),
       ),
     );
@@ -282,9 +356,15 @@ class CollageToolbar extends ConsumerWidget {
               bottom: MediaQuery.of(context).viewInsets.bottom,
               left: 20,
               right: 20,
-              top: 20,
+              top: 12,
             ),
-            child: SingleChildScrollView(
+            child: ConstrainedBox(
+              // Roughly half the screen (per the design brief) but never more
+              // than the available space, and always scrollable.
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.55,
+              ),
+              child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -457,6 +537,138 @@ class CollageToolbar extends ConsumerWidget {
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 4),
+                                  // Alignment + weight/style + opacity.
+                                  Row(
+                                    children: [
+                                      Icon(Icons.format_align_left,
+                                          size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: SegmentedButton<TextAlign>(
+                                          showSelectedIcon: false,
+                                          style: const ButtonStyle(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            tapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                          ),
+                                          segments: const [
+                                            ButtonSegment(
+                                              value: TextAlign.left,
+                                              icon: Icon(
+                                                  Icons.format_align_left,
+                                                  size: 16),
+                                              tooltip: 'Align left',
+                                            ),
+                                            ButtonSegment(
+                                              value: TextAlign.center,
+                                              icon: Icon(
+                                                  Icons.format_align_center,
+                                                  size: 16),
+                                              tooltip: 'Align centre',
+                                            ),
+                                            ButtonSegment(
+                                              value: TextAlign.right,
+                                              icon: Icon(
+                                                  Icons.format_align_right,
+                                                  size: 16),
+                                              tooltip: 'Align right',
+                                            ),
+                                          ],
+                                          selected: <TextAlign>{
+                                            layer.alignment
+                                          },
+                                          onSelectionChanged: (selection) {
+                                            ref
+                                                .read(
+                                                    collageProvider.notifier)
+                                                .updateTextLayer(
+                                                  layer.id,
+                                                  alignment: selection.first,
+                                                );
+                                            setState(() {});
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton.filledTonal(
+                                        tooltip: 'Bold',
+                                        isSelected: layer.bold,
+                                        icon: const Icon(
+                                            Icons.format_bold,
+                                            size: 18),
+                                        onPressed: () {
+                                          ref
+                                              .read(collageProvider.notifier)
+                                              .updateTextLayer(
+                                                layer.id,
+                                                bold: !layer.bold,
+                                              );
+                                          setState(() {});
+                                        },
+                                        style: IconButton.styleFrom(
+                                          minimumSize: const Size(36, 36),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton.filledTonal(
+                                        tooltip: 'Italic',
+                                        isSelected: layer.italic,
+                                        icon: const Icon(
+                                            Icons.format_italic,
+                                            size: 18),
+                                        onPressed: () {
+                                          ref
+                                              .read(collageProvider.notifier)
+                                              .updateTextLayer(
+                                                layer.id,
+                                                italic: !layer.italic,
+                                              );
+                                          setState(() {});
+                                        },
+                                        style: IconButton.styleFrom(
+                                          minimumSize: const Size(36, 36),
+                                          padding: EdgeInsets.zero,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.opacity, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Slider(
+                                          value: layer.opacity.clamp(0.05, 1.0),
+                                          min: 0.05,
+                                          max: 1.0,
+                                          divisions: 19,
+                                          label:
+                                              '${(layer.opacity * 100).round()}%',
+                                          onChanged: (val) {
+                                            ref
+                                                .read(
+                                                    collageProvider.notifier)
+                                                .updateTextLayer(
+                                                  layer.id,
+                                                  opacity: val,
+                                                );
+                                          },
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 40,
+                                        child: Text(
+                                          '${(layer.opacity * 100).round()}%',
+                                          textAlign: TextAlign.end,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                   Row(
                                     children: [
                                       const Icon(Icons.rotate_right, size: 16),
@@ -497,7 +709,8 @@ class CollageToolbar extends ConsumerWidget {
                 ],
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );
@@ -509,6 +722,20 @@ class CollageToolbar extends ConsumerWidget {
       if (bytes == null) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Keep an app-owned copy inside an operation folder so the collage is
+      // grouped and manageable in Files.
+      try {
+        final session = await OperationRecorder(
+          ref.read(operationStoreProvider),
+        ).start(OperationKind.collage, expectedItems: 1);
+        await session.saveBytes(bytes, fileName);
+        await session.complete();
+      } catch (_) {
+        // Grouping in Files is best effort; the gallery export below runs
+        // regardless.
+      }
+
       final saveResult = await saveImageBytes(bytes, fileName: fileName);
 
       if (context.mounted) {
@@ -524,7 +751,7 @@ class CollageToolbar extends ConsumerWidget {
             );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Saved to gallery'),
+            content: Text('Saved to the gallery and Files'),
             duration: Duration(seconds: 2),
           ),
         );

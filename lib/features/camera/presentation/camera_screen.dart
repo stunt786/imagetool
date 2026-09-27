@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../notifiers/document_batch_notifier.dart';
 import '../services/document_scanner_service.dart';
+import '../services/scanner_capability_service.dart';
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -25,10 +27,42 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _isScanningDocument = false;
   bool _hasAutoLaunchedMlKit = false;
 
+  /// Whether the Google ML Kit document scanner can be used. Probed once per
+  /// screen before anything is launched.
+  bool _mlScannerAvailable = true;
+  bool _capabilityResolved = false;
+  bool _capabilityProbeStarted = false;
+  bool _isCapturing = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Resolves the scanner capability, then routes: the Google scanner when the
+  /// device supports it, the built-in camera otherwise.
+  ///
+  /// The capability is checked *before* the fallback camera starts, so a
+  /// supported device never shows (or spends time initialising) the fallback
+  /// preview first.
+  Future<void> _resolveCapabilityThenRoute() async {
+    if (_capabilityProbeStarted) return;
+    _capabilityProbeStarted = true;
+    final available = await ref
+        .read(scannerCapabilityProvider)
+        .isGoogleDocumentScannerAvailable();
+    if (!mounted) return;
+    _capabilityResolved = true;
+    setState(() => _mlScannerAvailable = available);
+    _syncCameraLifecycle();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
@@ -53,15 +87,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final shell = StatefulNavigationShell.of(context);
       final isCameraTab = shell.currentIndex == 1;
 
-      if (isCameraTab && !_isCameraInitialized && !_isScanningDocument) {
-        _initializeCamera();
-      } else if (isCameraTab && !_hasAutoLaunchedMlKit) {
+      if (!isCameraTab) {
+        _hasAutoLaunchedMlKit = false;
+        if (_isCameraInitialized) _disposeCamera();
+        return;
+      }
+
+      // Resolve the capability first; _resolveCapabilityThenRoute calls back
+      // into this method once it knows which path to take.
+      if (!_capabilityResolved) {
+        unawaited(_resolveCapabilityThenRoute());
+        return;
+      }
+
+      // Supported device: open the Google scanner straight away and do not
+      // start the fallback camera at all.
+      if (_mlScannerAvailable && !_hasAutoLaunchedMlKit && !_isScanningDocument) {
         _hasAutoLaunchedMlKit = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_isScanningDocument) _launchMlKitScanner();
+          if (mounted && !_isScanningDocument && _mlScannerAvailable) {
+            _launchMlKitScanner();
+          }
         });
-      } else if (!isCameraTab && _isCameraInitialized) {
-        _disposeCamera();
+        return;
+      }
+
+      // Fallback path (unsupported device, or the user came back from the
+      // scanner): keep the built-in camera preview ready for capture.
+      if (!_isCameraInitialized && !_isInitializingCamera && !_isScanningDocument) {
+        _initializeCamera();
       }
     } catch (_) {}
   }
@@ -93,19 +147,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _cameras = await availableCameras();
         if (_cameras.isNotEmpty) {
           await _initCameraController(_cameras[_selectedCameraIndex]);
-          // Go straight into ML Kit scanning instead of showing a selection page.
-          if (mounted && !_hasAutoLaunchedMlKit) {
-            _hasAutoLaunchedMlKit = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_isScanningDocument) _launchMlKitScanner();
-            });
-          }
         }
       } catch (e) {
         debugPrint('Error initializing camera: $e');
       }
     }
     _isInitializingCamera = false;
+    // Re-run routing: on a supported device this is what opens the Google
+    // scanner once the fallback preview (if any) is ready.
+    if (mounted) _syncCameraLifecycle();
   }
 
   Future<void> _initCameraController(CameraDescription description) async {
@@ -147,22 +197,43 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _launchMlKitScanner() async {
     if (_isScanningDocument) return;
+    // Capability is re-checked here so a tap on a device without the Google
+    // scanner captures with the built-in camera instead of doing nothing.
+    if (!_mlScannerAvailable) {
+      await _captureWithFallbackCamera();
+      return;
+    }
+
     setState(() => _isScanningDocument = true);
     await _disposeCamera();
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     try {
-      final result = await DocumentScannerService.scanDocument();
-      if (result != null && result.files.isNotEmpty) {
-        await _startNewBatchIfNeeded();
-        final notifier = ref.read(documentBatchProvider.notifier);
-        for (final file in result.files) {
-          await notifier.addPageFromPath(file.path);
-        }
+      final outcome = await DocumentScannerService.scanDocument();
+
+      if (outcome.isUnavailable) {
+        MlKitScannerCapability.markUnavailable();
         if (mounted) {
-          HapticFeedback.lightImpact();
-          context.push('/camera/review');
+          setState(() => _mlScannerAvailable = false);
+          _showMessage(
+            'The Google document scanner is not available on this device. '
+            'Using the built-in camera instead.',
+          );
         }
+        return;
+      }
+
+      // Cancelled: the user changed their mind, so stay on this screen.
+      if (!outcome.isSuccess) return;
+
+      await _startNewBatchIfNeeded();
+      final notifier = ref.read(documentBatchProvider.notifier);
+      for (final file in outcome.files) {
+        await notifier.addPageFromPath(file.path);
+      }
+      if (mounted) {
+        HapticFeedback.lightImpact();
+        context.push('/camera/review');
       }
     } catch (_) {
     } finally {
@@ -170,6 +241,36 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         setState(() => _isScanningDocument = false);
         _syncCameraLifecycle();
       }
+    }
+  }
+
+  /// Fallback capture with the built-in camera.
+  ///
+  /// Used only when the Google ML Kit scanner is unavailable, so the scanner
+  /// tab is never a dead end. The captured page enters the same review,
+  /// crop/perspective, filter and PDF pipeline.
+  Future<void> _captureWithFallbackCamera() async {
+    if (_isCapturing) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      _showMessage('The camera is still starting up. Please try again.');
+      return;
+    }
+
+    setState(() => _isCapturing = true);
+    try {
+      final shot = await controller.takePicture();
+      await _startNewBatchIfNeeded();
+      await ref
+          .read(documentBatchProvider.notifier)
+          .addPageFromPath(shot.path);
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      context.push('/camera/review');
+    } catch (_) {
+      _showMessage('Could not capture the photo. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
     }
   }
 
@@ -209,7 +310,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   _cameraControl(
                     icon: Icons.close_rounded,
-                    onTap: () => context.go('/tools'),
+                    onTap: () {
+                      _hasAutoLaunchedMlKit = true;
+                      final shell = StatefulNavigationShell.of(context);
+                      shell.goBranch(0, initialLocation: shell.currentIndex == 0);
+                    },
                   ),
                   const Spacer(),
                   const Text(
@@ -249,7 +354,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   GestureDetector(
-                    onTap: _isScanningDocument ? null : _launchMlKitScanner,
+                    onTap: (_isScanningDocument || _isCapturing)
+                        ? null
+                        : (_mlScannerAvailable
+                            ? _launchMlKitScanner
+                            : _captureWithFallbackCamera),
                     behavior: HitTestBehavior.opaque,
                     child: Container(
                       width: 76,
@@ -264,7 +373,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           color: Colors.white,
                           shape: BoxShape.circle,
                         ),
-                        child: _isScanningDocument
+                        child: (_isScanningDocument || _isCapturing)
                             ? const Padding(
                                 padding: EdgeInsets.all(22),
                                 child: CircularProgressIndicator(
@@ -272,11 +381,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   color: Colors.black,
                                 ),
                               )
-                            : const Icon(
-                                Icons.document_scanner_rounded,
+                            : Icon(
+                                _mlScannerAvailable
+                                    ? Icons.document_scanner_rounded
+                                    : Icons.camera_alt_rounded,
                                 color: Colors.black,
                               ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _mlScannerAvailable
+                        ? 'Google document scanner'
+                        : 'Built-in camera (document scanner unavailable)',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],

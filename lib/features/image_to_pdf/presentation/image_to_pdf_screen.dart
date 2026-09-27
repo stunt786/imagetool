@@ -77,8 +77,12 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         child: Column(
           children: [
             if (_showSettings)
-              Flexible(
-                flex: 0,
+              // Bounded and scrollable: an unbounded settings panel overflows
+              // the column in landscape.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+                ),
                 child: SingleChildScrollView(
                   padding: EdgeInsets.fromLTRB(
                     16,
@@ -110,55 +114,69 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
   Widget _buildEmptyState(BuildContext context, ImageToPdfNotifier notifier) {
     final theme = Theme.of(context);
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.image_outlined,
-                size: 64,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+    // Scrollable and size-aware so the empty state never overflows on a small
+    // phone or in landscape.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final badgeSize = (constraints.maxHeight * 0.22).clamp(44.0, 64.0);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - 48).clamp(0.0, 4000.0),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'No images selected',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(badgeSize * 0.375),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.image_outlined,
+                    size: badgeSize,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'No images selected',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select images to convert to PDF',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  onPressed: () {
+                    notifier.pickImages(context);
+                    InterstitialTracker.instance.trackAction();
+                  },
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const Text('Select Images'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Select images to convert to PDF',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: () {
-                notifier.pickImages(context);
-                InterstitialTracker.instance.trackAction();
-              },
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: const Text('Select Images'),
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -177,14 +195,15 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         final item = state.images[index];
 
         return ReorderableDragStartListener(
-          key: ValueKey(item.path),
+          key: ValueKey(item.id),
           index: index,
           child: ImageThumbnailCard(
             index: index,
-            imageBytes: item.imageBytes ?? Uint8List(0),
+            imageBytes: item.previewBytes ?? item.imageBytes ?? Uint8List(0),
             imageName: item.name,
             imageSize: item.sizeBytes,
             totalImages: state.images.length,
+            isLoading: item.isLoading,
             onRemove: () => notifier.removeImage(index),
             onSwapBefore:
                 index > 0 ? () => notifier.swapImage(index, index - 1) : null,
@@ -215,19 +234,88 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         ],
       ),
       child: SafeArea(
-        child: state.isGenerating
-            ? Column(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (state.isLoadingImages) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Loading images ${state.loadedCount} of ${state.loadTotal}...',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.secondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${state.loadProgress.toInt()}%',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: state.loadProgress / 100,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (state.isGenerating)
+              Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  LinearProgressIndicator(value: state.progress),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Generating PDF... ${(state.progress * 100).toInt()}%',
-                    style: theme.textTheme.bodyMedium,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          state.statusText ?? 'Generating PDF...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${(state.progress * 100).toInt()}%',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      if (state.canCancel)
+                        TextButton(
+                          onPressed: notifier.cancelGeneration,
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 32),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: state.progress,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(3),
                   ),
                 ],
               )
-            : Row(
+            else
+              Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
@@ -240,13 +328,17 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
                   Expanded(
                     flex: 2,
                     child: FilledButton.icon(
-                      onPressed: () => _generatePdf(context, notifier),
+                      onPressed: state.isLoadingImages
+                          ? null
+                          : () => _generatePdf(context, notifier),
                       icon: const Icon(Icons.save_alt),
                       label: const Text('Generate & Save PDF'),
                     ),
                   ),
                 ],
               ),
+          ],
+        ),
       ),
     );
   }

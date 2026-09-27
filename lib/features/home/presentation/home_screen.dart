@@ -9,7 +9,18 @@ import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../files/presentation/file_preview_screen.dart';
 
-const _imageTools = <_ToolData>[
+final _imageTools = <_ToolData>[
+  _ToolData(
+    title: 'Scan Docs',
+    subtitle: 'Scan documents to PDF',
+    icon: Icons.document_scanner_rounded,
+    route: '/camera',
+    accent: Color(0xFF0891B2),
+    onTap: (context) {
+      final shell = StatefulNavigationShell.of(context);
+      shell.goBranch(1, initialLocation: shell.currentIndex == 1);
+    },
+  ),
   _ToolData(
     title: 'Resize',
     subtitle: 'Pixels, ratio, or presets',
@@ -71,7 +82,7 @@ const _pdfTools = <_ToolData>[
   ),
 ];
 
-const _allTools = [..._imageTools, ..._pdfTools];
+final _allTools = [..._imageTools, ..._pdfTools];
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -305,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           sliver: SliverList(
                             delegate: SliverChildListDelegate.fixed([
                               const SizedBox(height: 4),
-                              const _ToolsGrid(tools: _allTools),
+                              _ToolsGrid(tools: _allTools),
                               const SizedBox(height: 16),
                               _SectionHeader(
                                 title: 'Recent History',
@@ -409,7 +420,11 @@ class _ToolCardState extends State<_ToolCard> {
       onTapUp: (_) {
         setState(() => _pressed = false);
         InterstitialTracker.instance.trackNavigation();
-        context.push(data.route);
+        if (data.onTap != null) {
+          data.onTap!(context);
+        } else {
+          context.push(data.route);
+        }
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
@@ -439,7 +454,11 @@ class _ToolCardState extends State<_ToolCard> {
               borderRadius: BorderRadius.circular(18),
               onTap: () {
                 InterstitialTracker.instance.trackNavigation();
-                context.push(data.route);
+                if (data.onTap != null) {
+                  data.onTap!(context);
+                } else {
+                  context.push(data.route);
+                }
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
@@ -509,7 +528,11 @@ class _SearchToolRow extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         InterstitialTracker.instance.trackNavigation();
-        context.push(data.route);
+        if (data.onTap != null) {
+          data.onTap!(context);
+        } else {
+          context.push(data.route);
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -884,6 +907,7 @@ class _ToolData {
     required this.icon,
     required this.route,
     required this.accent,
+    this.onTap,
   });
 
   final String title;
@@ -891,6 +915,7 @@ class _ToolData {
   final IconData icon;
   final String route;
   final Color accent;
+  final void Function(BuildContext context)? onTap;
 }
 
 (String, String) _historyTimeParts(DateTime editedAt) {

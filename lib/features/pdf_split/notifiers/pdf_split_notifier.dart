@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/models/operation_folder.dart';
+import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -241,6 +244,12 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
           }
           break;
       }
+
+      await recordCompletedOperation(
+        ref.read(operationStoreProvider),
+        OperationKind.pdfSplit,
+        outputPaths,
+      );
 
       state = state.copyWith(
         isProcessing: false,
