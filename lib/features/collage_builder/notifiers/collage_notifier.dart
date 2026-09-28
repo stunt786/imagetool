@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
 
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -150,6 +152,41 @@ class CollageNotifier extends Notifier<CollageState> {
         layout: newLayout,
       );
     }
+  }
+
+  /// Loads images directly from file paths into the collage.
+  Future<void> loadFromPaths(List<String> paths) async {
+    final bytesList = <Uint8List>[];
+    final names = <String>[];
+    for (final path in paths.take(6)) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          bytesList.add(await file.readAsBytes());
+          names.add(p.basename(path));
+        }
+      } catch (_) {}
+    }
+    if (bytesList.isEmpty) return;
+
+    final count = bytesList.length;
+    final layout = CollageLayout.getLayoutForImageCount(count);
+    final slots = <CollageImageSlot>[];
+    for (int i = 0; i < layout.slotCount; i++) {
+      if (i < count) {
+        slots.add(CollageImageSlot(
+          index: i,
+          imageBytes: bytesList[i],
+          imageName: names[i],
+        ));
+      } else {
+        slots.add(CollageImageSlot(index: i));
+      }
+    }
+    state = state.copyWith(
+      images: slots,
+      layout: layout,
+    );
   }
 
   Future<void> addImageToSlot(BuildContext context, int slotIndex) async {

@@ -229,6 +229,17 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                             _filesForOperations(items),
                           )),
                 ),
+                if (_selected.length == 1)
+                  SelectionAction(
+                    icon: Icons.drive_file_rename_outline,
+                    label: 'Rename',
+                    onTap: _busy
+                        ? null
+                        : () {
+                            final ops = _selectedOperations();
+                            if (ops.isNotEmpty) _renameOperation(ops.first);
+                          },
+                  ),
                 SelectionAction(
                   icon: Icons.delete_outline,
                   label: 'Delete',

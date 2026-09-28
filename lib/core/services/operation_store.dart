@@ -348,6 +348,126 @@ class OperationStore extends ChangeNotifier {
     }
   }
 
+  /// Updates tags for an operation.
+  Future<bool> updateOperationTags(String operationId, List<String> tags) async {
+    await load();
+    final operation = operationById(operationId);
+    if (operation == null) return false;
+    _replaceOperation(
+      operation.copyWith(tags: tags, modifiedAt: DateTime.now()),
+    );
+    await _persist();
+    notifyListeners();
+    return true;
+  }
+
+  /// Reorders files within an operation folder.
+  Future<void> reorderFiles(String operationId, List<String> orderedFileIds) async {
+    await load();
+    final opFiles = _files.where((f) => f.operationId == operationId).toList();
+    if (opFiles.isEmpty) return;
+
+    // Create a map of id -> file
+    final map = {for (final f in opFiles) f.id: f};
+    final reordered = <AppFileItem>[];
+    for (final id in orderedFileIds) {
+      final f = map.remove(id);
+      if (f != null) reordered.add(f);
+    }
+    // Add any remaining
+    reordered.addAll(map.values);
+
+    _files.removeWhere((f) => f.operationId == operationId);
+    _files.addAll(reordered);
+    final op = operationById(operationId);
+    if (op != null && reordered.isNotEmpty) {
+      _replaceOperation(op.copyWith(
+        modifiedAt: DateTime.now(),
+        thumbnailPath: reordered.first.thumbnailPath ?? reordered.first.path,
+      ));
+    }
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Moves files from their current operation to [targetOperationId].
+  Future<int> moveFiles(Iterable<String> fileIds, String targetOperationId) async {
+    await load();
+    final targetOp = operationById(targetOperationId);
+    if (targetOp == null) return 0;
+    final targetDir = Directory(targetOp.directoryPath);
+    await targetDir.create(recursive: true);
+
+    var moved = 0;
+    for (final id in fileIds) {
+      final item = fileById(id);
+      if (item == null || item.operationId == targetOperationId) continue;
+      try {
+        final src = File(item.path);
+        final dest = await resolveOutputPath(targetDir, item.fileName);
+        if (await src.exists()) {
+          await src.rename(dest);
+        }
+        _replaceFile(item.copyWith(
+          path: dest,
+          fileName: path.basename(dest),
+        ));
+        // Update operationId
+        final idx = _files.indexWhere((f) => f.id == id);
+        if (idx != -1) {
+          _files[idx] = AppFileItem(
+            id: item.id,
+            operationId: targetOperationId,
+            path: dest,
+            fileName: path.basename(dest),
+            extension: item.extension,
+            mimeType: item.mimeType,
+            sizeBytes: item.sizeBytes,
+            createdAt: item.createdAt,
+            isPdf: item.isPdf,
+            isImage: item.isImage,
+            thumbnailPath: item.thumbnailPath,
+            pageCount: item.pageCount,
+          );
+        }
+        moved++;
+      } catch (_) {}
+    }
+    _sortAndTrim();
+    await _persist();
+    notifyListeners();
+    return moved;
+  }
+
+  /// Copies files into [targetOperationId].
+  Future<int> copyFiles(Iterable<String> fileIds, String targetOperationId) async {
+    await load();
+    final targetOp = operationById(targetOperationId);
+    if (targetOp == null) return 0;
+    final targetDir = Directory(targetOp.directoryPath);
+    await targetDir.create(recursive: true);
+
+    var copied = 0;
+    for (final id in fileIds) {
+      final item = fileById(id);
+      if (item == null) continue;
+      try {
+        final src = File(item.path);
+        final dest = await resolveOutputPath(targetDir, 'copy_${item.fileName}');
+        if (await src.exists()) {
+          await src.copy(dest);
+        }
+        await addOutputFile(
+          operationId: targetOperationId,
+          filePath: dest,
+          displayName: path.basename(dest),
+        );
+        copied++;
+      } catch (_) {}
+    }
+    return copied;
+  }
+
   /// Deletes an operation and everything it produced from app storage.
   ///
   /// The device gallery is never touched: only the app-owned folder is removed.

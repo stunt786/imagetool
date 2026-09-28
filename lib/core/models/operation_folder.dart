@@ -172,11 +172,13 @@ class OperationFolder {
     this.thumbnailPath,
     this.status = OperationStatus.pending,
     this.expectedItems = 0,
+    this.tags = const <String>[],
     this.errorMessage,
   });
 
   final String id;
   final OperationKind kind;
+  final List<String> tags;
 
   /// Editable, human friendly name, e.g. `Resize — 27 Sep 2026, 7:15 PM`.
   final String displayName;
@@ -232,6 +234,7 @@ class OperationFolder {
     int? expectedItems,
     String? thumbnailPath,
     OperationStatus? status,
+    List<String>? tags,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -246,6 +249,7 @@ class OperationFolder {
       expectedItems: expectedItems ?? this.expectedItems,
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       status: status ?? this.status,
+      tags: tags ?? this.tags,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -261,6 +265,7 @@ class OperationFolder {
         'expectedItems': expectedItems,
         'thumbnailPath': thumbnailPath,
         'status': status.name,
+        'tags': tags,
         'errorMessage': errorMessage,
       };
 
@@ -284,6 +289,8 @@ class OperationFolder {
       expectedItems: (json['expectedItems'] as num?)?.toInt() ?? 0,
       thumbnailPath: json['thumbnailPath'] as String?,
       status: OperationStatus.fromName(json['status'] as String?),
+      tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+          const <String>[],
       errorMessage: json['errorMessage'] as String?,
     );
   }

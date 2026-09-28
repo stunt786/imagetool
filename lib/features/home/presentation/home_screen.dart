@@ -4,11 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:intl/intl.dart';
+
+import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../camera/presentation/camera_screen.dart';
+import '../../files/notifiers/operation_library_notifier.dart';
 import '../../files/presentation/file_preview_screen.dart';
+import '../../files/presentation/operation_folder_screen.dart';
+import '../../files/services/file_actions.dart';
+import '../../files/widgets/file_thumbnail.dart';
+import '../../files/widgets/selection_action_bar.dart';
 
 final _imageTools = <_ToolData>[
   _ToolData(
@@ -114,6 +122,77 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .toList();
   }
 
+  final Set<String> _selectedOperations = <String>{};
+  bool _busy = false;
+
+  void _toggleOperation(String id) {
+    setState(() {
+      if (_selectedOperations.contains(id)) {
+        _selectedOperations.remove(id);
+      } else {
+        _selectedOperations.add(id);
+      }
+    });
+  }
+
+  void _clearOperationSelection() {
+    if (!mounted) return;
+    setState(_selectedOperations.clear);
+  }
+
+  List<OperationFolder> _selectedOpsList(List<OperationFolder> all) {
+    return all.where((op) => _selectedOperations.contains(op.id)).toList();
+  }
+
+  List<AppFileItem> _filesForOps(List<OperationFolder> operations) {
+    return [
+      for (final op in operations)
+        ...ref.read(operationStoreProvider).filesFor(op.id),
+    ];
+  }
+
+  Future<void> _deleteSelectedOps(List<OperationFolder> all) async {
+    final ops = _selectedOpsList(all);
+    if (ops.isEmpty) return;
+    final files = _filesForOps(ops);
+    final confirmed = await FileActions.confirmDelete(
+      context,
+      title: ops.length == 1
+          ? 'Delete this operation?'
+          : 'Delete ${ops.length} operations?',
+      message: '${files.length} file(s) will be removed from this app.',
+    );
+    if (!confirmed) return;
+    setState(() => _busy = true);
+    try {
+      final notifier = ref.read(operationLibraryProvider.notifier);
+      for (final op in ops) {
+        await notifier.deleteOperation(op.id);
+      }
+      _clearOperationSelection();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _renameOp(OperationFolder operation) async {
+    final name = await FileActions.promptForName(
+      context,
+      title: 'Rename Operation',
+      initialValue: operation.displayName,
+    );
+    if (name == null) return;
+    await ref
+        .read(operationLibraryProvider.notifier)
+        .renameOperation(operation.id, name);
+  }
+
+  String? _thumbnailFor(OperationFolder op) {
+    if (op.thumbnailPath != null) return op.thumbnailPath;
+    final files = ref.read(operationStoreProvider).filesFor(op.id);
+    return files.isEmpty ? null : files.first.path;
+  }
+
   List<EditHistoryItem> _filteredHistory(List<EditHistoryItem> history) {
     if (_searchQuery.isEmpty) return [];
     return history
@@ -128,6 +207,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final library = ref.watch(operationLibraryProvider);
+    final operations = library.operations;
     final history = ref.watch(editHistoryProvider);
     final width = MediaQuery.sizeOf(context).width;
     final contentPadding = width >= 1200
@@ -142,6 +223,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final isSearching = _searchQuery.isNotEmpty;
 
     return Scaffold(
+      bottomNavigationBar: _selectedOperations.isNotEmpty
+          ? SelectionActionBar(
+              actions: [
+                SelectionAction(
+                  icon: Icons.share_outlined,
+                  label: 'Share',
+                  onTap: _busy
+                      ? null
+                      : () {
+                          final ops = _selectedOpsList(operations);
+                          final files = _filesForOps(ops);
+                          FileActions.share(context, files);
+                        },
+                ),
+                SelectionAction(
+                  icon: Icons.download_outlined,
+                  label: 'Save',
+                  onTap: _busy
+                      ? null
+                      : () {
+                          final ops = _selectedOpsList(operations);
+                          final files = _filesForOps(ops);
+                          FileActions.save(context, files);
+                        },
+                ),
+                if (_selectedOperations.length == 1)
+                  SelectionAction(
+                    icon: Icons.drive_file_rename_outline,
+                    label: 'Rename',
+                    onTap: _busy
+                        ? null
+                        : () {
+                            final ops = _selectedOpsList(operations);
+                            if (ops.isNotEmpty) _renameOp(ops.first);
+                          },
+                  ),
+                SelectionAction(
+                  icon: Icons.delete_outline,
+                  label: 'Delete',
+                  destructive: true,
+                  onTap: _busy ? null : () => _deleteSelectedOps(operations),
+                ),
+              ],
+            )
+          : null,
       body: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -326,15 +452,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               const SizedBox(height: 16),
                               _SectionHeader(
                                 title: 'Recent History',
-                                actionLabel: history.isNotEmpty ? 'See All' : null,
-                                onActionTap: history.isNotEmpty
-                                    ? () => context.push('/pdfs')
+                                actionLabel: (operations.isNotEmpty || history.isNotEmpty)
+                                    ? 'See All'
+                                    : null,
+                                onActionTap: (operations.isNotEmpty || history.isNotEmpty)
+                                    ? () => context.push('/history')
                                     : null,
                               ),
                               const SizedBox(height: 14),
-                              if (history.isEmpty)
-                                const _EmptyHistoryCard()
-                              else
+                              if (operations.isNotEmpty)
+                                ...operations.take(10).map(
+                                      (op) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: _OperationHistoryRow(
+                                          operation: op,
+                                          thumbnailPath: _thumbnailFor(op),
+                                          selected: _selectedOperations.contains(op.id),
+                                          onTap: () {
+                                            if (_selectedOperations.isNotEmpty) {
+                                              _toggleOperation(op.id);
+                                            } else {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => OperationFolderScreen(operationId: op.id),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                          onLongPress: () => _toggleOperation(op.id),
+                                          onToggleSelected: () => _toggleOperation(op.id),
+                                        ),
+                                      ),
+                                    )
+                              else if (history.isNotEmpty)
                                 ...history.take(10).toList().asMap().entries.map(
                                       (entry) => Padding(
                                         padding: const EdgeInsets.only(bottom: 14),
@@ -350,21 +500,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                           ),
                                         ),
                                       ),
-                                    ),
-                              if (history.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 4),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton.icon(
-                                      onPressed: () => ref
-                                          .read(editHistoryProvider.notifier)
-                                          .clear(),
-                                      icon: const Icon(Icons.delete_outline_rounded),
-                                      label: const Text('Clear history'),
-                                    ),
-                                  ),
-                                ),
+                                    )
+                              else
+                                const _EmptyHistoryCard(),
                               const SizedBox(height: 110),
                             ]),
                           ),
@@ -965,3 +1103,122 @@ List<Color> _historyGradient(String tool) {
 
   return [color, Color.lerp(color, Colors.white, 0.35)!];
 }
+
+class _OperationHistoryRow extends StatelessWidget {
+  const _OperationHistoryRow({
+    required this.operation,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.onToggleSelected,
+    this.thumbnailPath,
+  });
+
+  final OperationFolder operation;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onToggleSelected;
+  final String? thumbnailPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final dateLabel =
+        DateFormat('MM/dd/yyyy HH:mm').format(operation.createdAt);
+
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: selected
+              ? scheme.secondaryContainer.withValues(alpha: 0.35)
+              : isDark
+                  ? const Color(0xFF1E2129)
+                  : scheme.surfaceContainerLowest,
+          border: Border.all(
+            color: selected
+                ? scheme.secondary
+                : scheme.outlineVariant.withValues(alpha: 0.5),
+            width: selected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            FileThumbnail(
+              path: thumbnailPath ?? '',
+              isPdf: operation.kind == OperationKind.imageToPdf ||
+                  operation.kind == OperationKind.pdfMerge ||
+                  operation.kind == OperationKind.pdfSplit ||
+                  operation.kind == OperationKind.pdfCompress,
+              size: 56,
+              borderRadius: 10,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    operation.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        dateLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '|',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.description_outlined,
+                        size: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${operation.itemCount}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Checkbox(
+              value: selected,
+              onChanged: (_) => onToggleSelected(),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

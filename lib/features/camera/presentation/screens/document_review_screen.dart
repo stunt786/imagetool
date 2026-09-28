@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/models/operation_folder.dart';
+import '../../../../core/services/operation_recorder.dart';
+import '../../../../core/services/operation_store_provider.dart';
 import '../../../../core/settings/app_settings.dart';
 import '../../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../../shared/services/watermark_helper.dart';
@@ -327,8 +330,17 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       return;
     }
     final batch = ref.read(documentBatchProvider);
-    // Move pages to persistent storage first: clearing the batch deletes the
-    // temp directory, which would otherwise orphan the history entry.
+    // Create an operation folder to keep all scanned pages together.
+    try {
+      final session = await OperationRecorder(ref.read(operationStoreProvider))
+          .start(OperationKind.scan, expectedItems: pages.length);
+      for (var i = 0; i < pages.length; i++) {
+        final name = 'scan_page_${(i + 1).toString().padLeft(2, '0')}.jpg';
+        await session.saveBytes(pages[i].displayBytes, name);
+      }
+      await session.complete();
+    } catch (_) {}
+
     var paths = await BatchStorageService.retainBatch(batch.id);
     paths = paths.isEmpty
         ? pages
@@ -336,25 +348,23 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
             .where((path) => path.isNotEmpty)
             .toList(growable: false)
         : paths;
-    if (paths.isEmpty) {
-      _showError('The scanned pages could not be retained.');
-      return;
+    if (paths.isNotEmpty) {
+      ref.read(editHistoryProvider.notifier).addGroup(
+            toolName: 'Camera Scan',
+            toolIcon: Icons.document_scanner_outlined,
+            count: paths.length,
+            filePath: paths.first,
+            thumbnailPath: paths.first,
+            pagePaths: paths,
+          );
     }
-    ref.read(editHistoryProvider.notifier).addGroup(
-          toolName: 'Camera Scan',
-          toolIcon: Icons.document_scanner_outlined,
-          count: paths.length,
-          filePath: paths.first,
-          thumbnailPath: paths.first,
-          pagePaths: paths,
-        );
     await ref.read(documentBatchProvider.notifier).clearBatch();
     if (!mounted) return;
     if (context.canPop()) {
       context.pop();
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Scan kept in Files for later export.')),
+      const SnackBar(content: Text('Scan saved in Files for later export.')),
     );
     context.go('/pdfs');
   }
@@ -381,6 +391,22 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   Future<void> _saveAsImages(List<ScannedPage> pages) async {
     final settings = ref.read(appSettingsProvider);
     try {
+      // 1) Keep in operation folder so it appears grouped in Files
+      try {
+        final session = await OperationRecorder(ref.read(operationStoreProvider))
+            .start(OperationKind.scan, expectedItems: pages.length);
+        for (var i = 0; i < pages.length; i++) {
+          final bytes = WatermarkHelper.applyGlobalWatermarkIfNeeded(
+            pages[i].displayBytes,
+            settings,
+          );
+          final name = 'scan_page_${(i + 1).toString().padLeft(2, '0')}.jpg';
+          await session.saveBytes(bytes, name);
+        }
+        await session.complete();
+      } catch (_) {}
+
+      // 2) Save to device gallery
       final results = await saveMultipleImages([
         for (var i = 0; i < pages.length; i++)
           (
@@ -395,7 +421,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${results.length} scan image(s) saved to Gallery'),
+          content: Text('${results.length} scan image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
           action: results.isNotEmpty
               ? SnackBarAction(

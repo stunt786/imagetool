@@ -119,6 +119,29 @@ class OperationLibraryNotifier extends Notifier<OperationLibrary> {
     return ok;
   }
 
+  Future<bool> updateOperationTags(String operationId, List<String> tags) async {
+    final ok = await _store.updateOperationTags(operationId, tags);
+    _emit();
+    return ok;
+  }
+
+  Future<void> reorderFiles(String operationId, List<String> orderedFileIds) async {
+    await _store.reorderFiles(operationId, orderedFileIds);
+    _emit();
+  }
+
+  Future<int> moveFiles(Iterable<String> fileIds, String targetOperationId) async {
+    final moved = await _store.moveFiles(fileIds, targetOperationId);
+    _emit();
+    return moved;
+  }
+
+  Future<int> copyFiles(Iterable<String> fileIds, String targetOperationId) async {
+    final copied = await _store.copyFiles(fileIds, targetOperationId);
+    _emit();
+    return copied;
+  }
+
   void _emit() {
     state = OperationLibrary(
       isLoading: false,

@@ -17,6 +17,7 @@ import '../../features/image_to_pdf/presentation/image_to_pdf_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
 import '../../features/files/presentation/files_screen.dart';
+import '../../features/files/presentation/history_screen.dart';
 import '../../features/pdf_merge/presentation/pdf_merge_screen.dart';
 import '../../features/pdf_split/presentation/pdf_split_screen.dart';
 import '../../features/pdf_viewer/presentation/pdf_viewer_screen.dart';
@@ -175,6 +176,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (context, state) =>
             const _MaterialPage(child: ImageToPdfScreen()),
+      ),
+      GoRoute(
+        path: '/history',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: HistoryScreen()),
       ),
       // In-app PDF viewer. The file is passed through `extra` so any screen can
       // deep-link into it without a second lookup.

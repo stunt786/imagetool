@@ -73,16 +73,34 @@ class OperationSession {
   }
 
   /// Records a file that was written somewhere else (for example by a service
-  /// that owns its own output path).
+  /// that owns its own output path). Ensures the file is stored inside the
+  /// operation's own folder.
   Future<AppFileItem?> recordFile(
     String filePath, {
     String? thumbnailPath,
     int? pageCount,
     String? displayName,
-  }) {
+  }) async {
+    var finalPath = filePath;
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        final opDir = Directory(operation.directoryPath);
+        final fileParent = path.canonicalize(file.parent.path);
+        final opDirPath = path.canonicalize(opDir.path);
+        if (fileParent != opDirPath) {
+          final target = await _store.resolveOutputPath(
+            opDir,
+            displayName ?? path.basename(filePath),
+          );
+          await file.copy(target);
+          finalPath = target;
+        }
+      }
+    } catch (_) {}
     return _store.addOutputFile(
       operationId: operation.id,
-      filePath: filePath,
+      filePath: finalPath,
       thumbnailPath: thumbnailPath,
       pageCount: pageCount,
       displayName: displayName,

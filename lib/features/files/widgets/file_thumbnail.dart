@@ -95,23 +95,113 @@ class _FileThumbnailState extends State<FileThumbnail> {
   }
 
   Widget _placeholder(ColorScheme scheme) {
-    if (widget.isPdf) {
-      return ColoredBox(
-        color: const Color(0xFFF4511E),
+    final lower = widget.path.toLowerCase();
+    if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv')) {
+      return Container(
+        color: const Color(0xFF1B3D2F),
         child: Center(
-          child: Text(
-            'PDF',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: widget.size * 0.26,
-              letterSpacing: 0.5,
+          child: Container(
+            width: widget.size * 0.6,
+            height: widget.size * 0.6,
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C853),
+              borderRadius: BorderRadius.circular(widget.borderRadius * 0.6),
+            ),
+            child: Center(
+              child: Text(
+                'X',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: widget.size * 0.32,
+                ),
+              ),
             ),
           ),
         ),
       );
     }
-    return ColoredBox(
+
+    if (lower.endsWith('.pptx') || lower.endsWith('.ppt')) {
+      return Container(
+        color: const Color(0xFF3E2723),
+        child: Center(
+          child: Container(
+            width: widget.size * 0.6,
+            height: widget.size * 0.6,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6D00),
+              borderRadius: BorderRadius.circular(widget.borderRadius * 0.6),
+            ),
+            child: Center(
+              child: Text(
+                'P',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: widget.size * 0.32,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
+      return Container(
+        color: const Color(0xFF1A237E),
+        child: Center(
+          child: Container(
+            width: widget.size * 0.6,
+            height: widget.size * 0.6,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2979FF),
+              borderRadius: BorderRadius.circular(widget.borderRadius * 0.6),
+            ),
+            child: Center(
+              child: Text(
+                'W',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: widget.size * 0.32,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (widget.isPdf || lower.endsWith('.pdf')) {
+      return Container(
+        color: const Color(0xFF2B1D1D),
+        child: Center(
+          child: Container(
+            width: widget.size * 0.62,
+            height: widget.size * 0.62,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE53935),
+              borderRadius: BorderRadius.circular(widget.borderRadius * 0.6),
+            ),
+            child: Center(
+              child: Text(
+                'PDF',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: widget.size * 0.22,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
       color: scheme.surfaceContainerHighest,
       child: Icon(
         Icons.image_outlined,
