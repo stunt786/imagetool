@@ -30,5 +30,6 @@
 *** Update Files page as in reference image files.jpg that has options like selection, filter, sorting, etc. Update page with all features as in image and exact visual design too. ***
 *** In History Section, Match the UI/UX design as in the reference image history.jpg and update the design accordingly. The history should have selection feature for different operations like delete, share, save to Gallary, rename. Also add proper image preview thumbnail with file name and date with number of images/files inside it. On click the file name or preview image on History/Files it should display contents inside it as in reference image prev.jpg.***
 *** Match the visual design and add features missing from prev.jpg , the content inside that folder should display all images/files independently that can be further modified with tools available in app. Also add feature to select the individual images for further actions as in reference image prev1.jpg with options like edit(crop, filters), delete, share, save to gallary, collage,Create PDF, etc.***
-*** For individual file operation, allow options 
+
+
 

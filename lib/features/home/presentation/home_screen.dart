@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
+import '../../camera/presentation/camera_screen.dart';
 import '../../files/presentation/file_preview_screen.dart';
 
 final _imageTools = <_ToolData>[
@@ -17,8 +18,13 @@ final _imageTools = <_ToolData>[
     route: '/camera',
     accent: Color(0xFF0891B2),
     onTap: (context) {
+      try {
+        ProviderScope.containerOf(context, listen: false)
+            .read(cameraLaunchTriggerProvider.notifier)
+            .state++;
+      } catch (_) {}
       final shell = StatefulNavigationShell.of(context);
-      shell.goBranch(1, initialLocation: shell.currentIndex == 1);
+      shell.goBranch(1, initialLocation: true);
     },
   ),
   _ToolData(
@@ -461,9 +467,11 @@ class _ToolCardState extends State<_ToolCard> {
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 48,
@@ -508,6 +516,7 @@ class _ToolCardState extends State<_ToolCard> {
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),

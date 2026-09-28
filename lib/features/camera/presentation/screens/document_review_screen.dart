@@ -109,6 +109,19 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     }
   }
 
+  void _exitToHome() {
+    if (!mounted) return;
+    final shell = StatefulNavigationShell.maybeOf(context);
+    if (context.canPop()) {
+      context.pop();
+    }
+    if (shell != null) {
+      shell.goBranch(0, initialLocation: true);
+    } else {
+      context.go('/tools');
+    }
+  }
+
   Future<void> _deletePage() async {
     final batch = ref.read(documentBatchProvider);
     if (_selectedIndex >= batch.pages.length) return;
@@ -133,10 +146,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       );
       if (shouldExit == true && mounted) {
         await ref.read(documentBatchProvider.notifier).clearBatch();
-        if (mounted) {
-          final shell = StatefulNavigationShell.of(context);
-          shell.goBranch(0, initialLocation: shell.currentIndex == 0);
-        }
+        _exitToHome();
       }
       return;
     }
@@ -197,6 +207,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
                 clearFilter: true,
               ),
             );
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.stages.isEmpty
@@ -238,6 +249,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
                 clearFilter: true,
               ),
             );
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Page straightened & cropped to paper edges.'),
@@ -338,6 +350,9 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         );
     await ref.read(documentBatchProvider.notifier).clearBatch();
     if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Scan kept in Files for later export.')),
     );
@@ -355,7 +370,12 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       );
     }
     await ref.read(documentBatchProvider.notifier).clearBatch();
-    if (mounted) context.push('/images/to-pdf');
+    if (mounted) {
+      if (context.canPop()) {
+        context.pop();
+      }
+      context.push('/images/to-pdf');
+    }
   }
 
   Future<void> _saveAsImages(List<ScannedPage> pages) async {
@@ -371,8 +391,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
             fileName: 'scan_page_${i + 1}.jpg',
           ),
       ]);
-      if (!mounted) return;
       await ref.read(documentBatchProvider.notifier).clearBatch();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${results.length} scan image(s) saved to Gallery'),
@@ -392,8 +412,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         ),
       );
       if (mounted) {
-        final shell = StatefulNavigationShell.of(context);
-        shell.goBranch(0, initialLocation: shell.currentIndex == 0);
+        _exitToHome();
       }
     } catch (error) {
       _showError('Saving failed: $error');
@@ -414,68 +433,72 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   @override
   Widget build(BuildContext context) {
     final batch = ref.watch(documentBatchProvider);
-    if (!batch.hasPages) return _buildEmptyState();
+    if (!batch.hasPages) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _exitToHome();
+      });
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+    }
 
     final safeIndex = _selectedIndex.clamp(0, batch.pages.length - 1);
     final page = batch.pages[safeIndex];
-    return Scaffold(
-      backgroundColor: const Color(0xFF111214),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _TopBar(
-              pageNumber: safeIndex + 1,
-              pageCount: batch.pages.length,
-              isBusy: _isBusy,
-              onClose: () => _confirmDiscard(batch),
-              onDone: _finish,
-              canUndo: batch.undoDepth > 0,
-              canRedo: batch.redoDepth > 0,
-              onUndo: ref.read(documentBatchProvider.notifier).undo,
-              onRedo: ref.read(documentBatchProvider.notifier).redo,
-            ),
-            Expanded(
-              child: _LargePagePreview(
-                page: page,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _confirmDiscard(batch);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF111214),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _TopBar(
+                pageNumber: safeIndex + 1,
+                pageCount: batch.pages.length,
                 isBusy: _isBusy,
-                onTap: () => _showFullPreview(page),
+                onClose: () => _confirmDiscard(batch),
+                onDone: _finish,
+                canUndo: batch.undoDepth > 0,
+                canRedo: batch.redoDepth > 0,
+                onUndo: ref.read(documentBatchProvider.notifier).undo,
+                onRedo: ref.read(documentBatchProvider.notifier).redo,
               ),
-            ),
-            _Filmstrip(
-              pages: batch.pages,
-              selectedIndex: safeIndex,
-              onSelect: (index) => setState(() => _selectedIndex = index),
-              onAdd: _addPage,
-            ),
-            _EditorToolbar(
-              onSmartFix: _smartFixPage,
-              onFlatten: _autoFlattenPage,
-              onCrop: _openCrop,
-              onEnhance: _openFilter,
-              onMagicRemove: _openMagicRemove,
-              onRotate: _rotatePage,
-              onRetake: _retakePage,
-              onDelete: _deletePage,
-            ),
-          ],
+              Expanded(
+                child: _LargePagePreview(
+                  page: page,
+                  isBusy: _isBusy,
+                  onTap: () => _showFullPreview(page),
+                ),
+              ),
+              _Filmstrip(
+                pages: batch.pages,
+                selectedIndex: safeIndex,
+                onSelect: (index) => setState(() => _selectedIndex = index),
+                onAdd: _addPage,
+              ),
+              _EditorToolbar(
+                onSmartFix: _smartFixPage,
+                onFlatten: _autoFlattenPage,
+                onCrop: _openCrop,
+                onEnhance: _openFilter,
+                onMagicRemove: _openMagicRemove,
+                onRotate: _rotatePage,
+                onRetake: _retakePage,
+                onDelete: _deletePage,
+              ),
+            ],
+          ),
         ),
-      ),
-      bottomNavigationBar: _BottomBar(
-        onAdd: _addPage,
-        onDone: _finish,
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF111214),
-      body: Center(
-        child: FilledButton.icon(
-          onPressed: _addPage,
-          icon: const Icon(Icons.document_scanner_outlined),
-          label: const Text('Scan page'),
+        bottomNavigationBar: _BottomBar(
+          onAdd: _addPage,
+          onDone: _finish,
         ),
       ),
     );
@@ -501,10 +524,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     );
     if (discard == true && mounted) {
       await ref.read(documentBatchProvider.notifier).clearBatch();
-      if (mounted) {
-        final shell = StatefulNavigationShell.of(context);
-        shell.goBranch(0, initialLocation: shell.currentIndex == 0);
-      }
+      _exitToHome();
     }
   }
 

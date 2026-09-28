@@ -6,9 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../shell/presentation/shell_index_scope.dart';
 import '../notifiers/document_batch_notifier.dart';
 import '../services/document_scanner_service.dart';
 import '../services/scanner_capability_service.dart';
+
+final cameraLaunchTriggerProvider = StateProvider<int>((ref) => 0);
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -34,10 +37,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _capabilityProbeStarted = false;
   bool _isCapturing = false;
 
+  /// Active shell branch index, refreshed on every dependency change.
+  int? _shellIndex;
+  int? _previousShellIndex;
+
+  /// Branch index of the scanner tab inside the shell.
+  static const int _cameraBranchIndex = 1;
+
+  int get _activeShellIndex {
+    final scopeIndex = ShellIndexScope.maybeOf(context);
+    if (scopeIndex != null) return scopeIndex;
+    if (_shellIndex != null) return _shellIndex!;
+    try {
+      return StatefulNavigationShell.of(context).currentIndex;
+    } catch (_) {
+      return _cameraBranchIndex;
+    }
+  }
+
+  /// True when the Google document scanner is the active capture path.
+  bool get _useGoogleScanner =>
+      resolveCapturePath(
+        googleScannerAvailable: _mlScannerAvailable,
+        preferBuiltInCamera: false,
+      ) ==
+      CapturePath.googleScanner;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_resolveCapabilityThenRoute());
   }
 
   /// Resolves the scanner capability, then routes: the Google scanner when the
@@ -68,8 +98,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final shell = StatefulNavigationShell.of(context);
-    if (shell.currentIndex != 1) {
+    final newIndex = ShellIndexScope.maybeOf(context) ??
+        (() {
+          try {
+            return StatefulNavigationShell.of(context).currentIndex;
+          } catch (_) {
+            return null;
+          }
+        })();
+
+    if (newIndex != null && newIndex != _cameraBranchIndex) {
+      _previousShellIndex = newIndex;
+    }
+
+    final isEnteringCamera =
+        newIndex == _cameraBranchIndex && _shellIndex != _cameraBranchIndex;
+    _shellIndex = newIndex;
+
+    // Only reset when initially mounting or entering from another branch
+    if (isEnteringCamera) {
       _hasAutoLaunchedMlKit = false;
     }
     _syncCameraLifecycle();
@@ -84,8 +131,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _syncCameraLifecycle() {
     try {
-      final shell = StatefulNavigationShell.of(context);
-      final isCameraTab = shell.currentIndex == 1;
+      final isCameraTab = _activeShellIndex == _cameraBranchIndex;
 
       if (!isCameraTab) {
         _hasAutoLaunchedMlKit = false;
@@ -100,20 +146,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return;
       }
 
-      // Supported device: open the Google scanner straight away and do not
-      // start the fallback camera at all.
-      if (_mlScannerAvailable && !_hasAutoLaunchedMlKit && !_isScanningDocument) {
-        _hasAutoLaunchedMlKit = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_isScanningDocument && _mlScannerAvailable) {
+      // Supported device: open the Google scanner straight away and never
+      // start the built-in camera.
+      if (_useGoogleScanner) {
+        if (!_hasAutoLaunchedMlKit && !_isScanningDocument) {
+          _hasAutoLaunchedMlKit = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _isScanningDocument || !_useGoogleScanner) return;
+            if (_activeShellIndex != _cameraBranchIndex) return;
             _launchMlKitScanner();
-          }
-        });
+          });
+        }
         return;
       }
 
-      // Fallback path (unsupported device, or the user came back from the
-      // scanner): keep the built-in camera preview ready for capture.
+      // Built-in camera path: only for unsupported devices.
       if (!_isCameraInitialized && !_isInitializingCamera && !_isScanningDocument) {
         _initializeCamera();
       }
@@ -197,19 +244,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _launchMlKitScanner() async {
     if (_isScanningDocument) return;
-    // Capability is re-checked here so a tap on a device without the Google
-    // scanner captures with the built-in camera instead of doing nothing.
-    if (!_mlScannerAvailable) {
+    _hasAutoLaunchedMlKit = true;
+    // Safety net: if the Google scanner is not the active path, capture with
+    // the built-in camera instead of doing nothing.
+    if (!_useGoogleScanner) {
       await _captureWithFallbackCamera();
       return;
     }
 
     setState(() => _isScanningDocument = true);
-    await _disposeCamera();
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_controller != null) {
+      await _disposeCamera();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
 
     try {
-      final outcome = await DocumentScannerService.scanDocument();
+      final outcome = await DocumentScannerService.scanDocument(
+        capability: ref.read(scannerCapabilityProvider),
+      );
 
       if (outcome.isUnavailable) {
         MlKitScannerCapability.markUnavailable();
@@ -223,8 +275,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return;
       }
 
-      // Cancelled: the user changed their mind, so stay on this screen.
-      if (!outcome.isSuccess) return;
+      // Cancelled: the user changed their mind or backed out.
+      if (!outcome.isSuccess) {
+        if (mounted) {
+          _returnToPreviousScreen();
+        }
+        return;
+      }
 
       await _startNewBatchIfNeeded();
       final notifier = ref.read(documentBatchProvider.notifier);
@@ -278,21 +335,70 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(cameraLaunchTriggerProvider, (previous, next) {
+      if (next != previous) {
+        _hasAutoLaunchedMlKit = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _useGoogleScanner && !_isScanningDocument) {
+            _launchMlKitScanner();
+          }
+        });
+      }
+    });
+
     if (!_isCameraInitialized && _controller == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _syncCameraLifecycle();
       });
     }
 
-    if (!_isCameraInitialized || _controller == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
-      );
-    }
+    final child = _useGoogleScanner
+        ? _buildGoogleScannerView()
+        : (!_isCameraInitialized || _controller == null)
+            ? const Scaffold(
+                backgroundColor: Colors.black,
+                body: Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              )
+            : _buildFallbackCameraView();
 
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _returnToPreviousScreen();
+      },
+      child: child,
+    );
+  }
+
+  void _returnToPreviousScreen() {
+    _hasAutoLaunchedMlKit = false;
+    try {
+      final shell = StatefulNavigationShell.of(context);
+      shell.goBranch(_previousShellIndex ?? 0, initialLocation: true);
+    } catch (_) {
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/tools');
+      }
+    }
+  }
+
+  void _handleClose() {
+    _returnToPreviousScreen();
+  }
+
+  Widget _buildGoogleScannerView() {
+    return const Scaffold(
+      backgroundColor: Colors.black,
+      body: SizedBox.expand(),
+    );
+  }
+
+  Widget _buildFallbackCameraView() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -310,11 +416,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   _cameraControl(
                     icon: Icons.close_rounded,
-                    onTap: () {
-                      _hasAutoLaunchedMlKit = true;
-                      final shell = StatefulNavigationShell.of(context);
-                      shell.goBranch(0, initialLocation: shell.currentIndex == 0);
-                    },
+                    onTap: _handleClose,
                   ),
                   const Spacer(),
                   const Text(
@@ -356,9 +458,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   GestureDetector(
                     onTap: (_isScanningDocument || _isCapturing)
                         ? null
-                        : (_mlScannerAvailable
-                            ? _launchMlKitScanner
-                            : _captureWithFallbackCamera),
+                        : _captureWithFallbackCamera,
                     behavior: HitTestBehavior.opaque,
                     child: Container(
                       width: 76,
@@ -381,21 +481,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                                   color: Colors.black,
                                 ),
                               )
-                            : Icon(
-                                _mlScannerAvailable
-                                    ? Icons.document_scanner_rounded
-                                    : Icons.camera_alt_rounded,
+                            : const Icon(
+                                Icons.camera_alt_rounded,
                                 color: Colors.black,
                               ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    _mlScannerAvailable
-                        ? 'Google document scanner'
-                        : 'Built-in camera (document scanner unavailable)',
-                    style: const TextStyle(
+                  const Text(
+                    'Built-in camera',
+                    style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,

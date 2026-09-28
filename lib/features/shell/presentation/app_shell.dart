@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/banner_ad_widget.dart';
+import '../../camera/presentation/camera_screen.dart';
+import 'shell_index_scope.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.navigationShell});
@@ -20,7 +23,12 @@ class AppShell extends StatelessWidget {
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,
-      body: navigationShell,
+      // Branch screens stay mounted in the shell's IndexedStack, so this is
+      // the only place they can observe which branch is active.
+      body: ShellIndexScope(
+        index: navigationShell.currentIndex,
+        child: navigationShell,
+      ),
       bottomNavigationBar: isMainScreen
           ? SafeArea(
               minimum: EdgeInsets.zero,
@@ -37,13 +45,13 @@ class AppShell extends StatelessWidget {
   }
 }
 
-class _BottomNavBar extends StatelessWidget {
+class _BottomNavBar extends ConsumerWidget {
   const _BottomNavBar({required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
 
     final destinations = [
@@ -87,10 +95,17 @@ class _BottomNavBar extends StatelessWidget {
           return _NavItem(
             data: item,
             selected: selected,
-            onTap: () => navigationShell.goBranch(
-              index,
-              initialLocation: index == navigationShell.currentIndex,
-            ),
+            onTap: () {
+              if (index == 1) {
+                ref.read(cameraLaunchTriggerProvider.notifier).state++;
+                navigationShell.goBranch(1, initialLocation: true);
+              } else {
+                navigationShell.goBranch(
+                  index,
+                  initialLocation: index == navigationShell.currentIndex,
+                );
+              }
+            },
           );
         }),
       ),

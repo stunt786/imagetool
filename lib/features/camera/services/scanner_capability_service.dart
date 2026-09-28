@@ -3,6 +3,29 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Which capture path the scanner tab should use.
+enum CapturePath {
+  /// The Google ML Kit document scanner.
+  googleScanner,
+
+  /// The app's own camera preview, used for manual capture.
+  builtInCamera,
+}
+
+/// Pure routing rule for the scanner tab.
+///
+/// The built-in camera is only used when the Google scanner is genuinely
+/// unavailable, or when the user explicitly asks for it. In particular,
+/// cancelling a scan or returning from the review screen must never silently
+/// switch to the fallback camera.
+CapturePath resolveCapturePath({
+  required bool googleScannerAvailable,
+  required bool preferBuiltInCamera,
+}) =>
+    googleScannerAvailable && !preferBuiltInCamera
+        ? CapturePath.googleScanner
+        : CapturePath.builtInCamera;
+
 /// Decides whether the Google ML Kit document scanner can be used *before* the
 /// scanner UI is opened, so unsupported devices go straight to the built-in
 /// camera instead of opening a scanner that cannot work.

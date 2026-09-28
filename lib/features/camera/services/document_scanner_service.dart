@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 
 import 'scanner_capability_service.dart';
@@ -47,9 +48,15 @@ class DocumentScanOutcome {
 /// Distinguishes *cancelled* from *unavailable* so the caller never falls back
 /// to the built-in camera just because the user changed their mind.
 class DocumentScannerService {
-  static Future<DocumentScanOutcome> scanDocument() async {
+  /// Runs one ML Kit document scan.
+  ///
+  /// [capability] is injectable for tests; production callers use the default.
+  static Future<DocumentScanOutcome> scanDocument({
+    ScannerCapabilityService? capability,
+  }) async {
     // Never open a scanner the device cannot run.
-    if (!await isAvailable()) {
+    if (!await (capability ?? MlKitScannerCapability())
+        .isGoogleDocumentScannerAvailable()) {
       return const DocumentScanOutcome.unavailable();
     }
 
@@ -74,10 +81,22 @@ class DocumentScannerService {
         status: DocumentScanStatus.success,
         files: imagePaths.map((path) => File(path)).toList(),
       );
-    } catch (e) {
+    } on PlatformException catch (e) {
+      // The Android plugin reports the user backing out of the scanner UI as
+      // a PlatformException("Operation cancelled"), never as an empty result.
+      // It must not demote the scanner, otherwise backing out of one scan
+      // permanently drops the app to the built-in camera.
+      if (_isUserCancellation(e)) {
+        debugPrint('ML Kit scanner cancelled by user');
+        return const DocumentScanOutcome.cancelled();
+      }
       // A real failure (missing Play services, scanner module unavailable,
       // permission problem): remember it so the next tap goes straight to the
       // built-in camera.
+      debugPrint('ML Kit scanner error: $e');
+      MlKitScannerCapability.markUnavailable();
+      return const DocumentScanOutcome.unavailable();
+    } catch (e) {
       debugPrint('ML Kit scanner error: $e');
       MlKitScannerCapability.markUnavailable();
       return const DocumentScanOutcome.unavailable();
@@ -88,7 +107,22 @@ class DocumentScannerService {
     }
   }
 
+  /// True when [error] is the scanner UI being dismissed by the user rather
+  /// than the scanner being unable to run.
+  static bool _isUserCancellation(PlatformException error) {
+    final text =
+        '${error.code} ${error.message ?? ""} ${error.details ?? ""}'
+            .toLowerCase();
+    return text.contains('cancel') ||
+        text.contains('user') ||
+        text.contains('back') ||
+        text.contains('dismiss') ||
+        text.contains('closed') ||
+        text.contains('abort');
+  }
+
   /// True when the ML Kit scanner should be offered.
-  static Future<bool> isAvailable() =>
-      MlKitScannerCapability().isGoogleDocumentScannerAvailable();
+  static Future<bool> isAvailable({ScannerCapabilityService? capability}) =>
+      (capability ?? MlKitScannerCapability())
+          .isGoogleDocumentScannerAvailable();
 }
