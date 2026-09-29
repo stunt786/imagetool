@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
 
+import '../../core/settings/app_settings.dart';
 import '../../features/image_resize/models/social_presets.dart';
 import '../../features/image_resize/services/image_processor_service.dart';
 
@@ -432,8 +433,9 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
 
   Future<ResizeResult?> compressToTargetSize(
     int targetBytes,
-    OutputImageFormat format,
-  ) async {
+    OutputImageFormat format, {
+    AppSettingsState? settings,
+  }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
@@ -444,6 +446,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         bytes: sourceBytes,
         targetBytes: targetBytes,
         format: format,
+        settings: settings,
       );
 
       if (result == null) {

@@ -6,6 +6,7 @@ import 'package:vector_math/vector_math_64.dart' as vec;
 
 import '../models/collage_state.dart';
 import '../notifiers/collage_notifier.dart';
+import 'collage_text_dialog.dart';
 
 class CollageCanvas extends ConsumerStatefulWidget {
   const CollageCanvas({super.key});
@@ -147,39 +148,39 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       top: top,
       width: width,
       height: height,
-      child: GestureDetector(
-        onTap: () => _handleSlotTap(context, index),
-        onScaleStart: (details) => _handleScaleStart(index, details),
-        onScaleUpdate: (details) => _handleScaleUpdate(index, details),
-        onScaleEnd: (details) => _handleScaleEnd(index),
-        onLongPressStart: (details) => _handleLongPressStart(index, details),
-        onLongPressEnd: (details) => _handleLongPressEnd(index),
-        behavior: HitTestBehavior.translucent,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: isDragSource
-                ? Colors.transparent
-                : isDragTarget
-                    ? Colors.blue.withValues(alpha: 0.2)
-                    : slot.hasImage
-                        ? Colors.transparent
-                        : const Color(0xFFD6E4FF),
-            border: Border.all(
-              color: isDragTarget
-                  ? Colors.blue
-                  : isDragSource
-                      ? Colors.blue.withValues(alpha: 0.5)
+      child: RepaintBoundary(
+        child: GestureDetector(
+          onTap: () => _handleSlotTap(context, index),
+          onScaleStart: (details) => _handleScaleStart(index, details),
+          onScaleUpdate: (details) => _handleScaleUpdate(index, details),
+          onScaleEnd: (details) => _handleScaleEnd(index),
+          onLongPressStart: (details) => _handleLongPressStart(index, details),
+          onLongPressEnd: (details) => _handleLongPressEnd(index),
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDragSource
+                  ? Colors.transparent
+                  : isDragTarget
+                      ? Colors.blue.withValues(alpha: 0.2)
                       : slot.hasImage
                           ? Colors.transparent
-                          : const Color(0xFF5B4DFF).withValues(alpha: 0.3),
-              width: isDragTarget ? 3 : isDragSource ? 2 : 1,
+                          : const Color(0xFFD6E4FF),
+              border: Border.all(
+                color: isDragTarget
+                    ? Colors.blue
+                    : isDragSource
+                        ? Colors.blue.withValues(alpha: 0.5)
+                        : slot.hasImage
+                            ? Colors.transparent
+                            : const Color(0xFF5B4DFF).withValues(alpha: 0.3),
+                width: isDragTarget ? 3 : isDragSource ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(state.cornerRadius),
             ),
-            borderRadius: BorderRadius.circular(state.cornerRadius),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(state.cornerRadius),
-            child: slot.hasImage && !isDragSource
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(state.cornerRadius),
+              child: slot.hasImage && !isDragSource
                 ? _buildImageContent(slot, width, height, index)
                 : slot.hasImage && isDragSource
                     ? Center(
@@ -198,6 +199,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
                       ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -537,174 +539,205 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
         translation: const Offset(-0.5, -0.5),
         child: Transform.rotate(
           angle: layer.rotation,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _activeTextLayerId = layer.id;
-              });
-            },
-            onScaleStart: (details) {
-              _initialTextRotation = layer.rotation;
-              _initialTextScale = layer.scale;
-              setState(() {
-                _activeTextLayerId = layer.id;
-              });
-            },
-            onScaleUpdate: (details) {
-              final deltaDx = details.focalPointDelta.dx / width;
-              final deltaDy = details.focalPointDelta.dy / height;
-              final newDx = (layer.normalizedOffset.dx + deltaDx).clamp(0.02, 0.98);
-              final newDy = (layer.normalizedOffset.dy + deltaDy).clamp(0.02, 0.98);
-              ref.read(collageProvider.notifier).setTextLayerOffset(layer.id, Offset(newDx, newDy));
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 44),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      _activeTextLayerId = layer.id;
+                    });
+                  },
+                  onDoubleTap: () {
+                    showCollageTextDialog(context, initialLayerId: layer.id);
+                  },
+                  onScaleStart: (details) {
+                    _initialTextRotation = layer.rotation;
+                    _initialTextScale = layer.scale;
+                    setState(() {
+                      _activeTextLayerId = layer.id;
+                    });
+                  },
+                  onScaleUpdate: (details) {
+                    final deltaDx = details.focalPointDelta.dx / width;
+                    final deltaDy = details.focalPointDelta.dy / height;
+                    final newDx = (layer.normalizedOffset.dx + deltaDx).clamp(0.02, 0.98);
+                    final newDy = (layer.normalizedOffset.dy + deltaDy).clamp(0.02, 0.98);
+                    ref.read(collageProvider.notifier).setTextLayerOffset(layer.id, Offset(newDx, newDy));
 
-              if (details.pointerCount > 1) {
-                final newScale = (_initialTextScale * details.scale).clamp(0.3, 5.0);
-                ref.read(collageProvider.notifier).setTextLayerScale(layer.id, newScale);
+                    if (details.pointerCount > 1) {
+                      final newScale = (_initialTextScale * details.scale).clamp(0.3, 5.0);
+                      ref.read(collageProvider.notifier).setTextLayerScale(layer.id, newScale);
 
-                final rotationDelta = details.rotation;
-                final newRotation = _initialTextRotation + rotationDelta;
-                ref.read(collageProvider.notifier).setTextLayerRotation(layer.id, newRotation);
-              }
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 100),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: isActive
-                      ? Colors.blueAccent
-                      : Colors.transparent,
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(8),
-                color: isActive
-                    ? Colors.blueAccent.withValues(alpha: 0.1)
-                    : Colors.transparent,
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: width * 0.9),
-                    child: Text(
-                      text,
-                      textAlign: layer.alignment,
-                      style: textStyle,
+                      final rotationDelta = details.rotation;
+                      final newRotation = _initialTextRotation + rotationDelta;
+                      ref.read(collageProvider.notifier).setTextLayerRotation(layer.id, newRotation);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: isActive
+                            ? Colors.blueAccent
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      color: isActive
+                          ? Colors.blueAccent.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: width * 0.9),
+                      child: Text(
+                        text,
+                        textAlign: layer.alignment,
+                        style: textStyle,
+                      ),
                     ),
                   ),
-                  if (isActive) ...[
-                    // Top 360° Rotation Handle with stalk
-                    Positioned(
-                      top: -42,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onPanStart: (_) {
-                                setState(() {
-                                  _activeTextLayerId = layer.id;
-                                });
-                              },
-                              onPanUpdate: (details) {
-                                final canvasBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-                                if (canvasBox != null) {
-                                  final localTouch = canvasBox.globalToLocal(details.globalPosition);
-                                  final dx = localTouch.dx - centerX;
-                                  final dy = localTouch.dy - centerY;
-                                  final angle = math.atan2(dy, dx) + (math.pi / 2);
-                                  ref.read(collageProvider.notifier).setTextLayerRotation(layer.id, angle);
-                                }
-                              },
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: Colors.blueAccent,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 2),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.3),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.rotate_right_rounded,
-                                  size: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              width: 2,
-                              height: 10,
-                              color: Colors.blueAccent,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Corner Handles for drag-resize
-                    Positioned(
-                      right: -12,
-                      bottom: -12,
-                      child: _buildCornerResizeHandle(layer, centerX, centerY),
-                    ),
-                    Positioned(
-                      left: -12,
-                      bottom: -12,
-                      child: _buildCornerResizeHandle(layer, centerX, centerY),
-                    ),
-                    Positioned(
-                      right: -12,
-                      top: -12,
-                      child: _buildCornerResizeHandle(layer, centerX, centerY),
-                    ),
-                    // Top-left delete handle
-                    Positioned(
-                      left: -12,
-                      top: -12,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () {
-                          ref.read(collageProvider.notifier).removeTextLayer(layer.id);
-                          setState(() {
-                            _activeTextLayerId = null;
-                          });
-                        },
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
+              if (isActive) ...[
+                // Top 360° Rotation Handle with stalk
+                Positioned(
+                  top: 2,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanStart: (_) {
+                            setState(() {
+                              _activeTextLayerId = layer.id;
+                            });
+                          },
+                          onPanUpdate: (details) {
+                            final canvasBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+                            if (canvasBox != null) {
+                              final localTouch = canvasBox.globalToLocal(details.globalPosition);
+                              final dx = localTouch.dx - centerX;
+                              final dy = localTouch.dy - centerY;
+                              final angle = math.atan2(dy, dx) + (math.pi / 2);
+                              ref.read(collageProvider.notifier).setTextLayerRotation(layer.id, angle);
+                            }
+                          },
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.rotate_right_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 2,
+                          height: 14,
+                          color: Colors.blueAccent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Corner Handles for drag-resize
+                Positioned(
+                  right: 4,
+                  bottom: 32,
+                  child: _buildCornerResizeHandle(layer, centerX, centerY),
+                ),
+                Positioned(
+                  left: 4,
+                  bottom: 32,
+                  child: _buildCornerResizeHandle(layer, centerX, centerY),
+                ),
+                // Top-right edit handle
+                Positioned(
+                  right: 4,
+                  top: 32,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      showCollageTextDialog(context, initialLayerId: layer.id);
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.blueAccent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.edit_rounded,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                // Top-left delete handle
+                Positioned(
+                  left: 4,
+                  top: 32,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      ref.read(collageProvider.notifier).removeTextLayer(layer.id);
+                      setState(() {
+                        _activeTextLayerId = null;
+                      });
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

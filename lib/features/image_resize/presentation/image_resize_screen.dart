@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -100,6 +101,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _isSyncingFields = false;
   _PresetCategory _presetCategory = _PresetCategory.profile;
   SocialPreset? _selectedSocialPreset;
+  static const String _recentSizesKey = 'recent_resize_sizes_v1';
   List<Size> _recentSizes = <Size>[
     const Size(1280, 960),
     const Size(1024, 768),
@@ -120,6 +122,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadRecentSizes();
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -422,6 +425,34 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     } catch (_) {}
 
     if (mounted && successCount > 0) {
+      if (_mode == _ResizeMode.dimensions || _mode == _ResizeMode.preset) {
+        final state = ref.read(imageEditProvider);
+        final target = _resolveTargetSize(state);
+        if (target != null) {
+          _rememberRecentSize(
+            Size(target.width.toDouble(), target.height.toDouble()),
+          );
+        }
+      } else if (_mode == _ResizeMode.bestFit) {
+        final maxWidth = int.tryParse(_bestFitWidthController.text);
+        final maxHeight = int.tryParse(_bestFitHeightController.text);
+        if (maxWidth != null &&
+            maxHeight != null &&
+            maxWidth > 0 &&
+            maxHeight > 0) {
+          _rememberRecentSize(
+            Size(maxWidth.toDouble(), maxHeight.toDouble()),
+          );
+        }
+      } else if (_mode == _ResizeMode.percentage) {
+        final state = ref.read(imageEditProvider);
+        if (state.hasImage) {
+          final factor = _percentage / 100;
+          final w = math.max(1, (state.width * factor).round());
+          final h = math.max(1, (state.height * factor).round());
+          _rememberRecentSize(Size(w.toDouble(), h.toDouble()));
+        }
+      }
       ref.read(editHistoryProvider.notifier).addGroup(
             toolName: 'Batch Resize',
             toolIcon: Icons.photo_size_select_large_rounded,
@@ -607,6 +638,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _mode = _ResizeMode.dimensions;
       _selectedSocialPreset = null;
     });
+    _rememberRecentSize(size);
     _refreshEstimate();
   }
 
@@ -1057,9 +1089,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     if (replaceOriginal == null || !mounted) return;
 
     final targetBytes = _targetSizeKB * 1024;
+    final appSettings = ref.read(appSettingsProvider);
     final result = await ref
         .read(imageEditProvider.notifier)
-        .compressToTargetSize(targetBytes, _outputFormat);
+        .compressToTargetSize(targetBytes, _outputFormat,
+            settings: appSettings);
 
     if (!mounted) return;
 
@@ -1078,6 +1112,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     ref
         .read(imageEditProvider.notifier)
         .replaceWithResult(result: result, fileName: fileName);
+    _rememberRecentSize(
+      Size(result.width.toDouble(), result.height.toDouble()),
+    );
     _syncInputsFromImage(result.width, result.height);
     _pushUndoState(result.bytes);
 
@@ -1085,7 +1122,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       await _recordEditedOutput(
         result.bytes,
         fileName,
-        OperationKind.imageEdit,
+        OperationKind.resize,
       );
       final saveResult = await saveImageBytes(
         result.bytes,
@@ -1413,7 +1450,50 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         1, (height * _aspectWidth + _aspectHeight ~/ 2) ~/ _aspectHeight);
   }
 
+  Future<void> _loadRecentSizes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getStringList(_recentSizesKey);
+      if (saved != null) {
+        final parsed = <Size>[];
+        for (final item in saved) {
+          final parts = item.split('x');
+          if (parts.length == 2) {
+            final w = double.tryParse(parts[0]);
+            final h = double.tryParse(parts[1]);
+            if (w != null && h != null && w > 0 && h > 0) {
+              parsed.add(Size(w, h));
+            }
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _recentSizes = parsed;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _persistRecentSizes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = _recentSizes
+          .map((s) => '${s.width.round()}x${s.height.round()}')
+          .toList();
+      await prefs.setStringList(_recentSizesKey, list);
+    } catch (_) {}
+  }
+
+  void _clearRecentSizes() {
+    setState(() {
+      _recentSizes = <Size>[];
+    });
+    _persistRecentSizes();
+  }
+
   void _rememberRecentSize(Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
     setState(() {
       _recentSizes = <Size>[
         size,
@@ -1422,8 +1502,9 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               item.width.round() != size.width.round() ||
               item.height.round() != size.height.round(),
         ),
-      ].take(6).toList(growable: false);
+      ].take(8).toList(growable: false);
     });
+    _persistRecentSizes();
   }
 
   String _buildOutputFileName({
@@ -1780,29 +1861,18 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FilledButton.icon(
-                  onPressed: () => _pickImage(allowMultiple: true),
-                  icon: const Icon(Icons.add_photo_alternate),
-                  label: const Text('Pick Images'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
-                  ),
+            FilledButton.icon(
+              onPressed: () => _pickImage(allowMultiple: true),
+              icon: const Icon(Icons.photo_library_rounded),
+              label: const Text('Pick Images'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 15),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _pickImage(allowMultiple: true),
-                  icon: const Icon(Icons.collections_rounded),
-                  label: const Text('Batch Resize'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
-                  ),
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 12),
             Text(
@@ -2295,21 +2365,22 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 ),
               ),
             ),
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              onPressed: () => setState(() => _recentSizes = <Size>[]),
-              child: Text(
-                'Clear',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w700,
+            if (_recentSizes.isNotEmpty)
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: _clearRecentSizes,
+                child: Text(
+                  'Clear',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         Wrap(
@@ -3155,11 +3226,65 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
   }
 
+  int _findClosestPresetIndex(int kb) {
+    int closestIndex = 0;
+    int minDiff = 1 << 30;
+    for (int i = 0; i < SocialPresets.targetFileSizeKB.length; i++) {
+      final diff = (SocialPresets.targetFileSizeKB[i] - kb).abs();
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIndex = i;
+      }
+    }
+    return closestIndex;
+  }
+
+  Future<void> _showCustomTargetSizeDialog() async {
+    final controller = TextEditingController(text: _targetSizeKB.toString());
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Target size (KB)'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Target File Size (KB)',
+            suffixText: 'KB',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final kb = int.tryParse(controller.text);
+              if (kb != null && kb > 0) {
+                Navigator.of(context).pop(kb);
+              }
+            },
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && mounted) {
+      setState(() {
+        _targetSizeKB = result;
+      });
+      _refreshEstimate();
+    }
+  }
+
   Widget _buildSmartCompressInputs(ImageEditState state) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
@@ -3180,46 +3305,86 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                   ),
                 ),
               ),
-              Text(
-                _targetSizeKB >= 1000
-                    ? '${(_targetSizeKB / 1000).toStringAsFixed(1)} MB'
-                    : '$_targetSizeKB KB',
-                style: TextStyle(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w800,
+              InkWell(
+                onTap: _showCustomTargetSizeDialog,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _targetSizeKB >= 1000
+                            ? '${(_targetSizeKB / 1000).toStringAsFixed(1)} MB'
+                            : '$_targetSizeKB KB',
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(Icons.edit_outlined,
+                          size: 14, color: scheme.primary),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 6),
           Slider(
             min: 0,
             max: (SocialPresets.targetFileSizeKB.length - 1).toDouble(),
             divisions: SocialPresets.targetFileSizeKB.length - 1,
-            value: SocialPresets.targetFileSizeKB
-                .indexOf(_targetSizeKB)
-                .clamp(0, SocialPresets.targetFileSizeKB.length - 1)
-                .toDouble(),
+            value: SocialPresets.targetFileSizeKB.contains(_targetSizeKB)
+                ? SocialPresets.targetFileSizeKB
+                    .indexOf(_targetSizeKB)
+                    .toDouble()
+                : _findClosestPresetIndex(_targetSizeKB).toDouble(),
             activeColor: scheme.primary,
             onChanged: (value) {
               setState(() {
                 _targetSizeKB = SocialPresets.targetFileSizeKB[value.round()];
               });
+              _refreshEstimate();
             },
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: SocialPresets.targetFileSizeKB
-                .map(
-                  (size) => Text(
-                    size >= 1000 ? '${size ~/ 1000}MB' : '${size}KB',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
+            children: [
+              for (final size in SocialPresets.targetFileSizeKB)
+                InkWell(
+                  onTap: () {
+                    setState(() => _targetSizeKB = size);
+                    _refreshEstimate();
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    child: Text(
+                      size >= 1000 ? '${size ~/ 1000}MB' : '${size}KB',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _targetSizeKB == size
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                        fontWeight: _targetSizeKB == size
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                      ),
                     ),
                   ),
-                )
-                .toList(growable: false),
+                ),
+            ],
           ),
         ],
       ),

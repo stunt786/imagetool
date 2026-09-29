@@ -92,6 +92,14 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
                   ),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Create stunning collages with up to 9 photos, customizable grid layouts, spacing, and text.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
@@ -99,7 +107,7 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
                 InterstitialTracker.instance.trackAction();
               },
               icon: const Icon(Icons.add_photo_alternate),
-              label: const Text('Select Photos (up to 6)'),
+              label: const Text('Select Photos (up to 9)'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),

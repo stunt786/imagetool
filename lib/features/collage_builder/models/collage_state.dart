@@ -277,7 +277,8 @@ class CollageLayout {
     if (count == 3) return all[4];
     if (count == 4) return all[3];
     if (count == 5) return all[7];
-    return all[6];
+    if (count == 6) return all[6];
+    return all.firstWhere((l) => l.id == 'grid_3x3', orElse: () => all[6]);
   }
 }
 

@@ -234,9 +234,11 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
 ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final Uint8List bytes = params['bytes'] as Uint8List;
   final int targetBytes = params['targetBytes'] as int;
-  // Leave a small safety margin so a user selecting 100 KB receives a file
-  // below the displayed target rather than one that rounds above it.
-  final int budgetBytes = math.max(1, (targetBytes * 0.99).floor());
+  // Safety margin: keep the file strictly below target size by a few KB (not higher).
+  // Dynamically scale margin so e.g. 100 KB has ~2 KB margin, 500 KB has ~6 KB margin, 2 MB has ~16 KB margin.
+  final int safetyMargin =
+      math.max(2048, (targetBytes * 0.012).round().clamp(2048, 16384));
+  final int budgetBytes = math.max(1024, targetBytes - safetyMargin);
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final SendPort? sendPort = params['sendPort'] as SendPort?;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
@@ -244,13 +246,20 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final image = img.decodeImage(bytes);
   if (image == null) return null;
 
+  final origW = image.width;
+  final origH = image.height;
+
+  final Map<String, ImageProcessResult> cache = <String, ImageProcessResult>{};
+
   ImageProcessResult encodeAt(int targetWidth, int targetHeight, int quality) {
     final w = targetWidth.clamp(1, 12000);
     final h = targetHeight.clamp(1, 12000);
-    // Quality probing commonly encodes the original dimensions several times.
-    // Avoid resampling in that case; JPEG/PNG encoding is the only work needed
-    // and this removes the largest repeated allocation in smart compression.
-    final processed = w == image.width && h == image.height
+    final q = quality.clamp(1, 100);
+    final cacheKey = '$w:$h:$q';
+    final cached = cache[cacheKey];
+    if (cached != null) return cached;
+
+    final processed = (w == image.width && h == image.height)
         ? image
         : img.copyResize(
             image,
@@ -259,18 +268,19 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
             interpolation: img.Interpolation.average,
           );
     final encoded = _encodeImage(processed,
-        format: format, quality: quality, settings: settings);
-    return ImageProcessResult(
+        format: format, quality: q, settings: settings);
+    final result = ImageProcessResult(
       bytes: Uint8List.fromList(encoded),
       width: processed.width,
       height: processed.height,
       fileSize: encoded.length,
     );
+    cache[cacheKey] = result;
+    return result;
   }
 
-  // Tracks the best result that fits within the target budget, plus the
-  // closest overshoot so the caller never silently returns a far-larger
-  // probe when nothing fits the budget.
+  // Tracks the best result that fits strictly within the target budget, plus the
+  // closest overshoot in case nothing fits the budget.
   ImageProcessResult? bestUnderTarget;
   ImageProcessResult? smallestOver;
 
@@ -279,9 +289,11 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
         bestUnderTarget = r;
       }
+    } else if (r.fileSize <= targetBytes) {
+      if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
+        bestUnderTarget = r;
+      }
     } else if (smallestOver == null || r.fileSize < smallestOver!.fileSize) {
-      // Track the closest overshoot so the caller never silently returns a
-      // far-larger probe when nothing fits the budget.
       smallestOver = r;
     }
   }
@@ -290,101 +302,143 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     sendPort?.send(progress);
   }
 
-  // ––– Step 1: probe at full dimensions, medium quality –––
-  reportProgress(0.05);
-  final probe = encodeAt(image.width, image.height, 50);
-  consider(probe);
-  reportProgress(0.15);
-  if (probe.fileSize <= budgetBytes) {
-    int low = 1;
-    int high = 100;
-    ImageProcessResult? best;
-    double searchProgress = 0.15;
-    while (low <= high) {
-      final mid = (low + high) ~/ 2;
-      final result = encodeAt(image.width, image.height, mid);
-      consider(result);
-      searchProgress += 0.05;
-      reportProgress(searchProgress.clamp(0.15, 0.45));
-      if (result.fileSize <= budgetBytes) {
-        best = result;
-        low = mid + 1;
+  // ── Step 1: Probe full dimensions at high quality (85) ──
+  reportProgress(0.08);
+  final probeHigh = encodeAt(origW, origH, 85);
+  consider(probeHigh);
+
+  if (probeHigh.fileSize <= budgetBytes) {
+    // Already fits at full dimensions! Try raising quality up to 100 to get as close as possible.
+    int qLow = 86;
+    int qHigh = 100;
+    while (qLow <= qHigh) {
+      final mid = (qLow + qHigh) ~/ 2;
+      final r = encodeAt(origW, origH, mid);
+      consider(r);
+      if (r.fileSize <= budgetBytes) {
+        qLow = mid + 1;
       } else {
-        high = mid - 1;
+        qHigh = mid - 1;
       }
     }
     reportProgress(1.0);
     sendPort?.send('done');
-    return best ?? probe;
+    return bestUnderTarget ?? probeHigh;
   }
 
-  // ––– Step 2: iterative dimension + quality reduction –––
-  double scale = (budgetBytes / math.max(probe.fileSize, 1)).clamp(0.05, 1.0);
+  // ── Step 2: Probe full dimensions at medium quality (60) ──
+  reportProgress(0.20);
+  final probeMed = encodeAt(origW, origH, 60);
+  consider(probeMed);
 
-  for (int i = 0; i < 10; i++) {
-    final int quality = math.max(10, 85 - i * 8);
-    final int w = math.max(16, (image.width * scale).round());
-    final int h = math.max(16, (image.height * scale).round());
-
-    final result = encodeAt(w, h, quality);
-    consider(result);
-    reportProgress(0.45 + (i + 1) * 0.05);
-
-    if (result.fileSize <= budgetBytes) {
-      int qLow = quality;
-      int qHigh = 100;
-      while (qLow <= qHigh) {
-        final mid = (qLow + qHigh) ~/ 2;
-        final r = encodeAt(w, h, mid);
-        consider(r);
-        if (r.fileSize <= budgetBytes) {
-          qLow = mid + 1;
-        } else {
-          qHigh = mid - 1;
-        }
-      }
-      break;
-    }
-
-    scale *= math.sqrt(budgetBytes / math.max(result.fileSize, 1));
-    scale = scale.clamp(0.02, 1.0);
-  }
-
-  // ––– Step 3: aggressive fallback loop if still over targetBytes –––
-  if (bestUnderTarget == null) {
-    double fallbackScale = 0.5;
-    int q = 30;
-    while (fallbackScale >= 0.02 && bestUnderTarget == null) {
-      final w = math.max(16, (image.width * fallbackScale).round());
-      final h = math.max(16, (image.height * fallbackScale).round());
-      final attempt = encodeAt(w, h, q);
-      consider(attempt);
-      if (attempt.fileSize <= budgetBytes) {
-        break;
-      }
-      if (q > 5) {
-        q = math.max(5, q - 10);
+  if (probeMed.fileSize <= budgetBytes) {
+    // Full dimensions fit if quality is between 60 and 84!
+    int qLow = 61;
+    int qHigh = 84;
+    while (qLow <= qHigh) {
+      final mid = (qLow + qHigh) ~/ 2;
+      final r = encodeAt(origW, origH, mid);
+      consider(r);
+      if (r.fileSize <= budgetBytes) {
+        qLow = mid + 1;
       } else {
-        fallbackScale *= 0.6;
+        qHigh = mid - 1;
+      }
+    }
+    reportProgress(1.0);
+    sendPort?.send('done');
+    return bestUnderTarget ?? probeMed;
+  }
+
+  // ── Step 3: Full dimensions exceed budget even at Q=60.
+  // We must resize dimensions!
+  // Binary search for dimension scale `s` in [0.02, 1.0] at base quality 80.
+  final double estScale = (math.sqrt(budgetBytes / math.max(probeMed.fileSize, 1)) *
+          math.sqrt(60.0 / 80.0))
+      .clamp(0.03, 0.98);
+
+  double lowScale = 0.02;
+  double highScale = 1.0;
+
+  // First test the estimated scale
+  final firstRes = encodeAt(
+    math.max(16, (origW * estScale).round()),
+    math.max(16, (origH * estScale).round()),
+    80,
+  );
+  consider(firstRes);
+  if (firstRes.fileSize <= budgetBytes) {
+    lowScale = estScale;
+  } else {
+    highScale = estScale;
+  }
+
+  // Refine scale with 7 binary search iterations
+  for (int i = 0; i < 7; i++) {
+    reportProgress(0.30 + (i / 7) * 0.45);
+    final midScale = (lowScale + highScale) / 2;
+    final w = math.max(16, (origW * midScale).round());
+    final h = math.max(16, (origH * midScale).round());
+    final res = encodeAt(w, h, 80);
+    consider(res);
+    if (res.fileSize <= budgetBytes) {
+      lowScale = midScale;
+    } else {
+      highScale = midScale;
+    }
+  }
+
+  // ── Step 4: Fine-tune quality at the optimal dimensions ──
+  // If the best result under budget is a bit below budgetBytes, bump quality
+  // upwards to get right up to the few-KB-below target threshold.
+  if (bestUnderTarget != null) {
+    final bestW = bestUnderTarget!.width;
+    final bestH = bestUnderTarget!.height;
+    int qLow = 81;
+    int qHigh = 98;
+    while (qLow <= qHigh) {
+      final midQ = (qLow + qHigh) ~/ 2;
+      final res = encodeAt(bestW, bestH, midQ);
+      consider(res);
+      if (res.fileSize <= budgetBytes) {
+        qLow = midQ + 1;
+      } else {
+        qHigh = midQ - 1;
+      }
+    }
+  }
+
+  // ── Step 5: Fallback if bestUnderTarget is still null (extremely tiny target) ──
+  if (bestUnderTarget == null) {
+    for (double s = 0.05; s >= 0.01 && bestUnderTarget == null; s /= 2) {
+      for (int q = 50; q >= 10 && bestUnderTarget == null; q -= 15) {
+        final w = math.max(8, (origW * s).round());
+        final h = math.max(8, (origH * s).round());
+        final res = encodeAt(w, h, q);
+        consider(res);
       }
     }
   }
 
   reportProgress(1.0);
   sendPort?.send('done');
-  if (bestUnderTarget != null && bestUnderTarget!.fileSize <= budgetBytes) {
+
+  if (bestUnderTarget != null && bestUnderTarget!.fileSize <= targetBytes) {
     return bestUnderTarget;
+  }
+  if (smallestOver != null && smallestOver!.fileSize <= targetBytes) {
+    return smallestOver;
   }
 
   // Absolute fallback: tiny low quality image strictly under target
   for (int dim = 64; dim >= 8; dim ~/= 2) {
     final lastAttempt = encodeAt(dim, dim, 5);
-    if (lastAttempt.fileSize <= budgetBytes) {
+    if (lastAttempt.fileSize <= targetBytes) {
       return lastAttempt;
     }
   }
 
-  return bestUnderTarget ?? smallestOver ?? probe;
+  return bestUnderTarget ?? smallestOver ?? probeHigh;
 }
 
 ImageProcessResult? _isolateResizeEstimate(Map<String, dynamic> params) {

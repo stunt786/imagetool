@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -17,6 +18,8 @@ final collageProvider = NotifierProvider<CollageNotifier, CollageState>(
 );
 
 class CollageNotifier extends Notifier<CollageState> {
+  static const int maxCollageImages = 9;
+  final List<CollageImageSlot> _cachedSlots = [];
   @override
   CollageState build() {
     return CollageState(
@@ -33,12 +36,26 @@ class CollageNotifier extends Notifier<CollageState> {
     );
   }
 
+  void _syncCachedSlots(List<CollageImageSlot> slots) {
+    for (final slot in slots) {
+      if (slot.hasImage) {
+        final existingIdx =
+            _cachedSlots.indexWhere((c) => c.imageName == slot.imageName);
+        if (existingIdx != -1) {
+          _cachedSlots[existingIdx] = slot;
+        } else {
+          _cachedSlots.add(slot);
+        }
+      }
+    }
+  }
+
   Future<void> pickImages(BuildContext context) async {
-    // Guard: enforce 6-image maximum
-    if (state.imageCount >= 6) {
+    // Guard: enforce 9-image maximum for 3x3 support
+    if (state.imageCount >= maxCollageImages) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Maximum 6 photos allowed in a collage.'),
+          content: Text('Maximum 9 photos allowed in a collage.'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -66,8 +83,8 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (bytesList.isEmpty) return;
 
-    // Cap total images to 6
-    final maxNew = 6 - state.imageCount;
+    // Cap total images to maxCollageImages (9)
+    final maxNew = maxCollageImages - state.imageCount;
     if (bytesList.length > maxNew) {
       final overflow = bytesList.length - maxNew;
       bytesList.removeRange(maxNew, bytesList.length);
@@ -75,7 +92,7 @@ class CollageNotifier extends Notifier<CollageState> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Only $maxNew image(s) added (6 max). $overflow photo(s) skipped.'),
+            content: Text('Only $maxNew image(s) added (9 max). $overflow photo(s) skipped.'),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -101,6 +118,7 @@ class CollageNotifier extends Notifier<CollageState> {
           imageName: names[i],
         );
       }
+      _syncCachedSlots(newImages);
       state = state.copyWith(images: newImages);
     } else {
       final newLayout = CollageLayout.getLayoutForImageCount(
@@ -147,6 +165,7 @@ class CollageNotifier extends Notifier<CollageState> {
         }
       }
 
+      _syncCachedSlots(newImages);
       state = state.copyWith(
         images: newImages,
         layout: newLayout,
@@ -158,7 +177,7 @@ class CollageNotifier extends Notifier<CollageState> {
   Future<void> loadFromPaths(List<String> paths) async {
     final bytesList = <Uint8List>[];
     final names = <String>[];
-    for (final path in paths.take(6)) {
+    for (final path in paths.take(maxCollageImages)) {
       try {
         final file = File(path);
         if (await file.exists()) {
@@ -183,6 +202,7 @@ class CollageNotifier extends Notifier<CollageState> {
         slots.add(CollageImageSlot(index: i));
       }
     }
+    _syncCachedSlots(slots);
     state = state.copyWith(
       images: slots,
       layout: layout,
@@ -208,11 +228,28 @@ class CollageNotifier extends Notifier<CollageState> {
       imageName: picked.first.name,
     );
 
+    _syncCachedSlots(newImages);
+    state = state.copyWith(images: newImages);
+  }
+
+  void setSlotImage(int slotIndex, Uint8List bytes, String name) {
+    if (slotIndex < 0 || slotIndex >= state.images.length) return;
+    final newImages = List<CollageImageSlot>.from(state.images);
+    newImages[slotIndex] = CollageImageSlot(
+      index: slotIndex,
+      imageBytes: bytes,
+      imageName: name,
+    );
+    _syncCachedSlots(newImages);
     state = state.copyWith(images: newImages);
   }
 
   void removeImageFromSlot(int slotIndex) {
     final newImages = List<CollageImageSlot>.from(state.images);
+    final removed = newImages[slotIndex];
+    if (removed.hasImage) {
+      _cachedSlots.removeWhere((c) => c.imageName == removed.imageName);
+    }
     newImages[slotIndex] = newImages[slotIndex].clear();
     state = state.copyWith(images: newImages);
   }
@@ -245,13 +282,23 @@ class CollageNotifier extends Notifier<CollageState> {
       fitMode: fromSlot.fitMode,
     );
 
+    _syncCachedSlots(newImages);
     state = state.copyWith(images: newImages);
   }
 
   void changeLayout(CollageLayout newLayout) {
+    _syncCachedSlots(state.images);
+
     final newImages = <CollageImageSlot>[];
+    final activeImages = state.images.where((s) => s.hasImage).toList();
+    final allAvailable = <CollageImageSlot>[
+      ...activeImages,
+      for (final cached in _cachedSlots)
+        if (!activeImages.any((a) => a.imageName == cached.imageName)) cached,
+    ];
+
     for (int i = 0; i < newLayout.slotCount; i++) {
-      if (i < state.images.length) {
+      if (i < state.images.length && state.images[i].hasImage) {
         newImages.add(CollageImageSlot(
           index: i,
           imageBytes: state.images[i].imageBytes,
@@ -260,6 +307,17 @@ class CollageNotifier extends Notifier<CollageState> {
           offsetX: state.images[i].offsetX,
           offsetY: state.images[i].offsetY,
           fitMode: state.images[i].fitMode,
+        ));
+      } else if (i < allAvailable.length) {
+        final src = allAvailable[i];
+        newImages.add(CollageImageSlot(
+          index: i,
+          imageBytes: src.imageBytes,
+          imageName: src.imageName,
+          scale: src.scale,
+          offsetX: src.offsetX,
+          offsetY: src.offsetY,
+          fitMode: src.fitMode,
         ));
       } else {
         newImages.add(CollageImageSlot(index: i));
@@ -429,29 +487,33 @@ class CollageNotifier extends Notifier<CollageState> {
     state = state.copyWith(isExporting: true, exportProgress: 0.0);
 
     try {
+      final canvasWidth = state.canvasWidth;
+      final canvasHeight = state.canvasHeight;
+      // Logical preview reference scale (canvas is nominally previewed at 360 logical px)
+      final scaleFactor = canvasWidth / 360.0;
+      final gapPx = (state.gap * scaleFactor).round();
+      final radiusPx = (state.cornerRadius * scaleFactor).round();
+
+      final bgR = (state.backgroundColor.r * 255).round().clamp(0, 255);
+      final bgG = (state.backgroundColor.g * 255).round().clamp(0, 255);
+      final bgB = (state.backgroundColor.b * 255).round().clamp(0, 255);
+
       final canvas = img.Image(
-        width: state.canvasWidth,
-        height: state.canvasHeight,
+        width: canvasWidth,
+        height: canvasHeight,
       );
 
-      img.fill(canvas, color: img.ColorRgb8(
-        (state.backgroundColor.r * 255).round().clamp(0, 255),
-        (state.backgroundColor.g * 255).round().clamp(0, 255),
-        (state.backgroundColor.b * 255).round().clamp(0, 255),
-      ));
-
-      final gapPx = state.gap.toInt();
-      final radiusPx = state.cornerRadius.toInt();
+      img.fill(canvas, color: img.ColorRgb8(bgR, bgG, bgB));
 
       for (int i = 0; i < state.layout.slotCount; i++) {
         final slot = state.images[i];
         if (!slot.hasImage) continue;
 
         final rect = state.layout.slotRects[i];
-        final x = (rect.left * state.canvasWidth + gapPx).toInt();
-        final y = (rect.top * state.canvasHeight + gapPx).toInt();
-        final w = ((rect.width) * state.canvasWidth - gapPx * 2).toInt();
-        final h = ((rect.height) * state.canvasHeight - gapPx * 2).toInt();
+        final x = (rect.left * canvasWidth + gapPx).toInt();
+        final y = (rect.top * canvasHeight + gapPx).toInt();
+        final w = ((rect.width) * canvasWidth - gapPx * 2).toInt();
+        final h = ((rect.height) * canvasHeight - gapPx * 2).toInt();
 
         if (w <= 0 || h <= 0) continue;
 
@@ -496,13 +558,9 @@ class CollageNotifier extends Notifier<CollageState> {
         }
 
         final slotImage = img.Image(width: w, height: h);
+        img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
 
         if (slot.fitMode == ImageFitMode.contain) {
-          img.fill(slotImage, color: img.ColorRgb8(
-            (state.backgroundColor.r * 255).round().clamp(0, 255),
-            (state.backgroundColor.g * 255).round().clamp(0, 255),
-            (state.backgroundColor.b * 255).round().clamp(0, 255),
-          ));
           final offsetX = ((w - resized.width) / 2).toInt();
           final offsetY = ((h - resized.height) / 2).toInt();
           img.compositeImage(slotImage, resized, dstX: offsetX, dstY: offsetY);
@@ -511,7 +569,7 @@ class CollageNotifier extends Notifier<CollageState> {
         }
 
         if (radiusPx > 0) {
-          _applyRoundedCorners(slotImage, radiusPx);
+          _applyRoundedCorners(slotImage, radiusPx, bgR, bgG, bgB);
         }
 
         img.compositeImage(canvas, slotImage, dstX: x, dstY: y);
@@ -660,41 +718,50 @@ class CollageNotifier extends Notifier<CollageState> {
     }
   }
 
-  void _applyRoundedCorners(img.Image image, int radius) {
+  void _applyRoundedCorners(img.Image image, int radius, int bgR, int bgG, int bgB) {
     final w = image.width;
     final h = image.height;
     final r = radius.clamp(0, w ~/ 2).clamp(0, h ~/ 2);
+    if (r <= 0) return;
 
     for (int y = 0; y < h; y++) {
       for (int x = 0; x < w; x++) {
-        bool shouldClear = false;
+        double dist = -1.0;
 
         if (x < r && y < r) {
-          final dx = x - r + 1;
-          final dy = y - r + 1;
-          if (dx * dx + dy * dy > r * r) shouldClear = true;
+          final dx = r - x - 1;
+          final dy = r - y - 1;
+          dist = math.sqrt(dx * dx + dy * dy) - r;
         } else if (x >= w - r && y < r) {
           final dx = x - (w - r);
-          final dy = y - r + 1;
-          if (dx * dx + dy * dy > r * r) shouldClear = true;
+          final dy = r - y - 1;
+          dist = math.sqrt(dx * dx + dy * dy) - r;
         } else if (x < r && y >= h - r) {
-          final dx = x - r + 1;
+          final dx = r - x - 1;
           final dy = y - (h - r);
-          if (dx * dx + dy * dy > r * r) shouldClear = true;
+          dist = math.sqrt(dx * dx + dy * dy) - r;
         } else if (x >= w - r && y >= h - r) {
           final dx = x - (w - r);
           final dy = y - (h - r);
-          if (dx * dx + dy * dy > r * r) shouldClear = true;
+          dist = math.sqrt(dx * dx + dy * dy) - r;
         }
 
-        if (shouldClear) {
-          image.setPixel(x, y, img.ColorRgba8(0, 0, 0, 0));
+        if (dist >= 0.5) {
+          image.setPixel(x, y, img.ColorRgb8(bgR, bgG, bgB));
+        } else if (dist > -0.5) {
+          final t = (dist + 0.5).clamp(0.0, 1.0);
+          final p = image.getPixel(x, y);
+          final blendedR = (p.r * (1.0 - t) + bgR * t).round().clamp(0, 255);
+          final blendedG = (p.g * (1.0 - t) + bgG * t).round().clamp(0, 255);
+          final blendedB = (p.b * (1.0 - t) + bgB * t).round().clamp(0, 255);
+          image.setPixel(x, y, img.ColorRgb8(blendedR, blendedG, blendedB));
         }
       }
     }
   }
 
   void reset() {
+    _cachedSlots.clear();
     state = CollageState(
       images: List.generate(
         CollageLayout.all[0].slotCount,
