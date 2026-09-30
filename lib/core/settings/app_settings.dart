@@ -93,27 +93,20 @@ class AppSettingsState {
 
   static Future<String> loadPath([SharedPreferences? preferences]) async {
     final prefs = preferences ?? await SharedPreferences.getInstance();
-    final stored = prefs.getString(_key);
-    if (stored != null && stored.isNotEmpty) {
-      final storedDir = Directory(stored);
-      if (!await storedDir.exists()) {
-        try {
-          await storedDir.create(recursive: true);
-        } catch (_) {}
-      }
-      return stored;
-    }
-
-    if (Platform.isAndroid) {
-      try {
-        final defaultDir =
-            Directory('/storage/emulated/0/Documents/PixelTools');
-        if (!await defaultDir.exists()) {
-          await defaultDir.create(recursive: true);
+    // On Android the raw `custom_save_path` is legacy: without
+    // MANAGE_EXTERNAL_STORAGE it is no longer writable. The user's destination
+    // is the SAF folder from Settings (`custom_save_tree_uri`) plus MediaStore
+    // defaults, while tool outputs are staged in the app-private directory.
+    if (!Platform.isAndroid) {
+      final stored = prefs.getString(_key);
+      if (stored != null && stored.isNotEmpty) {
+        final storedDir = Directory(stored);
+        if (!await storedDir.exists()) {
+          try {
+            await storedDir.create(recursive: true);
+          } catch (_) {}
         }
-        return defaultDir.path;
-      } catch (_) {
-        // Fallback to app documents directory if permission denied
+        return stored;
       }
     }
 

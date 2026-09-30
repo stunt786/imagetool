@@ -39,6 +39,11 @@ android {
     }
 }
 
+dependencies {
+    // SAF tree access (Settings → save folder, one-off exports).
+    implementation("androidx.documentfile:documentfile:1.0.0")
+}
+
 flutter {
     source = "../.."
 }

@@ -13,6 +13,7 @@ import '../../../core/models/operation_folder.dart';
 import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/operation_recorder.dart';
 import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -486,6 +487,17 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       final fileSize = await File(outputPath).length();
       if (!await File(outputPath).exists() || fileSize == 0) {
         throw Exception('PDF file was not created or is empty');
+      }
+
+      // Export to public storage (MediaStore Download/PixelTools or custom SAF folder)
+      try {
+        await PublicStorage.publishFile(
+          sourcePath: outputPath,
+          fileName: fileName,
+          kind: PublicFileKind.document,
+        );
+      } catch (_) {
+        // Local copy in OperationStore remains available
       }
 
       state = state.copyWith(

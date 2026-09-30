@@ -20,6 +20,7 @@ class ImageSaveResult {
 class StorageService {
   static const String _imageDirectoryName = 'PixelTools_Images';
 
+  @Deprecated('Use saveToolOutputs instead for unified scoped storage and gallery publishing')
   static Future<ImageSaveResult> saveImage({
     required Uint8List bytes,
     required String extension,
@@ -48,6 +49,7 @@ class StorageService {
     );
   }
 
+  @Deprecated('Use saveToolOutputs instead for unified scoped storage and gallery publishing')
   static Future<ImageSaveResult> saveMultipleImages({
     required List<({Uint8List bytes, String extension})> images,
   }) async {

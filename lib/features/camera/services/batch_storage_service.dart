@@ -8,11 +8,19 @@ class BatchStorageService {
   static const _batchRoot = 'temp_scans';
 
   static Future<Directory> get _batchRootDir async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(appDir.path, _batchRoot));
+    final tempDir = await getTemporaryDirectory();
+    final dir = Directory(p.join(tempDir.path, _batchRoot));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+    // One-time cleanup of legacy temp_scans in documents directory if it exists
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final legacyDir = Directory(p.join(appDir.path, _batchRoot));
+      if (await legacyDir.exists()) {
+        await legacyDir.delete(recursive: true);
+      }
+    } catch (_) {}
     return dir;
   }
 

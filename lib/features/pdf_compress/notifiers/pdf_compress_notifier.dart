@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/output_saver.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
@@ -120,8 +120,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
         await ref.read(appSettingsProvider.notifier).getSaveDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final baseName = _pdfBaseName(selectedName);
-    final outputPath =
-        '${saveDir.path}/pixeltools_${baseName}_compressed_$timestamp.pdf';
+    final outputName = 'pixeltools_${baseName}_compressed_$timestamp.pdf';
     final workingPath = '${saveDir.path}/.pixeltools_work_$timestamp.pdf';
     final watermarkedPath = '${saveDir.path}/.pixeltools_wm_$timestamp.pdf';
 
@@ -209,25 +208,27 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
       if (state.selectedFilePath != inputPath) return null;
       state = state.copyWith(progress: 0.97);
 
-      // 4) Publish the result.
-      final outputFile = File(outputPath);
-      await File(finalPath).copy(outputPath);
-
-      final outputFileSize = await outputFile.length();
-      if (!await outputFile.exists() || outputFileSize == 0) {
+      // 4) Persist the result: grouped copy in Files plus the public save
+      //    (MediaStore or the SAF folder chosen in Settings).
+      if (!await File(finalPath).exists() ||
+          await File(finalPath).length() == 0) {
         throw Exception('Compressed PDF file was not created or is empty');
       }
+
+      final saved = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.pdfCompress,
+        entries: [
+          OutputEntry.file(sourcePath: finalPath, fileName: outputName),
+        ],
+        stagingDirectory: saveDir,
+      );
+      final outputPath = saved.first.localPath;
+      final outputFileSize = await File(outputPath).length();
 
       if (!didImprove && note == null) {
         note = 'This PDF is already highly optimised; the original file was kept.';
       }
-
-      // Group the compressed output in Files.
-      await recordCompletedOperation(
-        ref.read(operationStoreProvider),
-        OperationKind.pdfCompress,
-        [outputPath],
-      );
 
       state = state.copyWith(
         isProcessing: false,
@@ -235,7 +236,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
         selectedFileSize: inputSize,
         outputPath: outputPath,
         outputFileSize: outputFileSize,
-        publicExportPath: outputPath,
+        publicExportPath: saved.first.publicPath,
         note: note,
       );
 

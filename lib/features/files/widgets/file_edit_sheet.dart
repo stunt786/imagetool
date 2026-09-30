@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
-import '../../../shared/utils/image_saver.dart';
 import '../../camera/notifiers/document_batch_notifier.dart';
 import '../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../notifiers/operation_library_notifier.dart';
@@ -120,18 +119,8 @@ class FileEditSheet extends ConsumerWidget {
     }
   }
 
-  Future<void> _saveToGallery(BuildContext context) async {
-    final bytes = await _readBytes();
-    if (bytes == null) return;
-    final res = await saveImageBytes(bytes, fileName: item.fileName);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res.path != null ? 'Saved to Gallery!' : 'Could not save to gallery.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+  Future<void> _save(BuildContext context) async {
+    await FileActions.save(context, [item]);
   }
 
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
@@ -341,8 +330,8 @@ class FileEditSheet extends ConsumerWidget {
                     ),
                     _ActionButton(
                       icon: Icons.download_outlined,
-                      label: 'Save',
-                      onTap: () => _saveToGallery(context),
+                      label: item.isPdf ? 'Export' : 'Save',
+                      onTap: () => _save(context),
                     ),
                     _ActionButton(
                       icon: Icons.drive_file_rename_outline,

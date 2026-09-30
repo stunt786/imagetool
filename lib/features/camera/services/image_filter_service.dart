@@ -278,7 +278,7 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   if (filterName == 'autoFlatten') {
     final image = img.decodeImage(bytes);
     if (image == null) return null;
-    final flattened = DocumentEnhancementService.internalAutoFlattenPaper(image);
+    final flattened = DocumentEnhancementService.internalAutoFlattenSmooth(image);
     return Uint8List.fromList(img.encodeJpg(flattened, quality: 92));
   }
   if (filterName == 'antiLight') {
@@ -296,17 +296,9 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
   if (filterName == 'smartScan') {
     final image = img.decodeImage(bytes);
     if (image == null) return null;
-    // Same gated pipeline as Smart Fix: never alter what is already clean.
-    var processed = DocumentEnhancementService.internalAutoFitPaper(image);
-    processed =
-        DocumentEnhancementService.internalAutoFlattenPaper(processed);
-    if (DocumentEnhancementService.internalHasUnevenIllumination(processed)) {
-      processed = DocumentEnhancementService
-          .internalAutocorrectAntiLightShadows(processed);
-    }
-    processed =
-        DocumentEnhancementService.internalAutoAdjustDarkImage(processed);
-    return Uint8List.fromList(img.encodeJpg(processed, quality: 92));
+    // Smart clean removes unwanted objects (fingers, flies, dirt, objects over doc) without warping
+    final cleaned = DocumentEnhancementService.internalSmartClean(image);
+    return Uint8List.fromList(img.encodeJpg(cleaned, quality: 92));
   }
 
   final image = img.decodeImage(bytes);

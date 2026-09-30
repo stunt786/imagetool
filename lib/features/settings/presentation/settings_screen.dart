@@ -3,10 +3,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_strings.dart';
-import '../../../core/services/permission_service.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -16,102 +15,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen>
-    with WidgetsBindingObserver {
-  bool? _hasFilePermission;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _refreshFilePermission();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refreshFilePermission();
-  }
-
-  Future<void> _refreshFilePermission() async {
-    final granted = await const AppPermissionService().hasStoragePermission();
-    if (mounted) setState(() => _hasFilePermission = granted);
-  }
-
-  Future<void> _showFilePermissionDialog() async {
-    final service = const AppPermissionService();
-    final granted = await service.hasStoragePermission();
-    if (mounted) setState(() => _hasFilePermission = granted);
-    if (!mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Allow file access'),
-        content: Text(
-          granted
-              ? 'PixelTools can access files for importing images and PDFs and saving your results.'
-              : 'Allow PixelTools to access files so you can import images and PDFs and save results.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          if (!granted)
-            FilledButton(
-              onPressed: () async {
-                Navigator.of(dialogContext).pop();
-                final requested = await service.requestStoragePermission();
-                if (!requested &&
-                    await service.isStoragePermissionPermanentlyDenied() &&
-                    mounted) {
-                  await _showOpenSettingsDialog();
-                }
-                await _refreshFilePermission();
-              },
-              child: const Text('Allow file access'),
-            ),
-          if (granted)
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Done'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showOpenSettingsDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Permission needs attention'),
-        content: const Text(
-          'File access was blocked by the system. Open PixelTools settings, enable file access, then return to the app.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(dialogContext).pop();
-              await const AppPermissionService().openAppSettings();
-              await _refreshFilePermission();
-            },
-            child: const Text('Open App Settings'),
-          ),
-        ],
-      ),
-    );
-  }
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
@@ -152,10 +56,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                   context,
                   title: 'Storage',
                   children: [
-                    FutureBuilder<Directory>(
-                      future: ref.read(appSettingsProvider.notifier).getSaveDirectory(),
+                    FutureBuilder<String>(
+                      future: _resolveSaveLocation(),
                       builder: (context, snapshot) {
-                        final actualPath = snapshot.data?.path ?? 'Loading...';
+                        final actualPath = snapshot.data ?? 'Loading...';
                         return ListTile(
                           leading: const Icon(Icons.folder_outlined),
                           title: const Text('Save Location'),
@@ -172,25 +76,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           onTap: () => _pickFolder(context, ref),
                         );
                       },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: Icon(
-                        _hasFilePermission == true
-                            ? Icons.folder_shared_outlined
-                            : Icons.folder_off_outlined,
-                        color: _hasFilePermission == true
-                            ? scheme.primary
-                            : scheme.error,
-                      ),
-                      title: const Text('File Access'),
-                      subtitle: Text(
-                        _hasFilePermission == true
-                            ? 'Allowed for importing and saving files'
-                            : 'Tap to allow image and PDF file access',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _showFilePermissionDialog,
                     ),
                   ],
                 ),
@@ -214,6 +99,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           ),
                           const SizedBox(height: 12),
                           SegmentedButton<ThemeMode>(
+                            showSelectedIcon: false,
                             segments: const [
                               ButtonSegment(
                                 value: ThemeMode.system,
@@ -281,40 +167,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           },
                         );
                       },
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.star_outline),
-                      title: const Text('Rate the App'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Rate us on the App Store!')),
-                        );
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.share_outlined),
-                      title: const Text('Share App'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Share.share(
-                          'Edit images and PDFs offline with ${AppStrings.appName}.',
-                          subject: AppStrings.appName,
-                        );
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.mail_outline),
-                      title: const Text('Contact Us'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _showContactDialog(context),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.help_outline),
-                      title: const Text('Help'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _showHelpDialog(context),
                     ),
                   ],
                 ),
@@ -575,7 +427,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     );
   }
 
+  /// Resolves the destination shown under Save Location: the SAF folder the
+  /// user picked on Android, or the concrete directory on other platforms.
+  Future<String> _resolveSaveLocation() async {
+    if (Platform.isAndroid) {
+      final customLabel = await PublicStorage.loadTreeLabel();
+      if (customLabel != null && customLabel.isNotEmpty) {
+        return customLabel;
+      }
+      return 'Pictures/PixelTools (images)\nDownload/PixelTools (PDFs)';
+    }
+    final dir =
+        await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+    return dir.path;
+  }
+
   Future<void> _pickFolder(BuildContext context, WidgetRef ref) async {
+    if (Platform.isAndroid) {
+      await _pickAndroidSaveLocation(context);
+      return;
+    }
+
     final result = await FilePicker.getDirectoryPath();
     if (result != null && result.isNotEmpty) {
       final dir = Directory(result);
@@ -588,43 +460,67 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
           const SnackBar(content: Text('Save location updated')),
         );
       }
+      if (mounted) setState(() {});
     }
   }
 
-  void _showContactDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Contact Us'),
-        content: const Text(
-          'Reach us at support@pixeltools.app for feedback, feature requests, or bug reports.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
+  /// Android: shared storage is only writable through MediaStore or a
+  /// persisted SAF grant, so the custom folder is picked with the system
+  /// folder picker and stored as a tree URI — no storage permission needed.
+  Future<void> _pickAndroidSaveLocation(BuildContext context) async {
+    final currentLabel = await PublicStorage.loadTreeLabel();
+    final hasCustom = currentLabel != null && currentLabel.isNotEmpty;
+    if (!context.mounted) return;
 
-  void _showHelpDialog(BuildContext context) {
-    showDialog<void>(
+    final action = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Help'),
-        content: const Text(
-          'Use the tools grid for quick actions. My Files tab shows your saved work. Tap any history item to preview it again.',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save location'),
+        content: Text(
+          hasCustom
+              ? 'New images and PDFs are saved to:\n$currentLabel'
+              : 'Images are saved to Pictures/PixelTools and PDFs to '
+                  'Download/PixelTools.\n\nChoose a folder to save '
+                  'everything to one place instead.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            onPressed: () => Navigator.of(dialogContext).pop('cancel'),
+            child: const Text('Cancel'),
+          ),
+          if (hasCustom)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('default'),
+              child: const Text('Use default'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('choose'),
+            child: const Text('Choose folder'),
           ),
         ],
       ),
     );
+
+    if (action == 'choose') {
+      final picked = await PublicStorage.pickFolder();
+      if (picked != null) {
+        await PublicStorage.setSaveTree(uri: picked.uri, label: picked.label);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Save location updated')),
+          );
+        }
+      }
+    } else if (action == 'default') {
+      await PublicStorage.clearSaveTree();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Save location reset to default')),
+        );
+      }
+    }
+
+    if (mounted) setState(() {});
   }
 }
 
@@ -731,8 +627,11 @@ class _WatermarkLivePreviewState extends State<_WatermarkLivePreview> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             Text(
               'Live Preview',
@@ -741,6 +640,7 @@ class _WatermarkLivePreviewState extends State<_WatermarkLivePreview> {
               ),
             ),
             SegmentedButton<int>(
+              showSelectedIcon: false,
               segments: const [
                 ButtonSegment(
                   value: 0,

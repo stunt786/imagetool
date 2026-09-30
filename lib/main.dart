@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app/pixeltools_app.dart';
 import 'core/services/ad_service.dart';
-import 'core/services/permission_service.dart';
 import 'core/settings/app_settings.dart';
 import 'shared/services/watermark_helper.dart';
 import 'splash_screen.dart';
@@ -21,9 +20,9 @@ void main() async {
     await AdService.instance.initialize();
   }
 
-  if (!kIsWeb) {
-    await const AppPermissionService().requestAllPermissions();
-  }
+  // Permissions are requested in context (camera when the camera opens, photo
+  // access when the gallery picker runs) per current Android policy — never
+  // as a burst on first launch.
 
   runApp(
     ProviderScope(

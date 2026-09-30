@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/services/storage_service.dart';
+import 'core/models/operation_folder.dart';
+import 'core/services/operation_store_provider.dart';
+import 'core/services/output_saver.dart';
+import 'core/services/public_storage.dart';
 import 'core/settings/app_settings.dart';
-import 'features/image_resize/models/social_presets.dart';
 import 'shared/services/watermark_helper.dart';
 
 /// ImageEditorScreen provides a unified interface for Resize, Crop, and Rotate.
@@ -280,14 +282,22 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
         widget.imageBytes,
         settings,
       );
-      final result = await StorageService.saveImage(
-        bytes: finalBytes,
-        extension: OutputImageFormat.png.extension,
-        customFileName: widget.fileName,
+      final savedOutputs = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.imageEdit,
+        entries: [
+          OutputEntry.bytes(
+            bytes: finalBytes,
+            fileName: widget.fileName,
+            publicKind: PublicFileKind.image,
+          ),
+        ],
       );
       if (mounted) {
+        final savedName =
+            savedOutputs.isNotEmpty ? widget.fileName : 'image';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Saved: ${result.fileName}")),
+          SnackBar(content: Text("Saved: $savedName")),
         );
         Navigator.pop(context);
       }

@@ -21,23 +21,12 @@ class PdfService {
 
   static final instance = PdfService._();
 
-  /// Returns the save directory for processed PDFs.
-  /// Android: Download/PixelTools/PDFs (public folder) with fallback to app docs.
-  /// Other platforms: app documents directory.
+  /// Working directory for intermediate PDF artifacts.
+  ///
+  /// Always app-private: public destinations are reached by publishing the
+  /// finished output through MediaStore / SAF (see [PublicStorage]), which
+  /// scoped storage requires on Android 10+.
   Future<Directory> getSaveDir() async {
-    if (Platform.isAndroid) {
-      try {
-        final downloadDir = await getDownloadsDirectory();
-        if (downloadDir != null) {
-          final dir =
-              Directory(path.join(downloadDir.path, 'PixelTools', 'PDFs'));
-          if (!await dir.exists()) {
-            await dir.create(recursive: true);
-          }
-          return dir;
-        }
-      } catch (_) {}
-    }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory(path.join(base.path, 'PixelTools', 'PDFs'));
     if (!await dir.exists()) {

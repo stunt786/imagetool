@@ -21,11 +21,18 @@ class AdBannerWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(child: child),
-        const BannerAdWidget(),
-      ],
+    // Scaffold gives its body loose width constraints, so without forcing
+    // double.infinity this Column shrink-wraps to its widest child and the
+    // whole screen sits flush left on tablets/landscape. Filling the width
+    // lets each screen center its own content for any device size.
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        children: [
+          Expanded(child: child),
+          const Center(child: BannerAdWidget()),
+        ],
+      ),
     );
   }
 }

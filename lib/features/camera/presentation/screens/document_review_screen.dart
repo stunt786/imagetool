@@ -9,10 +9,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/models/operation_folder.dart';
 import '../../../../core/services/operation_recorder.dart';
 import '../../../../core/services/operation_store_provider.dart';
+import '../../../../core/services/output_saver.dart';
+import '../../../../core/services/public_storage.dart';
 import '../../../../core/settings/app_settings.dart';
 import '../../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../../shared/services/watermark_helper.dart';
-import '../../../../shared/utils/image_saver.dart';
 import '../../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../models/document_batch.dart';
 import '../../models/scanned_page.dart';
@@ -169,7 +170,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     final batch = ref.read(documentBatchProvider);
     if (_selectedIndex >= batch.pages.length) return;
     context.push(
-      '/camera/perspective',
+      '/camera/crop',
       extra: {
         'batchId': batch.id,
         'pageIndex': _selectedIndex,
@@ -215,14 +216,14 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
           SnackBar(
             content: Text(result.stages.isEmpty
                 ? 'Page already looks clean – nothing to fix.'
-                : 'Smart fix applied: ${result.stages.join(', ')}.'),
+                : 'Smart clean applied: ${result.stages.join(', ')}.'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      _showError('Smart fix failed: $e');
+      _showError('Smart clean failed: $e');
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -236,7 +237,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
     setState(() => _isBusy = true);
     try {
-      // Flatten straightens perspective skew and crops to the paper edges.
+      // Flatten straightens paper and clears raised/down parts to make it smooth.
       final flattenedBytes =
           await DocumentEnhancementService.flattenDocument(page.imageBytes!);
       if (flattenedBytes != null && mounted) {
@@ -255,7 +256,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Page straightened & cropped to paper edges.'),
+            content: Text('Page straightened & smoothed (raised/down curves flattened).'),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 2),
           ),
@@ -391,32 +392,24 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   Future<void> _saveAsImages(List<ScannedPage> pages) async {
     final settings = ref.read(appSettingsProvider);
     try {
-      // 1) Keep in operation folder so it appears grouped in Files
-      try {
-        final session = await OperationRecorder(ref.read(operationStoreProvider))
-            .start(OperationKind.scan, expectedItems: pages.length);
-        for (var i = 0; i < pages.length; i++) {
-          final bytes = WatermarkHelper.applyGlobalWatermarkIfNeeded(
-            pages[i].displayBytes,
-            settings,
-          );
-          final name = 'scan_page_${(i + 1).toString().padLeft(2, '0')}.jpg';
-          await session.saveBytes(bytes, name);
-        }
-        await session.complete();
-      } catch (_) {}
-
-      // 2) Save to device gallery
-      final results = await saveMultipleImages([
+      final entries = [
         for (var i = 0; i < pages.length; i++)
-          (
+          OutputEntry.bytes(
             bytes: WatermarkHelper.applyGlobalWatermarkIfNeeded(
               pages[i].displayBytes,
               settings,
             ),
-            fileName: 'scan_page_${i + 1}.jpg',
+            fileName: 'scan_page_${(i + 1).toString().padLeft(2, '0')}.jpg',
+            publicKind: PublicFileKind.image,
           ),
-      ]);
+      ];
+
+      final results = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.scan,
+        entries: entries,
+      );
+
       await ref.read(documentBatchProvider.notifier).clearBatch();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -428,8 +421,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
                   label: 'Share',
                   onPressed: () {
                     final files = results
-                        .where((result) => result.path != null)
-                        .map((result) => XFile(result.path!))
+                        .map((result) => XFile(result.localPath))
                         .toList();
                     if (files.isNotEmpty) Share.shareXFiles(files);
                   },
@@ -884,48 +876,84 @@ class _EditorToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF24262A),
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFF1E2024),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: const [
           BoxShadow(
-              color: Colors.black45, blurRadius: 12, offset: Offset(0, 4)),
+            color: Colors.black54,
+            blurRadius: 16,
+            offset: Offset(0, 5),
+          ),
         ],
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             _ToolButton(
               icon: Icons.auto_mode_rounded,
               label: 'Smart Fix',
-              color: const Color(0xFF4DA6FF),
+              iconColor: const Color(0xFF4DA6FF),
+              containerColor: const Color(0xFF19324F),
               onTap: onSmartFix,
             ),
+            const SizedBox(width: 10),
             _ToolButton(
               icon: Icons.straighten_rounded,
               label: 'Flatten',
+              iconColor: const Color(0xFF38D9A9),
+              containerColor: const Color(0xFF173831),
               onTap: onFlatten,
             ),
-            _ToolButton(icon: Icons.crop, label: 'Crop', onTap: onCrop),
+            const SizedBox(width: 10),
             _ToolButton(
-                icon: Icons.auto_awesome, label: 'Enhance', onTap: onEnhance),
+              icon: Icons.crop_rounded,
+              label: 'Crop',
+              iconColor: Colors.white,
+              onTap: onCrop,
+            ),
+            const SizedBox(width: 10),
+            _ToolButton(
+              icon: Icons.auto_awesome_rounded,
+              label: 'Enhance',
+              iconColor: const Color(0xFFFFB84D),
+              containerColor: const Color(0xFF382C17),
+              onTap: onEnhance,
+            ),
+            const SizedBox(width: 10),
             _ToolButton(
               icon: Icons.auto_fix_high_rounded,
               label: 'Magic Remove',
+              iconColor: const Color(0xFFC084FC),
+              containerColor: const Color(0xFF321E42),
               onTap: onMagicRemove,
             ),
+            const SizedBox(width: 10),
             _ToolButton(
-                icon: Icons.rotate_right, label: 'Rotate', onTap: onRotate),
-            _ToolButton(icon: Icons.refresh, label: 'Retake', onTap: onRetake),
+              icon: Icons.rotate_right_rounded,
+              label: 'Rotate',
+              iconColor: Colors.white,
+              onTap: onRotate,
+            ),
+            const SizedBox(width: 10),
             _ToolButton(
-              icon: Icons.delete_outline,
+              icon: Icons.refresh_rounded,
+              label: 'Retake',
+              iconColor: Colors.white70,
+              onTap: onRetake,
+            ),
+            const SizedBox(width: 10),
+            _ToolButton(
+              icon: Icons.delete_outline_rounded,
               label: 'Delete',
-              color: const Color(0xFFFF7676),
+              iconColor: const Color(0xFFFF6B6B),
+              containerColor: const Color(0xFF3B1B1E),
               onTap: onDelete,
             ),
           ],
@@ -940,38 +968,73 @@ class _ToolButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.color = Colors.white,
+    this.iconColor = Colors.white,
+    this.containerColor,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Color color;
+  final Color iconColor;
+  final Color? containerColor;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: 64,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(height: 5),
-            SizedBox(
-              width: 64,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  style: TextStyle(color: color, fontSize: 11),
+    final effectiveContainerColor =
+        containerColor ?? Colors.white.withValues(alpha: 0.08);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        splashColor: iconColor.withValues(alpha: 0.16),
+        highlightColor: iconColor.withValues(alpha: 0.08),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: SizedBox(
+            width: 74,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: effectiveContainerColor,
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: iconColor.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(icon, color: iconColor, size: 24),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: 74,
+                  height: 28,
+                  child: Center(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        height: 1.15,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/output_saver.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
@@ -148,26 +148,28 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       final dot = firstName.lastIndexOf('.');
       final baseName = dot > 0 ? firstName.substring(0, dot) : firstName;
       final fileName = 'pixeltools_${baseName}_merged_$timestamp.pdf';
-      final outputPath = '${saveDir.path}/$fileName';
-      final file = File(outputPath);
-      await file.writeAsBytes(resultBytes, flush: true);
 
-      if (!await file.exists() || await file.length() == 0) {
+      if (resultBytes.isEmpty) {
         throw Exception('Merged PDF file was not created or is empty');
       }
 
-      // Group the output in Files.
-      await recordCompletedOperation(
+      // One grouped copy in Files, plus the public save (MediaStore or the
+      // SAF folder chosen in Settings).
+      final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
-        OperationKind.pdfMerge,
-        [outputPath],
+        kind: OperationKind.pdfMerge,
+        entries: [
+          OutputEntry.bytes(bytes: resultBytes, fileName: fileName),
+        ],
+        stagingDirectory: saveDir,
       );
+      final outputPath = saved.first.localPath;
 
       state = state.copyWith(
         isProcessing: false,
         progress: 1.0,
         outputPath: outputPath,
-        publicExportPath: outputPath,
+        publicExportPath: saved.first.publicPath,
       );
 
       return outputPath;

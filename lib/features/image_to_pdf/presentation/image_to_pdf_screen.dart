@@ -52,6 +52,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Image to PDF'),
+        centerTitle: true,
         actions: [
           if (state.images.isNotEmpty)
             IconButton(
@@ -125,54 +126,59 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             constraints: BoxConstraints(
               minHeight: (constraints.maxHeight - 48).clamp(0.0, 4000.0),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(badgeSize * 0.375),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.image_outlined,
-                    size: badgeSize,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'No images selected',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Select images to convert to PDF',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: () {
-                    notifier.pickImages(context);
-                    InterstitialTracker.instance.trackAction();
-                  },
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
-                  label: const Text('Select Images'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
+            // Fills the viewport width so the icon, texts and button stay
+            // centered on any device size instead of hugging the left edge.
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(badgeSize * 0.375),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.image_outlined,
+                      size: badgeSize,
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  Text(
+                    'No images selected',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select images to convert to PDF',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    onPressed: () {
+                      notifier.pickImages(context);
+                      InterstitialTracker.instance.trackAction();
+                    },
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: const Text('Select Images'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -429,6 +435,15 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Saved to Downloads & Files',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

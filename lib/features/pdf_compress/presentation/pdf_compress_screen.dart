@@ -103,51 +103,54 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
             constraints: BoxConstraints(
               minHeight: (constraints.maxHeight - 48).clamp(0.0, 4000.0),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(badgeSize * 0.375),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.compress_rounded,
-                    size: badgeSize,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'No PDF selected',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Select a PDF file to compress',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: () => notifier.pickFile(context),
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Select PDF'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(badgeSize * 0.375),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.compress_rounded,
+                      size: badgeSize,
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  Text(
+                    'No PDF selected',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select a PDF file to compress',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    onPressed: () => notifier.pickFile(context),
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Select PDF'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -164,256 +167,261 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _CompressionLevelCards(
-            selected: state.compressionLevel,
-            onLevelChanged: notifier.setCompressionLevel,
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.picture_as_pdf,
-                    color: theme.colorScheme.onPrimaryContainer,
-                    size: 28,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CompressionLevelCards(
+                selected: state.compressionLevel,
+                onLevelChanged: notifier.setCompressionLevel,
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.picture_as_pdf,
+                        color: theme.colorScheme.onPrimaryContainer,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            state.selectedFileName ?? 'Selected PDF',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (state.selectedFileSize != null)
+                            Text(
+                              state.outputPath != null &&
+                                      state.outputFileSize != null
+                                  ? '${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)}'
+                                  : PdfService.formatFileSize(
+                                      state.selectedFileSize!),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                fontWeight: state.outputPath != null
+                                    ? FontWeight.w600
+                                    : null,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (!state.isProcessing && state.outputPath == null)
+                      TextButton.icon(
+                        onPressed: () => notifier.pickFile(context),
+                        icon: const Icon(Icons.swap_horiz, size: 18),
+                        label: const Text('Change'),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (state.isProcessing) ...[
+                LinearProgressIndicator(value: state.progress),
+                const SizedBox(height: 8),
+                Text(
+                  state.progress < 0.1
+                      ? 'Analysing PDF structure...'
+                      : state.progress >= 0.85 && state.progress < 0.9
+                          ? 'Optimising streams...'
+                          : 'Compressing... ${(state.progress * 100).toInt()}%',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
+                const SizedBox(height: 20),
+              ],
+              if (state.outputPath != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        state.selectedFileName ?? 'Selected PDF',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: theme.colorScheme.onSecondaryContainer,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Compression Complete',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                        ],
                       ),
-                      if (state.selectedFileSize != null)
+                      const SizedBox(height: 12),
+                      if (state.compressionRatio != null)
                         Text(
-                          state.outputPath != null &&
-                                  state.outputFileSize != null
-                              ? '${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)}'
-                              : PdfService.formatFileSize(
-                                  state.selectedFileSize!),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontWeight: state.outputPath != null
-                                ? FontWeight.w600
-                                : null,
+                          state.compressionRatio! > 0
+                              ? 'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})'
+                              : 'No size reduction was possible for this PDF (${PdfService.formatFileSize(state.selectedFileSize!)}). The original file was kept; the output is never larger than the input.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
+                      if (state.note != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          state.note!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                      if (state.publicExportPath == null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Ready to export — file is in temporary storage.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                      if (state.publicExportPath != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Saved to:',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          state.publicExportPath!
+                              .split('/')
+                              .sublist(0,
+                                  state.publicExportPath!.split('/').length - 1)
+                              .join('/'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            color: theme.colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                if (!state.isProcessing && state.outputPath == null)
-                  TextButton.icon(
-                    onPressed: () => notifier.pickFile(context),
-                    icon: const Icon(Icons.swap_horiz, size: 18),
-                    label: const Text('Change'),
+                const SizedBox(height: 20),
+                if (state.publicExportPath == null) ...[
+                  FilledButton.icon(
+                    onPressed: () => notifier.exportFile(),
+                    icon: const Icon(Icons.save_alt),
+                    label: const Text('Export to Device'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (state.isProcessing) ...[
-            LinearProgressIndicator(value: state.progress),
-            const SizedBox(height: 8),
-            Text(
-              state.progress < 0.1
-                  ? 'Analysing PDF structure...'
-                  : state.progress >= 0.85 && state.progress < 0.9
-                      ? 'Optimising streams...'
-                      : 'Compressing... ${(state.progress * 100).toInt()}%',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-          if (state.outputPath != null) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.secondaryContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  'Output File',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLowest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Row(
                     children: [
                       Icon(
-                        Icons.check_circle,
-                        color: theme.colorScheme.onSecondaryContainer,
-                        size: 24,
+                        Icons.picture_as_pdf,
+                        color: theme.colorScheme.primary,
+                        size: 20,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Compression Complete',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSecondaryContainer,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          state.outputPath!.split('/').last,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () async {
+                          await Share.shareXFiles([XFile(state.outputPath!)]);
+                        },
+                        icon: Icon(
+                          Icons.share,
+                          color: theme.colorScheme.primary,
+                          size: 20,
+                        ),
+                        tooltip: 'Share',
+                      ),
+                    ],
+                  ),
+                ),
+                if (state.publicExportPath != null) ...[
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            notifier.clear();
+                          },
+                          icon: const Icon(Icons.check_rounded),
+                          label: const Text('Done'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            await Share.shareXFiles([XFile(state.outputPath!)]);
+                          },
+                          icon: const Icon(Icons.share_rounded),
+                          label: const Text('Share'),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (state.compressionRatio != null)
-                    Text(
-                      state.compressionRatio! > 0
-                          ? 'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})'
-                          : 'No size reduction was possible for this PDF (${PdfService.formatFileSize(state.selectedFileSize!)}). The original file was kept; the output is never larger than the input.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSecondaryContainer,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  if (state.note != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      state.note!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
-                  if (state.publicExportPath == null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Ready to export — file is in temporary storage.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
-                  if (state.publicExportPath != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Saved to:',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      state.publicExportPath!
-                          .split('/')
-                          .sublist(
-                              0, state.publicExportPath!.split('/').length - 1)
-                          .join('/'),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                        color: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    ),
-                  ],
                 ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (state.publicExportPath == null) ...[
-              FilledButton.icon(
-                onPressed: () => notifier.exportFile(),
-                icon: const Icon(Icons.save_alt),
-                label: const Text('Export to Device'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
-                ),
-              ),
-              const SizedBox(height: 12),
+              ],
             ],
-            Text(
-              'Output File',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.picture_as_pdf,
-                    color: theme.colorScheme.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      state.outputPath!.split('/').last,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () async {
-                      await Share.shareXFiles([XFile(state.outputPath!)]);
-                    },
-                    icon: Icon(
-                      Icons.share,
-                      color: theme.colorScheme.primary,
-                      size: 20,
-                    ),
-                    tooltip: 'Share',
-                  ),
-                ],
-              ),
-            ),
-            if (state.publicExportPath != null) ...[
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        notifier.clear();
-                      },
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Done'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        await Share.shareXFiles([XFile(state.outputPath!)]);
-                      },
-                      icon: const Icon(Icons.share_rounded),
-                      label: const Text('Share'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -511,11 +519,15 @@ class _CompressionLevelCards extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(
-              'Compression Level',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.4,
+            Flexible(
+              child: Text(
+                'Compression Level',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.4,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),

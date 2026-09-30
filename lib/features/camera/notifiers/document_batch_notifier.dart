@@ -139,6 +139,12 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     _syncUndoDepths();
   }
 
+  void addPage(ScannedPage page) {
+    _recordEdit();
+    state = state.addPage(page);
+    _syncUndoDepths();
+  }
+
   Future<void> removePage(int index) async {
     final page = state.pages.elementAtOrNull(index);
     if (page != null && page.path.isNotEmpty) {

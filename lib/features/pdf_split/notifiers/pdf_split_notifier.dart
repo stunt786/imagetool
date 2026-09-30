@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/operation_recorder.dart';
 import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/output_saver.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -130,18 +130,11 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
         'iconBytes': WatermarkHelper.cachedIconBytes,
       };
 
-      List<String> outputPaths;
+      List<OutputEntry> entries;
 
       final saveDir =
           await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-
-      Future<String> savePdfFile(Uint8List bytes, String name) async {
-        final filePath = '${saveDir.path}/$name';
-        final file = File(filePath);
-        await file.writeAsBytes(bytes, flush: true);
-        return filePath;
-      }
 
       switch (state.splitMode) {
         case SplitMode.allPages:
@@ -154,13 +147,12 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               },
             );
             state = state.copyWith(progress: 0.7);
-            outputPaths = [];
+            entries = [];
             for (int i = 0; i < results.length; i++) {
-              final savedPath = await savePdfFile(
-                results[i],
-                'pixeltools_${baseName}_${timestamp}_page_${i + 1}.pdf',
-              );
-              outputPaths.add(savedPath);
+              entries.add(OutputEntry.bytes(
+                bytes: results[i],
+                fileName: 'pixeltools_${baseName}_${timestamp}_page_${i + 1}.pdf',
+              ));
             }
           }
           break;
@@ -184,11 +176,12 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               },
             );
             state = state.copyWith(progress: 0.7);
-            final savedPath = await savePdfFile(
-              resultBytes,
-              'pixeltools_${baseName}_${timestamp}_extracted.pdf',
-            );
-            outputPaths = [savedPath];
+            entries = [
+              OutputEntry.bytes(
+                bytes: resultBytes,
+                fileName: 'pixeltools_${baseName}_${timestamp}_extracted.pdf',
+              ),
+            ];
           }
           break;
 
@@ -211,13 +204,13 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               },
             );
             state = state.copyWith(progress: 0.7);
-            outputPaths = [];
+            entries = [];
             for (int i = 0; i < results.length; i++) {
-              final savedPath = await savePdfFile(
-                results[i],
-                'pixeltools_${baseName}_${timestamp}_page_${sortedPages[i]}.pdf',
-              );
-              outputPaths.add(savedPath);
+              entries.add(OutputEntry.bytes(
+                bytes: results[i],
+                fileName:
+                    'pixeltools_${baseName}_${timestamp}_page_${sortedPages[i]}.pdf',
+              ));
             }
           }
           break;
@@ -233,29 +226,34 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
               },
             );
             state = state.copyWith(progress: 0.7);
-            outputPaths = [];
+            entries = [];
             for (int i = 0; i < results.length; i++) {
-              final savedPath = await savePdfFile(
-                results[i],
-                'pixeltools_${baseName}_${timestamp}_part_${i + 1}.pdf',
-              );
-              outputPaths.add(savedPath);
+              entries.add(OutputEntry.bytes(
+                bytes: results[i],
+                fileName: 'pixeltools_${baseName}_${timestamp}_part_${i + 1}.pdf',
+              ));
             }
           }
           break;
       }
 
-      await recordCompletedOperation(
+      final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
-        OperationKind.pdfSplit,
-        outputPaths,
+        kind: OperationKind.pdfSplit,
+        entries: entries,
+        stagingDirectory: saveDir,
       );
+      final outputPaths = [for (final result in saved) result.localPath];
+      final publicPaths = [
+        for (final result in saved)
+          if (result.publicPath != null) result.publicPath!,
+      ];
 
       state = state.copyWith(
         isProcessing: false,
         progress: 1.0,
         outputPaths: outputPaths,
-        publicExportPaths: outputPaths,
+        publicExportPaths: publicPaths,
       );
 
       return outputPaths;

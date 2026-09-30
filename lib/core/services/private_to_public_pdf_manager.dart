@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../shared/models/picked_file.dart';
+import 'public_storage.dart';
 
 /// Orchestrates the two-phase "Sandbox-to-Public" PDF pipeline:
 ///
@@ -115,10 +116,46 @@ class PrivateToPublicPdfManager {
   /// Exports multiple sandbox files to a user-selected public directory via SAF.
   /// Opens the system directory picker. Returns the list of public paths
   /// (empty if the user cancelled).
+  ///
+  /// On Android this writes through the persisted tree grant (DocumentFile),
+  /// not raw `File` copies — scoped storage rejects those without
+  /// `MANAGE_EXTERNAL_STORAGE`, which the app no longer holds.
   Future<List<String>> exportMultipleFiles({
     required List<String> sandboxPaths,
     String Function(int index, String sandboxPath)? nameOverride,
   }) async {
+    if (Platform.isAndroid) {
+      final picked = await PublicStorage.pickFolder();
+      if (picked == null) return [];
+
+      final results = <String>[];
+      try {
+        for (int i = 0; i < sandboxPaths.length; i++) {
+          final sandboxPath = sandboxPaths[i];
+          if (!await File(sandboxPath).exists()) continue;
+
+          final baseName = nameOverride != null
+              ? nameOverride(i, sandboxPath)
+              : path.basename(sandboxPath);
+          try {
+            final destination = await PublicStorage.publishFile(
+              sourcePath: sandboxPath,
+              fileName: baseName,
+              kind: PublicStorage.kindForFileName(baseName),
+              treeUriOverride: picked.uri,
+            );
+            results.add(destination);
+          } catch (_) {
+            // Skip files that failed; the caller reports totals.
+          }
+        }
+      } finally {
+        // One-off export: drop the grant again so it does not linger.
+        await PublicStorage.releaseTree(picked.uri);
+      }
+      return results;
+    }
+
     final dir = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select save location',
     );

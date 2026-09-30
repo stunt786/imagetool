@@ -81,10 +81,18 @@ class FilePickerService {
     BuildContext context,
     bool allowMultiple,
   ) async {
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    final PermissionState ps = await PhotoManager.requestPermissionExtend(
+      requestOption: const PermissionRequestOption(
+        androidPermission: AndroidPermission(
+          type: RequestType.image,
+          mediaLocation: false,
+        ),
+      ),
+    );
     if (!ps.isAuth && !ps.hasAccess) {
       return [];
     }
+    if (!context.mounted) return [];
 
     final List<AssetEntity>? result = await AssetPicker.pickAssets(
       context,

@@ -59,10 +59,9 @@ class DocumentEnhancementService {
     });
   }
 
-  /// All-in-one smart scan enhancement with per-stage detection gating.
-  /// Only stages that actually detect a problem run; the returned [stages]
-  /// list names exactly what was applied so the UI never claims work it
-  /// did not do.
+  /// Smart Clean filter: cleans up unwanted objects (fingers holding paper,
+  /// housefly, dirt/spots, foreign objects placed over document) and levels
+  /// lighting/background WITHOUT warping or distorting geometry.
   static Future<SmartEnhanceResult?> smartScanEnhanceDetailed(
     Uint8List bytes,
   ) async {
@@ -71,24 +70,7 @@ class DocumentEnhancementService {
       if (image == null) return null;
 
       final stages = <String>[];
-      img.Image processed = image;
-
-      final fitted = internalAutoFitPaper(processed);
-      if (!identical(fitted, processed)) stages.add('Auto-crop');
-      processed = fitted;
-
-      final flat = internalAutoFlattenPaper(processed);
-      if (!identical(flat, processed)) stages.add('Flatten');
-      processed = flat;
-
-      if (internalHasUnevenIllumination(processed)) {
-        processed = internalAutocorrectAntiLightShadows(processed);
-        stages.add('Shadow removal');
-      }
-
-      final brightened = internalAutoAdjustDarkImage(processed);
-      if (!identical(brightened, processed)) stages.add('Brightness');
-      processed = brightened;
+      final processed = internalSmartClean(image, stagesOut: stages);
 
       return SmartEnhanceResult(
         bytes: Uint8List.fromList(img.encodeJpg(processed, quality: 95)),
@@ -97,21 +79,20 @@ class DocumentEnhancementService {
     });
   }
 
-  /// All-in-one smart scan enhancement:
-  /// Auto-fit paper + Auto-flatten curvature + Correct antilight shadows + Auto-adjust brightness/contrast
+  /// All-in-one smart scan clean:
+  /// Cleans unwanted objects and normalizes background without warping.
   static Future<Uint8List?> smartScanEnhance(Uint8List bytes) async {
     final result = await smartScanEnhanceDetailed(bytes);
     return result?.bytes;
   }
 
-  /// Flatten = straighten + auto-crop to the paper bounds (NOT a curvature
-  /// dewarp). Warps a skewed paper quad into a rectangle, then crops to the
-  /// detected paper edges. Flat pages pass through untouched.
+  /// Auto flatten: straightens paper orientation/quad and makes paper smooth,
+  /// clearing raised and down parts in pages (creases, curls, gutter folds).
   static Future<Uint8List?> flattenDocument(Uint8List bytes) async {
     return Isolate.run(() {
       final image = img.decodeImage(bytes);
       if (image == null) return null;
-      final flattened = internalFlattenStraighten(image);
+      final flattened = internalAutoFlattenSmooth(image);
       return Uint8List.fromList(img.encodeJpg(flattened, quality: 95));
     });
   }
@@ -244,13 +225,457 @@ class DocumentEnhancementService {
     return src;
   }
 
-  /// Automatically dewarps and flattens bended/curled scan paper.
-  static img.Image internalAutoFlattenPaper(img.Image src) {
-    final w = src.width;
-    final h = src.height;
+  /// Cleans up unwanted objects (housefly, dirt, objects placed over document,
+  /// fingers holding paper) and normalizes paper background WITHOUT WARPING.
+  static img.Image internalSmartClean(
+    img.Image src, {
+    List<String>? stagesOut,
+  }) {
+    img.Image result = src.clone();
+    final w = result.width;
+    final h = result.height;
+    if (w < 10 || h < 10) return result;
 
-    // Analyze vertical baseline curvature across horizontal slices
-    const numSlices = 20;
+    // 1. Remove fingers holding paper near edges/margins
+    final fingersCleaned = _cleanFingerIntrusions(result);
+    if (fingersCleaned) {
+      stagesOut?.add('Fingers removed');
+    }
+
+    // 2. Remove unwanted objects like housefly, dirt, spots, foreign objects placed over paper
+    final objectsCleaned = _cleanUnwantedObjectsAndDirt(result);
+    if (objectsCleaned) {
+      stagesOut?.add('Dirt & objects cleaned');
+    }
+
+    // 3. Clean background & remove harsh antilight shadows without warping
+    if (internalHasUnevenIllumination(result)) {
+      result = internalAutocorrectAntiLightShadows(result);
+      stagesOut?.add('Shadows removed');
+    } else {
+      result = _levelPaperBackground(result);
+      stagesOut?.add('Background cleaned');
+    }
+
+    // 4. Adjust brightness if dark/underexposed
+    final brightened = internalAutoAdjustDarkImage(result);
+    if (!identical(brightened, result)) {
+      stagesOut?.add('Brightness');
+      result = brightened;
+    }
+
+    return result;
+  }
+
+  /// Detects and cleans fingers holding down the document borders.
+  static bool _cleanFingerIntrusions(img.Image image) {
+    final w = image.width;
+    final h = image.height;
+    final scale = math.min(1.0, 360.0 / math.max(w, h));
+    final sw = (w * scale).round().clamp(10, w);
+    final sh = (h * scale).round().clamp(10, h);
+    final small = img.copyResize(image, width: sw, height: sh);
+
+    var paperR = 0, paperG = 0, paperB = 0;
+    var paperSamples = 0;
+    for (var y = sh ~/ 4; y < sh * 3 ~/ 4; y += 3) {
+      for (var x = sw ~/ 4; x < sw * 3 ~/ 4; x += 3) {
+        final p = small.getPixel(x, y);
+        paperR += p.r.toInt();
+        paperG += p.g.toInt();
+        paperB += p.b.toInt();
+        paperSamples++;
+      }
+    }
+    if (paperSamples == 0) return false;
+    final avgPaperR = paperR ~/ paperSamples;
+    final avgPaperG = paperG ~/ paperSamples;
+    final avgPaperB = paperB ~/ paperSamples;
+    final paperLum = 0.299 * avgPaperR + 0.587 * avgPaperG + 0.114 * avgPaperB;
+
+    final marginX = (sw * 0.18).round();
+    final marginY = (sh * 0.18).round();
+
+    final mask = List<int>.filled(sw * sh, 0);
+    for (var y = 0; y < sh; y++) {
+      final isNearEdgeY = y < marginY || y > sh - marginY;
+      for (var x = 0; x < sw; x++) {
+        final isNearEdgeX = x < marginX || x > sw - marginX;
+        if (!isNearEdgeX && !isNearEdgeY) continue;
+
+        final p = small.getPixel(x, y);
+        final r = p.r.toInt();
+        final g = p.g.toInt();
+        final b = p.b.toInt();
+        final lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Skin-tone detection in RGB color space
+        final isSkin = r > 65 &&
+            g > 30 &&
+            b > 15 &&
+            r > g &&
+            g >= (b * 0.75) &&
+            (r - g) < 130 &&
+            (r - b) < 160 &&
+            (r - g) >= 8;
+
+        // Or dark finger silhouette touching outer border
+        final isDarkFinger = (x <= 3 || x >= sw - 4 || y <= 3 || y >= sh - 4) &&
+            lum < paperLum - 50 &&
+            lum < 130;
+
+        if (isSkin || isDarkFinger) {
+          mask[y * sw + x] = 1;
+        }
+      }
+    }
+
+    final visited = List<int>.filled(sw * sh, 0);
+    var modifiedAny = false;
+
+    for (var i = 0; i < sw * sh; i++) {
+      if (mask[i] != 1 || visited[i] == 1) continue;
+      final stack = <int>[i];
+      visited[i] = 1;
+      final comp = <int>[];
+      var touchesBorder = false;
+      var minX = sw, maxX = 0, minY = sh, maxY = 0;
+
+      while (stack.isNotEmpty) {
+        final cur = stack.removeLast();
+        comp.add(cur);
+        final cx = cur % sw;
+        final cy = cur ~/ sw;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+        if (cx == 0 || cy == 0 || cx == sw - 1 || cy == sh - 1) {
+          touchesBorder = true;
+        }
+
+        for (final offset in [-1, 1, -sw, sw]) {
+          final next = cur + offset;
+          if (next >= 0 && next < sw * sh) {
+            if ((offset == -1 && cx == 0) || (offset == 1 && cx == sw - 1)) {
+              continue;
+            }
+            if (mask[next] == 1 && visited[next] == 0) {
+              visited[next] = 1;
+              stack.add(next);
+            }
+          }
+        }
+      }
+
+      final compWidth = maxX - minX + 1;
+      final compHeight = maxY - minY + 1;
+      final compArea = comp.length;
+      final maxArea = (sw * sh * 0.30).round();
+
+      if (touchesBorder &&
+          compArea >= 25 &&
+          compArea < maxArea &&
+          compWidth >= 8 &&
+          compHeight >= 8) {
+        final fullMinX = (minX / scale).floor().clamp(0, w - 1);
+        final fullMaxX = (maxX / scale).ceil().clamp(0, w - 1);
+        final fullMinY = (minY / scale).floor().clamp(0, h - 1);
+        final fullMaxY = (maxY / scale).ceil().clamp(0, h - 1);
+
+        final bg = _sampleCleanBackgroundNear(
+            image, fullMinX, fullMinY, fullMaxX, fullMaxY, avgPaperR, avgPaperG, avgPaperB);
+
+        for (final pixelIndex in comp) {
+          final cx = pixelIndex % sw;
+          final cy = pixelIndex ~/ sw;
+          final pxStart = (cx / scale).floor().clamp(0, w - 1);
+          final pxEnd = ((cx + 1) / scale).ceil().clamp(0, w);
+          final pyStart = (cy / scale).floor().clamp(0, h - 1);
+          final pyEnd = ((cy + 1) / scale).ceil().clamp(0, h);
+
+          for (var py = pyStart; py < pyEnd; py++) {
+            for (var px = pxStart; px < pxEnd; px++) {
+              image.setPixelRgb(px, py, bg[0], bg[1], bg[2]);
+              modifiedAny = true;
+            }
+          }
+        }
+      }
+    }
+
+    return modifiedAny;
+  }
+
+  /// Removes isolated unwanted objects (housefly, dirt, spots, foreign objects placed over paper).
+  static bool _cleanUnwantedObjectsAndDirt(img.Image image) {
+    final w = image.width;
+    final h = image.height;
+    if (w < 20 || h < 20) return false;
+
+    final scale = math.min(1.0, 480.0 / math.max(w, h));
+    final sw = (w * scale).round().clamp(10, w);
+    final sh = (h * scale).round().clamp(10, h);
+    final small = img.copyResize(image, width: sw, height: sh);
+    final gray = img.grayscale(small);
+
+    const gridCols = 16;
+    const gridRows = 16;
+    final bgGrid = List<double>.filled(gridCols * gridRows, 240.0);
+    final cellW = sw / gridCols;
+    final cellH = sh / gridRows;
+
+    for (var gy = 0; gy < gridRows; gy++) {
+      for (var gx = 0; gx < gridCols; gx++) {
+        final x0 = (gx * cellW).floor().clamp(0, sw - 1);
+        final x1 = ((gx + 1) * cellW).floor().clamp(0, sw);
+        final y0 = (gy * cellH).floor().clamp(0, sh - 1);
+        final y1 = ((gy + 1) * cellH).floor().clamp(0, sh);
+        final vals = <int>[];
+        for (var y = y0; y < y1; y += 2) {
+          for (var x = x0; x < x1; x += 2) {
+            vals.add(gray.getPixel(x, y).r.toInt());
+          }
+        }
+        if (vals.isNotEmpty) {
+          vals.sort();
+          bgGrid[gy * gridCols + gx] = vals[(vals.length * 0.85).floor()].toDouble();
+        }
+      }
+    }
+
+    double sampleBgLum(int x, int y) {
+      final gx = ((x / sw) * gridCols - 0.5).clamp(0.0, gridCols - 1.001);
+      final gy = ((y / sh) * gridRows - 0.5).clamp(0.0, gridRows - 1.001);
+      final x0 = gx.floor(), y0 = gy.floor();
+      final x1 = (x0 + 1).clamp(0, gridCols - 1);
+      final y1 = (y0 + 1).clamp(0, gridRows - 1);
+      final fx = gx - x0, fy = gy - y0;
+      final v00 = bgGrid[y0 * gridCols + x0];
+      final v10 = bgGrid[y0 * gridCols + x1];
+      final v01 = bgGrid[y1 * gridCols + x0];
+      final v11 = bgGrid[y1 * gridCols + x1];
+      return (v00 * (1 - fx) + v10 * fx) * (1 - fy) +
+          (v01 * (1 - fx) + v11 * fx) * fy;
+    }
+
+    final darkMask = List<int>.filled(sw * sh, 0);
+    for (var y = 0; y < sh; y++) {
+      for (var x = 0; x < sw; x++) {
+        final lum = gray.getPixel(x, y).r.toInt();
+        final bg = sampleBgLum(x, y);
+        if (bg - lum > 35) {
+          darkMask[y * sw + x] = 1;
+        }
+      }
+    }
+
+    final visited = List<int>.filled(sw * sh, 0);
+    var removedAny = false;
+    final marginX = (sw * 0.08).round();
+    final marginY = (sh * 0.08).round();
+
+    for (var i = 0; i < sw * sh; i++) {
+      if (darkMask[i] != 1 || visited[i] == 1) continue;
+      final stack = <int>[i];
+      visited[i] = 1;
+      final comp = <int>[];
+      var minX = sw, maxX = 0, minY = sh, maxY = 0;
+
+      while (stack.isNotEmpty) {
+        final cur = stack.removeLast();
+        comp.add(cur);
+        final cx = cur % sw;
+        final cy = cur ~/ sw;
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+
+        for (final offset in [-1, 1, -sw, sw]) {
+          final next = cur + offset;
+          if (next >= 0 && next < sw * sh) {
+            if ((offset == -1 && cx == 0) || (offset == 1 && cx == sw - 1)) {
+              continue;
+            }
+            if (darkMask[next] == 1 && visited[next] == 0) {
+              visited[next] = 1;
+              stack.add(next);
+            }
+          }
+        }
+      }
+
+      final blobWidth = maxX - minX + 1;
+      final blobHeight = maxY - minY + 1;
+      final blobArea = comp.length;
+
+      // Count external dark pixels within a surrounding radius
+      var surroundingDark = 0;
+      const pad = 8;
+      final pMinX = math.max(0, minX - pad);
+      final pMaxX = math.min(sw - 1, maxX + pad);
+      final pMinY = math.max(0, minY - pad);
+      final pMaxY = math.min(sh - 1, maxY + pad);
+
+      for (var y = pMinY; y <= pMaxY; y++) {
+        for (var x = pMinX; x <= pMaxX; x++) {
+          if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
+          if (darkMask[y * sw + x] == 1) surroundingDark++;
+        }
+      }
+
+      // An isolated housefly, bug, dirt speck, crumb, or blemish:
+      // Has almost no other dark pixels in its surrounding neighborhood (isolated on paper)
+      // and has small-to-medium compact size (not a large photo/diagram).
+      final isHouseflyOrDirt = (surroundingDark <= 4) &&
+          blobArea >= 2 &&
+          blobArea <= 600 &&
+          blobWidth <= 60 &&
+          blobHeight <= 60;
+
+      // Foreign object in margins (clips, staples, stamps, smudges, stray marks):
+      final isInMargin = minX < marginX ||
+          maxX > sw - marginX ||
+          minY < marginY ||
+          maxY > sh - marginY;
+      final isMarginObject = isInMargin &&
+          (surroundingDark <= 12) &&
+          blobArea <= 2000;
+
+      if (isHouseflyOrDirt || isMarginObject) {
+        final fullMinX = (minX / scale).floor().clamp(0, w - 1);
+        final fullMaxX = (maxX / scale).ceil().clamp(0, w - 1);
+        final fullMinY = (minY / scale).floor().clamp(0, h - 1);
+        final fullMaxY = (maxY / scale).ceil().clamp(0, h - 1);
+
+        final bg = _sampleCleanBackgroundNear(
+            image, fullMinX, fullMinY, fullMaxX, fullMaxY, 245, 245, 245);
+
+        for (final pixelIndex in comp) {
+          final cx = pixelIndex % sw;
+          final cy = pixelIndex ~/ sw;
+          final pxStart = (cx / scale).floor().clamp(0, w - 1);
+          final pxEnd = ((cx + 1) / scale).ceil().clamp(0, w);
+          final pyStart = (cy / scale).floor().clamp(0, h - 1);
+          final pyEnd = ((cy + 1) / scale).ceil().clamp(0, h);
+
+          for (var py = pyStart; py < pyEnd; py++) {
+            for (var px = pxStart; px < pxEnd; px++) {
+              image.setPixelRgb(px, py, bg[0], bg[1], bg[2]);
+              removedAny = true;
+            }
+          }
+        }
+      }
+    }
+
+    return removedAny;
+  }
+
+  static List<int> _sampleCleanBackgroundNear(
+    img.Image image,
+    int minX,
+    int minY,
+    int maxX,
+    int maxY,
+    int fallbackR,
+    int fallbackG,
+    int fallbackB,
+  ) {
+    var sumR = 0, sumG = 0, sumB = 0, count = 0;
+    const ringPad = 12;
+    final rMinX = math.max(0, minX - ringPad);
+    final rMaxX = math.min(image.width - 1, maxX + ringPad);
+    final rMinY = math.max(0, minY - ringPad);
+    final rMaxY = math.min(image.height - 1, maxY + ringPad);
+
+    for (var y = rMinY; y <= rMaxY; y += 2) {
+      for (var x = rMinX; x <= rMaxX; x += 2) {
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
+        final p = image.getPixel(x, y);
+        final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        if (lum > 140) {
+          sumR += p.r.toInt();
+          sumG += p.g.toInt();
+          sumB += p.b.toInt();
+          count++;
+        }
+      }
+    }
+    if (count > 0) {
+      return [
+        (sumR / count).round().clamp(0, 255),
+        (sumG / count).round().clamp(0, 255),
+        (sumB / count).round().clamp(0, 255),
+      ];
+    }
+    return [fallbackR, fallbackG, fallbackB];
+  }
+
+  static img.Image _levelPaperBackground(img.Image src) {
+    const bgDim = 48;
+    final smallW = math.max(16, src.width ~/ bgDim);
+    final smallH = math.max(16, src.height ~/ bgDim);
+    final small = img.copyResize(src, width: smallW, height: smallH);
+
+    final dilated = img.Image(width: smallW, height: smallH);
+    const k = 2;
+    for (var y = 0; y < smallH; y++) {
+      for (var x = 0; x < smallW; x++) {
+        var maxR = 0, maxG = 0, maxB = 0;
+        for (var dy = -k; dy <= k; dy++) {
+          final ny = (y + dy).clamp(0, smallH - 1);
+          for (var dx = -k; dx <= k; dx++) {
+            final nx = (x + dx).clamp(0, smallW - 1);
+            final p = small.getPixel(nx, ny);
+            if (p.r > maxR) maxR = p.r.toInt();
+            if (p.g > maxG) maxG = p.g.toInt();
+            if (p.b > maxB) maxB = p.b.toInt();
+          }
+        }
+        dilated.setPixelRgb(x, y, maxR, maxG, maxB);
+      }
+    }
+
+    final blurred = img.gaussianBlur(dilated, radius: 4);
+    final bgMap = img.copyResize(blurred, width: src.width, height: src.height);
+    final result = src.clone();
+    const targetBg = 248.0;
+
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final p = src.getPixel(x, y);
+        final bg = bgMap.getPixel(x, y);
+        final bgLum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
+        final pLum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+
+        if (pLum > bgLum - 30) {
+          final bgR = math.max(30.0, bg.r.toDouble());
+          final bgG = math.max(30.0, bg.g.toDouble());
+          final bgB = math.max(30.0, bg.b.toDouble());
+          final nr = ((p.r / bgR) * targetBg).clamp(0.0, 255.0).toInt();
+          final ng = ((p.g / bgG) * targetBg).clamp(0.0, 255.0).toInt();
+          final nb = ((p.b / bgB) * targetBg).clamp(0.0, 255.0).toInt();
+          result.setPixelRgb(x, y, nr, ng, nb);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Auto flatten: straightens paper orientation and makes paper smooth,
+  /// clearing raised and down parts in pages (peaks, troughs, curls, crease shadows).
+  static img.Image internalAutoFlattenSmooth(img.Image src) {
+    // 1. Straighten perspective quad / deskew
+    final straightened = internalFlattenStraighten(src);
+
+    final w = straightened.width;
+    final h = straightened.height;
+    if (w < 40 || h < 40) return straightened;
+
+    // 2. Curvature analysis: analyze raised and down parts across slices
+    const numSlices = 28;
     final sliceWidth = w / numSlices;
     final detectedOffsets = List<double>.filled(numSlices, 0.0);
 
@@ -263,35 +688,28 @@ class DocumentEnhancementService {
 
       for (var y = 0; y < h; y++) {
         for (var x = startX; x < endX; x++) {
-          final p = src.getPixel(x, y);
+          final p = straightened.getPixel(x, y);
           final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
-          // Document content (text/lines) is darker than paper background
           if (lum < 165) {
-            final darkness = (165 - lum);
+            final darkness = 165 - lum;
             weightSum += darkness;
             yWeightedSum += darkness * y;
           }
         }
       }
 
-      if (weightSum > 40) {
+      if (weightSum > 30) {
         detectedOffsets[s] = yWeightedSum / weightSum;
       } else {
         detectedOffsets[s] = h / 2.0;
       }
     }
 
-    // A text-heavy column can shift its dark-pixel centre independently of
-    // neighbouring columns.  Treating those local shifts as paper curvature
-    // was the cause of the previous wavy result. Keep only the broad, smooth
-    // component before considering a dewarp.
     final smoothedOffsets = List<double>.filled(numSlices, 0.0);
     for (var i = 0; i < numSlices; i++) {
       var weightedSum = 0.0;
       var weight = 0.0;
-      for (var j = math.max(0, i - 3);
-          j <= math.min(numSlices - 1, i + 3);
-          j++) {
+      for (var j = math.max(0, i - 3); j <= math.min(numSlices - 1, i + 3); j++) {
         final w = 4.0 - (i - j).abs();
         weightedSum += detectedOffsets[j] * w;
         weight += w;
@@ -301,45 +719,116 @@ class DocumentEnhancementService {
 
     final avgOffset = smoothedOffsets.reduce((a, b) => a + b) / numSlices;
     final relativeDips = smoothedOffsets.map((y) => y - avgOffset).toList();
-
     final maxDip = relativeDips.reduce(math.max);
     final minDip = relativeDips.reduce(math.min);
     final curveAmplitude = maxDip - minDip;
 
-    // Be conservative: a scanner should preserve a flat page rather than
-    // inventing a warp from normal paragraph/table layout.
-    if (curveAmplitude < (h * 0.015) || curveAmplitude > (h * 0.12)) {
-      return src;
-    }
+    img.Image dewarped = straightened;
 
-    final result = img.Image(width: w, height: h);
+    // Invert the curvature: pulling up down troughs and leveling raised parts
+    if (curveAmplitude >= (h * 0.015) && curveAmplitude <= (h * 0.20)) {
+      dewarped = img.Image(width: w, height: h);
+      for (var x = 0; x < w; x++) {
+        final slicePos = (x / w) * numSlices - 0.5;
+        final s0 = slicePos.floor().clamp(0, numSlices - 1);
+        final s1 = (s0 + 1).clamp(0, numSlices - 1);
+        final t = (slicePos - s0).clamp(0.0, 1.0);
+        final dyOffset = relativeDips[s0] * (1 - t) + relativeDips[s1] * t;
 
-    // Dewarp: for every destination column, reverse the vertical curvature dip
-    for (var x = 0; x < w; x++) {
-      final slicePos = (x / w) * numSlices - 0.5;
-      final s0 = slicePos.floor().clamp(0, numSlices - 1);
-      final s1 = (s0 + 1).clamp(0, numSlices - 1);
-      final t = (slicePos - s0).clamp(0.0, 1.0);
+        for (var y = 0; y < h; y++) {
+          final srcY = (y + dyOffset).clamp(0.0, (h - 1).toDouble());
+          final iy = srcY.floor();
+          final fy = srcY - iy;
 
-      final dyOffset = relativeDips[s0] * (1 - t) + relativeDips[s1] * t;
+          final p0 = straightened.getPixel(x, iy);
+          final p1 = straightened.getPixel(x, (iy + 1).clamp(0, h - 1));
 
-      for (var y = 0; y < h; y++) {
-        final srcY = (y + dyOffset).clamp(0.0, (h - 1).toDouble());
-        final iy = srcY.floor();
-        final fy = srcY - iy;
+          final r = (p0.r * (1 - fy) + p1.r * fy).round().clamp(0, 255);
+          final g = (p0.g * (1 - fy) + p1.g * fy).round().clamp(0, 255);
+          final b = (p0.b * (1 - fy) + p1.b * fy).round().clamp(0, 255);
 
-        final p0 = src.getPixel(x, iy);
-        final p1 = src.getPixel(x, (iy + 1).clamp(0, h - 1));
-
-        final r = (p0.r * (1 - fy) + p1.r * fy).round().clamp(0, 255);
-        final g = (p0.g * (1 - fy) + p1.g * fy).round().clamp(0, 255);
-        final b = (p0.b * (1 - fy) + p1.b * fy).round().clamp(0, 255);
-
-        result.setPixelRgb(x, y, r, g, b);
+          dewarped.setPixelRgb(x, y, r, g, b);
+        }
       }
     }
 
-    return result;
+    // 3. Clear crease shadows and smooth paper surface
+    return _smoothPaperSurfaceShading(dewarped);
+  }
+
+  /// Smooths out crease shadows and fold troughs to make paper surface smooth.
+  static img.Image _smoothPaperSurfaceShading(img.Image src) {
+    const bgDim = 32;
+    final smallW = math.max(16, src.width ~/ bgDim);
+    final smallH = math.max(16, src.height ~/ bgDim);
+    final small = img.copyResize(src, width: smallW, height: smallH);
+
+    final dilated = img.Image(width: smallW, height: smallH);
+    const k = 2;
+    for (var y = 0; y < smallH; y++) {
+      for (var x = 0; x < smallW; x++) {
+        var maxR = 0, maxG = 0, maxB = 0;
+        for (var dy = -k; dy <= k; dy++) {
+          final ny = (y + dy).clamp(0, smallH - 1);
+          for (var dx = -k; dx <= k; dx++) {
+            final nx = (x + dx).clamp(0, smallW - 1);
+            final p = small.getPixel(nx, ny);
+            if (p.r > maxR) maxR = p.r.toInt();
+            if (p.g > maxG) maxG = p.g.toInt();
+            if (p.b > maxB) maxB = p.b.toInt();
+          }
+        }
+        dilated.setPixelRgb(x, y, maxR, maxG, maxB);
+      }
+    }
+
+    final blurred = img.gaussianBlur(dilated, radius: 4);
+    final bgMap = img.copyResize(blurred, width: src.width, height: src.height);
+
+    var sumBgLum = 0.0;
+    var count = 0;
+    for (var y = 0; y < smallH; y += 2) {
+      for (var x = 0; x < smallW; x += 2) {
+        final p = blurred.getPixel(x, y);
+        sumBgLum += 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        count++;
+      }
+    }
+    final targetLum = count > 0 ? (sumBgLum / count).clamp(210.0, 250.0) : 240.0;
+
+    final out = src.clone();
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final p = src.getPixel(x, y);
+        final bg = bgMap.getPixel(x, y);
+
+        final bgR = math.max(20.0, bg.r.toDouble());
+        final bgG = math.max(20.0, bg.g.toDouble());
+        final bgB = math.max(20.0, bg.b.toDouble());
+
+        final factorR = targetLum / bgR;
+        final factorG = targetLum / bgG;
+        final factorB = targetLum / bgB;
+
+        final pLum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        final bgLum = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
+
+        // Smooth crease shadow dips back to the flat paper luminance
+        if (pLum > bgLum - 40) {
+          final nr = (p.r * factorR).clamp(0.0, 255.0).toInt();
+          final ng = (p.g * factorG).clamp(0.0, 255.0).toInt();
+          final nb = (p.b * factorB).clamp(0.0, 255.0).toInt();
+          out.setPixelRgb(x, y, nr, ng, nb);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /// Automatically dewarps and flattens bended/curled scan paper.
+  static img.Image internalAutoFlattenPaper(img.Image src) {
+    return internalAutoFlattenSmooth(src);
   }
 
   /// Adaptively adjusts brightness and contrast for dark/underexposed images.

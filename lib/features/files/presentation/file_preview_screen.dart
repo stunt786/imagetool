@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../features/image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -97,19 +98,24 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
-            Row(
-              children: [
-                _ToolBadge(tool: _currentItem.toolUsed),
-                const SizedBox(width: 8),
-                Text(
-                  _currentItem.timeAgo,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ToolBadge(tool: _currentItem.toolUsed),
+                  const SizedBox(width: 8),
+                  Text(
+                    _currentItem.timeAgo,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -150,10 +156,40 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
   }
 
   Widget _buildBottomBar(bool isPdf) {
+    final actions = <_ActionSpec>[
+      _ActionSpec(
+        icon: isPdf ? Icons.file_upload_outlined : Icons.save_alt_rounded,
+        label: isPdf ? 'Export' : 'Save',
+        onTap: _saveOrExportFile,
+      ),
+      if (_isPageGroup)
+        _ActionSpec(
+          icon: Icons.picture_as_pdf_outlined,
+          label: 'To PDF',
+          onTap: _exportGroupToPdf,
+        ),
+      _ActionSpec(
+        icon: Icons.edit_outlined,
+        label: 'Rename',
+        onTap: _renameCurrentFile,
+      ),
+      _ActionSpec(
+        icon: Icons.share_rounded,
+        label: 'Share',
+        onTap: _shareFile,
+      ),
+      _ActionSpec(
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+        color: Colors.redAccent,
+        onTap: _deleteFile,
+      ),
+    ];
+
     return Container(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
+        left: 8,
+        right: 8,
         top: 10,
         bottom: MediaQuery.of(context).padding.bottom + 10,
       ),
@@ -161,37 +197,28 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         color: Color(0xFF1A1A1A),
         border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _ActionButton(
-            icon: isPdf ? Icons.file_upload_outlined : Icons.save_alt_rounded,
-            label: isPdf ? 'Export' : 'Save',
-            onTap: _saveOrExportFile,
-          ),
-          if (_isPageGroup)
-            _ActionButton(
-              icon: Icons.picture_as_pdf_outlined,
-              label: 'To PDF',
-              onTap: _exportGroupToPdf,
-            ),
-          _ActionButton(
-            icon: Icons.edit_outlined,
-            label: 'Rename',
-            onTap: _renameCurrentFile,
-          ),
-          _ActionButton(
-            icon: Icons.share_rounded,
-            label: 'Share',
-            onTap: _shareFile,
-          ),
-          _ActionButton(
-            icon: Icons.delete_outline_rounded,
-            label: 'Delete',
-            color: Colors.redAccent,
-            onTap: _deleteFile,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Share the bar width evenly between the actions and tighten the
+          // side padding as the slots get narrower, so every option stays
+          // fully on screen on small phones, landscape and large fonts.
+          final itemWidth = constraints.maxWidth / actions.length;
+          final horizontalPadding = ((itemWidth - 56) / 2).clamp(2.0, 16.0);
+          return Row(
+            children: [
+              for (final action in actions)
+                Expanded(
+                  child: _ActionButton(
+                    icon: action.icon,
+                    label: action.label,
+                    color: action.color,
+                    horizontalPadding: horizontalPadding,
+                    onTap: action.onTap,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -277,7 +304,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
     context.push('/images/to-pdf');
   }
 
-  Future<void> _saveOrExportFile() async {    final item = _currentItem;
+  Future<void> _saveOrExportFile() async {
+    final item = _currentItem;
     final isPdf = item.fileName.toLowerCase().endsWith('.pdf');
     final path = item.filePath ?? item.thumbnailPath;
     if (path == null || path.isEmpty) {
@@ -293,17 +321,37 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       }
 
       if (isPdf) {
-        final saveDir =
-            await ref.read(appSettingsProvider.notifier).getSaveDirectory();
-        final destPath = '${saveDir.path}/${item.fileName}';
-        if (file.path != destPath) {
-          await file.copy(destPath);
+        if (Platform.isAndroid) {
+          // Scoped storage: publish through MediaStore/SAF instead of a raw
+          // write into shared storage.
+          final destination = await PublicStorage.publishFile(
+            sourcePath: path,
+            fileName: item.fileName,
+            kind: PublicFileKind.document,
+          );
+          if (mounted) _showSnack('Saved to $destination');
+        } else {
+          final saveDir =
+              await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+          final destPath = '${saveDir.path}/${item.fileName}';
+          if (file.path != destPath) {
+            await file.copy(destPath);
+          }
+          if (mounted) _showSnack('Exported PDF to ${saveDir.path}');
         }
-        if (mounted) _showSnack('Exported PDF to ${saveDir.path}');
       } else {
-        final bytes = await file.readAsBytes();
-        await saveImageBytes(bytes, fileName: item.fileName);
-        if (mounted) _showSnack('Saved to gallery');
+        if (Platform.isAndroid) {
+          final destination = await PublicStorage.publishFile(
+            sourcePath: file.path,
+            fileName: item.fileName,
+            kind: PublicFileKind.image,
+          );
+          if (mounted) _showSnack('Saved to $destination');
+        } else {
+          final bytes = await file.readAsBytes();
+          await saveImageBytes(bytes, fileName: item.fileName);
+          if (mounted) _showSnack('Saved to gallery');
+        }
       }
     } catch (e) {
       if (mounted) _showSnack('Export failed: $e');
@@ -622,8 +670,8 @@ class _ToolBadge extends StatelessWidget {
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
+class _ActionSpec {
+  const _ActionSpec({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -634,6 +682,22 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final Color? color;
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+    this.horizontalPadding = 16,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  final double horizontalPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -642,21 +706,25 @@ class _ActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: clr, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: clr.withValues(alpha: 0.8),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
+        padding:
+            EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: clr, size: 24),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: clr.withValues(alpha: 0.8),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

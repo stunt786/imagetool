@@ -7,9 +7,10 @@ import 'package:pdfx/pdfx.dart' as pdfx;
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/output_saver.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
@@ -111,7 +112,7 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
       final saveDir =
           await ref.read(appSettingsProvider.notifier).getSaveDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      List<String> outputPaths;
+      List<OutputEntry> entries;
 
       switch (state.outputFormat) {
         case ConvertFormat.jpg:
@@ -167,14 +168,16 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
 
           state = state.copyWith(progress: 0.9);
 
-          outputPaths = [];
+          entries = [];
           for (int i = 0; i < encodedResults.length; i++) {
             final ext = state.outputFormat.extension;
             final fileName =
                 'pixeltools_${baseName}_${timestamp}_page_${startPage + i}.$ext';
-            final filePath = '${saveDir.path}/$fileName';
-            await File(filePath).writeAsBytes(encodedResults[i], flush: true);
-            outputPaths.add(filePath);
+            entries.add(OutputEntry.bytes(
+              bytes: encodedResults[i],
+              fileName: fileName,
+              publicKind: PublicFileKind.image,
+            ));
           }
           break;
 
@@ -187,13 +190,12 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final destPath =
-                '${saveDir.path}/pixeltools_${baseName}_$timestamp.txt';
-            await File(srcPath).copy(destPath);
-            try {
-              await File(srcPath).delete();
-            } catch (_) {}
-            outputPaths = [destPath];
+            entries = [
+              OutputEntry.file(
+                sourcePath: srcPath,
+                fileName: 'pixeltools_${baseName}_$timestamp.txt',
+              ),
+            ];
           }
           break;
 
@@ -206,28 +208,33 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
                 state = state.copyWith(progress: progress);
               },
             );
-            final destPath =
-                '${saveDir.path}/pixeltools_${baseName}_$timestamp.docx';
-            await File(srcPath).copy(destPath);
-            try {
-              await File(srcPath).delete();
-            } catch (_) {}
-            outputPaths = [destPath];
+            entries = [
+              OutputEntry.file(
+                sourcePath: srcPath,
+                fileName: 'pixeltools_${baseName}_$timestamp.docx',
+              ),
+            ];
           }
           break;
       }
 
-      await recordCompletedOperation(
+      final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
-        OperationKind.pdfConvert,
-        outputPaths,
+        kind: OperationKind.pdfConvert,
+        entries: entries,
+        stagingDirectory: saveDir,
       );
+      final outputPaths = [for (final result in saved) result.localPath];
+      final publicPaths = [
+        for (final result in saved)
+          if (result.publicPath != null) result.publicPath!,
+      ];
 
       state = state.copyWith(
         isProcessing: false,
         progress: 1.0,
         outputPaths: outputPaths,
-        publicExportPaths: outputPaths,
+        publicExportPaths: publicPaths,
       );
 
       return outputPaths;

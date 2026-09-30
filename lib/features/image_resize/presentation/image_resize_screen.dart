@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -12,11 +13,11 @@ import '../../../shared/models/picked_file.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
-import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/operation_recorder.dart';
 import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/output_saver.dart';
+import '../../../core/services/public_storage.dart';
 import '../models/batch_policy.dart';
 import '../models/crop_geometry.dart';
 import '../models/social_presets.dart';
@@ -267,8 +268,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     }
 
     final appSettings = ref.read(appSettingsProvider);
-    // One operation for the whole batch, recorded lazily on the first output.
-    OperationSession? batchSession;
     final progressNotifier = ValueNotifier<({int current, int total})>(
       (current: 1, total: _batchFiles.length),
     );
@@ -303,6 +302,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       ),
     );
 
+    final entries = <OutputEntry>[];
     String? firstSavedPath;
     int successCount = 0;
 
@@ -394,20 +394,26 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             baseName: file.name,
             format: _outputFormat,
           );
-          final saveResult =
-              await saveImageBytes(result.bytes, fileName: fileName);
-          // Keep an app-owned copy so the batch appears as one operation in
-          // Files (the gallery export above is unchanged).
-          try {
-            batchSession ??= await OperationRecorder(
-              ref.read(operationStoreProvider),
-            ).start(OperationKind.resize, expectedItems: _batchFiles.length);
-            await batchSession.saveBytes(result.bytes, fileName);
-          } catch (_) {
-            // Grouping is best effort; the gallery export already succeeded.
-          }
-          firstSavedPath ??= saveResult.path;
-          successCount++;
+          entries.add(
+            OutputEntry.bytes(
+              bytes: result.bytes,
+              fileName: fileName,
+              publicKind: PublicFileKind.image,
+            ),
+          );
+        }
+      }
+
+      if (entries.isNotEmpty) {
+        final savedOutputs = await saveToolOutputs(
+          ref.read(operationStoreProvider),
+          kind: OperationKind.resize,
+          entries: entries,
+        );
+        successCount = savedOutputs.length;
+        if (savedOutputs.isNotEmpty) {
+          firstSavedPath =
+              savedOutputs.first.publicPath ?? savedOutputs.first.localPath;
         }
       }
     } catch (error) {
@@ -419,10 +425,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
     }
-
-    try {
-      await batchSession?.complete();
-    } catch (_) {}
 
     if (mounted && successCount > 0) {
       if (_mode == _ResizeMode.dimensions || _mode == _ResizeMode.preset) {
@@ -861,14 +863,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
-      await _recordEditedOutput(
-        result.bytes,
-        fileName,
-        OperationKind.resize,
-      );
-      final saveResult = await saveImageBytes(
-        result.bytes,
+      final savedPath = await _saveAndRecordEditedOutput(
+        bytes: result.bytes,
         fileName: fileName,
+        kind: OperationKind.resize,
+        replaceOriginal: _replaceOriginal,
         replacePath: _replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
       if (!mounted) return;
@@ -878,8 +877,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               toolUsed: 'Image Resizer',
               editedAt: DateTime.now(),
               toolIcon: Icons.photo_size_select_large_rounded,
-              filePath: saveResult.path,
-              thumbnailPath: saveResult.path,
+              filePath: savedPath ?? '',
+              thumbnailPath: savedPath ?? '',
             ),
           );
       _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
@@ -968,14 +967,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _flipPreviewV = false;
     });
     try {
-      await _recordEditedOutput(
-        result.bytes,
-        fileName,
-        OperationKind.imageEdit,
-      );
-      final saveResult = await saveImageBytes(
-        result.bytes,
+      final savedPath = await _saveAndRecordEditedOutput(
+        bytes: result.bytes,
         fileName: fileName,
+        kind: OperationKind.imageEdit,
+        replaceOriginal: replaceOriginal,
         replacePath:
             replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
@@ -986,8 +982,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               toolUsed: 'Image Resizer',
               editedAt: DateTime.now(),
               toolIcon: Icons.rotate_right_rounded,
-              filePath: saveResult.path,
-              thumbnailPath: saveResult.path,
+              filePath: savedPath ?? '',
+              thumbnailPath: savedPath ?? '',
             ),
           );
       _showSnack(
@@ -1043,14 +1039,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _syncInputsFromImage(result.width, result.height);
     _pushUndoState(result.bytes);
     try {
-      await _recordEditedOutput(
-        result.bytes,
-        fileName,
-        OperationKind.imageEdit,
-      );
-      final saveResult = await saveImageBytes(
-        result.bytes,
+      final savedPath = await _saveAndRecordEditedOutput(
+        bytes: result.bytes,
         fileName: fileName,
+        kind: OperationKind.imageEdit,
+        replaceOriginal: replaceOriginal,
         replacePath:
             replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
@@ -1061,8 +1054,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               toolUsed: 'Image Resizer',
               editedAt: DateTime.now(),
               toolIcon: Icons.flip_rounded,
-              filePath: saveResult.path,
-              thumbnailPath: saveResult.path,
+              filePath: savedPath ?? '',
+              thumbnailPath: savedPath ?? '',
             ),
           );
       _showSnack(replaceOriginal
@@ -1119,14 +1112,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
 
     try {
-      await _recordEditedOutput(
-        result.bytes,
-        fileName,
-        OperationKind.resize,
-      );
-      final saveResult = await saveImageBytes(
-        result.bytes,
+      final savedPath = await _saveAndRecordEditedOutput(
+        bytes: result.bytes,
         fileName: fileName,
+        kind: OperationKind.resize,
+        replaceOriginal: replaceOriginal,
         replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
       if (!mounted) return;
@@ -1136,8 +1126,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               toolUsed: 'Image Resizer',
               editedAt: DateTime.now(),
               toolIcon: Icons.compress_rounded,
-              filePath: saveResult.path,
-              thumbnailPath: saveResult.path,
+              filePath: savedPath ?? '',
+              thumbnailPath: savedPath ?? '',
               compressionLevel: 'Smart',
             ),
           );
@@ -1368,14 +1358,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _pushUndoState(result.bytes);
     setState(() {});
     try {
-      await _recordEditedOutput(
-        result.bytes,
-        fileName,
-        OperationKind.imageEdit,
-      );
-      final saveResult = await saveImageBytes(
-        result.bytes,
+      final savedPath = await _saveAndRecordEditedOutput(
+        bytes: result.bytes,
         fileName: fileName,
+        kind: OperationKind.imageEdit,
+        replaceOriginal: replaceOriginal,
         replacePath:
             replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
@@ -1386,8 +1373,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               toolUsed: 'Image Resizer',
               editedAt: DateTime.now(),
               toolIcon: Icons.crop_rounded,
-              filePath: saveResult.path,
-              thumbnailPath: saveResult.path,
+              filePath: savedPath ?? '',
+              thumbnailPath: savedPath ?? '',
             ),
           );
       _showSnack(replaceOriginal ? 'Replaced original' : 'Crop applied & saved.');
@@ -1626,21 +1613,37 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
   }
 
-  /// Keeps an app-owned copy of an edited image inside an operation folder so
-  /// it shows up in Files. Never blocks the gallery save that follows.
-  Future<void> _recordEditedOutput(
-    Uint8List bytes,
-    String fileName,
-    OperationKind kind,
-  ) async {
-    try {
-      final session = await OperationRecorder(ref.read(operationStoreProvider))
-          .start(kind, expectedItems: 1);
-      await session.saveBytes(bytes, fileName);
-      await session.complete();
-    } catch (_) {
-      // Best effort: the user-visible export still happens separately.
+  /// Persists an edited image through the unified [saveToolOutputs] pipeline.
+  /// If [replaceOriginal] is requested with an existing [replacePath], overwrites
+  /// that file directly. Otherwise, materializes into the operation folder and
+  /// publishes to public storage (MediaStore or user-chosen SAF tree).
+  Future<String?> _saveAndRecordEditedOutput({
+    required Uint8List bytes,
+    required String fileName,
+    required OperationKind kind,
+    bool replaceOriginal = false,
+    String? replacePath,
+  }) async {
+    if (replaceOriginal && replacePath != null && replacePath.isNotEmpty) {
+      final original = File(replacePath);
+      if (await original.exists()) {
+        await original.writeAsBytes(bytes, flush: true);
+        return original.path;
+      }
+      throw StateError('The original image is no longer available to replace.');
     }
+    final saved = await saveToolOutputs(
+      ref.read(operationStoreProvider),
+      kind: kind,
+      entries: [
+        OutputEntry.bytes(
+          bytes: bytes,
+          fileName: fileName,
+          publicKind: PublicFileKind.image,
+        ),
+      ],
+    );
+    return saved.isNotEmpty ? saved.first.localPath : null;
   }
 
   String _buildSaveFileName({

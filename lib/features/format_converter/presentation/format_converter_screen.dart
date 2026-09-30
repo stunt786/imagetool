@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
-import '../../../core/services/operation_recorder.dart';
+import '../../../core/services/output_saver.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
-import '../../../shared/utils/image_saver.dart';
 import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/format_converter_notifier.dart';
 
@@ -80,55 +80,50 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
-      final items = convertedImages.map((image) {
+      final isPdf = state.selectedFormat.isPdf;
+      final entries = convertedImages.map((image) {
         final outputName =
             '${image.baseName}.${state.selectedFormat.extension}';
-        return (bytes: image.convertedBytes!, fileName: outputName);
+        return OutputEntry.bytes(
+          bytes: image.convertedBytes!,
+          fileName: outputName,
+          publicKind: isPdf ? PublicFileKind.document : PublicFileKind.image,
+        );
       }).toList();
 
-      // 1) Keep the app's own copy inside an operation folder so Files can
-      //    group the run and manage its outputs.
-      try {
-        final session = await OperationRecorder(
-          ref.read(operationStoreProvider),
-        ).start(OperationKind.convert, expectedItems: items.length);
-        for (final item in items) {
-          await session.saveBytes(item.bytes, item.fileName);
-        }
-        await session.complete();
-      } catch (_) {
-        // Grouping in Files is best effort; exporting to the gallery below
-        // must still succeed.
-      }
-
-      // 2) Export to the device gallery, as before.
-      final results = await saveMultipleImages(items);
+      final saved = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.convert,
+        entries: entries,
+      );
 
       if (mounted) {
-        if (results.length > 1) {
+        if (saved.length > 1) {
           ref.read(editHistoryProvider.notifier).addGroup(
                 toolName: 'Format Converter',
                 toolIcon: Icons.swap_horiz_rounded,
-                count: results.length,
-                thumbnailPath: results.first.path,
-                filePath: results.first.path,
+                count: saved.length,
+                thumbnailPath: saved.first.localPath,
+                filePath: saved.first.localPath,
               );
-        } else if (results.length == 1) {
+        } else if (saved.length == 1) {
           ref.read(editHistoryProvider.notifier).addEntry(
                 EditHistoryItem(
-                  fileName: results.first.fileName,
+                  fileName: entries.first.fileName,
                   toolUsed: 'Format Converter',
                   editedAt: DateTime.now(),
                   toolIcon: Icons.swap_horiz_rounded,
-                  thumbnailPath: results.first.path,
+                  thumbnailPath: saved.first.localPath,
+                  filePath: saved.first.localPath,
                 ),
               );
         }
 
+        final destLabel = isPdf ? 'Downloads and Files' : 'the gallery and Files';
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(
-                'Saved ${results.length} file${results.length > 1 ? 's' : ''} to the gallery and Files'),
+                'Saved ${saved.length} file${saved.length > 1 ? 's' : ''} to $destLabel'),
             backgroundColor: Colors.green,
           ),
         );

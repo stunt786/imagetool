@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/public_storage.dart';
 import 'image_saver_types.dart';
 
 abstract final class AppSavePaths {
@@ -20,7 +21,26 @@ abstract final class AppSavePaths {
     return cacheDir;
   }
 
+  /// App-private directory that is always writable without any permission.
+  /// Android exports live here first and are then published to MediaStore (or
+  /// the SAF folder chosen in Settings).
+  static Future<Directory> getLocalOutputDirectory() async {
+    final baseDir = await getApplicationDocumentsDirectory();
+    final outputDir =
+        Directory(path.join(baseDir.path, defaultDirectoryName));
+    if (!await outputDir.exists()) {
+      await outputDir.create(recursive: true);
+    }
+    return outputDir;
+  }
+
   static Future<Directory> getOutputDirectory() async {
+    // Android never writes raw paths into shared storage: shared destinations
+    // are reached through MediaStore / SAF (see PublicStorage).
+    if (Platform.isAndroid) {
+      return getLocalOutputDirectory();
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final customPath = prefs.getString(_customPathKey);
     if (customPath != null && customPath.isNotEmpty) {
@@ -31,23 +51,8 @@ abstract final class AppSavePaths {
       return customDir;
     }
 
-    if (Platform.isAndroid) {
-      final picturesDir =
-          Directory('/storage/emulated/0/Pictures/$defaultDirectoryName');
-      if (!await picturesDir.exists()) {
-        await picturesDir.create(recursive: true);
-      }
-      return picturesDir;
-    }
-
     if (Platform.isIOS) {
-      final baseDir = await getApplicationDocumentsDirectory();
-      final outputDir =
-          Directory(path.join(baseDir.path, defaultDirectoryName));
-      if (!await outputDir.exists()) {
-        await outputDir.create(recursive: true);
-      }
-      return outputDir;
+      return getLocalOutputDirectory();
     }
 
     final downloads = await getDownloadsDirectory();
@@ -60,12 +65,7 @@ abstract final class AppSavePaths {
       return outputDir;
     }
 
-    final baseDir = await getApplicationDocumentsDirectory();
-    final outputDir = Directory(path.join(baseDir.path, defaultDirectoryName));
-    if (!await outputDir.exists()) {
-      await outputDir.create(recursive: true);
-    }
-    return outputDir;
+    return getLocalOutputDirectory();
   }
 }
 
@@ -89,10 +89,30 @@ Future<ImageSaveResult> saveImageBytesImpl(
   }
   final safeName = fileName.trim().isEmpty ? 'image.jpg' : fileName.trim();
   final prefixed = 'pixeltools_$safeName';
-  final targetDir = await AppSavePaths.getOutputDirectory();
 
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final outName = _withSuffix(prefixed, '_$timestamp');
+
+  if (Platform.isAndroid) {
+    // Keep a local copy for sharing/history, then publish the gallery entry
+    // through MediaStore (or the SAF folder chosen in Settings).
+    final targetDir = await AppSavePaths.getLocalOutputDirectory();
+    final outFile = File('${targetDir.path}/$outName');
+    await outFile.writeAsBytes(bytes, flush: true);
+    try {
+      await PublicStorage.publishBytes(
+        bytes: bytes,
+        fileName: outName,
+        kind: PublicFileKind.image,
+      );
+    } catch (_) {
+      await _deleteQuietly(outFile);
+      rethrow;
+    }
+    return ImageSaveResult(fileName: outName, path: outFile.path);
+  }
+
+  final targetDir = await AppSavePaths.getOutputDirectory();
   final outFile = File('${targetDir.path}/$outName');
   await outFile.writeAsBytes(bytes, flush: true);
   return ImageSaveResult(fileName: outName, path: outFile.path);
@@ -110,6 +130,25 @@ Future<List<ImageSaveResult>> saveMultipleImagesImpl(
     final prefixed = 'pixeltools_$safeName';
     final timestamp = DateTime.now().millisecondsSinceEpoch + results.length;
     final outName = _withSuffix(prefixed, '_$timestamp');
+
+    if (Platform.isAndroid) {
+      final localDir = await AppSavePaths.getLocalOutputDirectory();
+      final outFile = File('${localDir.path}/$outName');
+      await outFile.writeAsBytes(item.bytes, flush: true);
+      try {
+        await PublicStorage.publishBytes(
+          bytes: item.bytes,
+          fileName: outName,
+          kind: PublicFileKind.image,
+        );
+      } catch (_) {
+        await _deleteQuietly(outFile);
+        rethrow;
+      }
+      results.add(ImageSaveResult(fileName: outName, path: outFile.path));
+      continue;
+    }
+
     final outFile = File('${targetDir.path}/$outName');
     await outFile.writeAsBytes(item.bytes, flush: true);
     results.add(ImageSaveResult(fileName: outName, path: outFile.path));
@@ -124,4 +163,14 @@ String _withSuffix(String fileName, String suffix) {
   final base = fileName.substring(0, dot);
   final ext = fileName.substring(dot);
   return '$base$suffix$ext';
+}
+
+Future<void> _deleteQuietly(File file) async {
+  try {
+    if (await file.exists()) {
+      await file.delete();
+    }
+  } catch (_) {
+    // Best effort cleanup only.
+  }
 }

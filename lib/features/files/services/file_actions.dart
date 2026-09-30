@@ -5,7 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
-import '../../../shared/utils/image_saver.dart';
+import '../../../core/services/public_storage.dart';
 
 /// Shared file actions used by Files and the folder-content screen, so the
 /// behaviour (and the error messages) stay identical everywhere.
@@ -69,8 +69,11 @@ abstract final class FileActions {
           failed++;
           continue;
         }
-        final bytes = await file.readAsBytes();
-        await saveImageBytes(bytes, fileName: item.fileName);
+        await PublicStorage.publishFile(
+          sourcePath: item.path,
+          fileName: item.fileName,
+          kind: PublicFileKind.image,
+        );
         saved++;
       } catch (_) {
         failed++;

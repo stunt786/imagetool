@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/output_saver.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -43,7 +47,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
   bool _flipHorizontal = false;
   bool _flipVertical = false;
   int _quality = 80;
-  OutputImageFormat _outputFormat = OutputImageFormat.jpg;
+  final OutputImageFormat _outputFormat = OutputImageFormat.jpg;
   int _targetSizeKB = 500;
   _PresetCategory _presetCategory = _PresetCategory.profile;
   SocialPreset? _selectedPreset;
@@ -311,35 +315,45 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
         state.currentBytes!,
         settings,
       );
-      final result = await StorageService.saveImage(
-        bytes: finalBytes,
-        extension: _outputFormat.extension,
+      final fileName =
+          'pixeltools_img_${DateTime.now().millisecondsSinceEpoch}.${_outputFormat.extension}';
+      final savedOutputs = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.imageEdit,
+        entries: [
+          OutputEntry.bytes(
+            bytes: finalBytes,
+            fileName: fileName,
+            publicKind: PublicFileKind.image,
+          ),
+        ],
       );
 
-      if (!mounted) return;
+      if (!mounted || savedOutputs.isEmpty) return;
 
+      final saved = savedOutputs.first;
       final comparison = StorageService.formatSizeComparison(
         state.fileSize,
-        result.fileSize,
+        finalBytes.length,
       );
 
       _showSnack('Saved: $comparison');
-      await _showSaveSnackBar(result);
+      await _showSaveSnackBar(saved.localPath, fileName);
       InterstitialTracker.instance.trackAction();
     } catch (error) {
       _showSnack('Saving failed: $error');
     }
   }
 
-  Future<void> _showSaveSnackBar(dynamic result) async {
+  Future<void> _showSaveSnackBar(String filePath, String fileName) async {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Saved to ${result.fileName}'),
+        content: Text('Saved to $fileName'),
         action: SnackBarAction(
           label: 'Share',
           onPressed: () async {
-            await Share.shareXFiles([XFile(result.filePath)]);
+            await Share.shareXFiles([XFile(filePath)]);
           },
         ),
       ),

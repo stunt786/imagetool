@@ -82,7 +82,7 @@ class _PerspectiveCorrectionScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Adjust Corners'),
+        title: const Text('Crop & Perspective'),
         actions: [
           TextButton.icon(
             onPressed: _autoFitCorners,
@@ -167,8 +167,8 @@ class _PerspectiveCorrectionScreenState
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
             onPressed: _isProcessing ? null : _applyCorrection,
-            icon: const Icon(Icons.transform),
-            label: const Text('Correct Perspective'),
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Apply Crop'),
           ),
         ),
       ),
@@ -245,12 +245,21 @@ class _PerspectiveCorrectionScreenState
 
     setState(() => _isProcessing = true);
 
+    final topWidth = (sourceCorners[1] - sourceCorners[0]).distance;
+    final bottomWidth = (sourceCorners[2] - sourceCorners[3]).distance;
+    final leftHeight = (sourceCorners[3] - sourceCorners[0]).distance;
+    final rightHeight = (sourceCorners[2] - sourceCorners[1]).distance;
+    final calcW = (topWidth > bottomWidth ? topWidth : bottomWidth).round();
+    final calcH = (leftHeight > rightHeight ? leftHeight : rightHeight).round();
+    final targetW = calcW > 50 ? calcW : page.width;
+    final targetH = calcH > 50 ? calcH : page.height;
+
     try {
       final result = await PerspectiveCorrectionService.correct(
         bytes: page.imageBytes!,
         srcPoints: sourceCorners,
-        targetWidth: page.width,
-        targetHeight: page.height,
+        targetWidth: targetW,
+        targetHeight: targetH,
       );
 
       if (result != null && mounted) {
@@ -270,18 +279,16 @@ class _PerspectiveCorrectionScreenState
               correctedPage,
             );
 
-        setState(() {
-          _previewBytes = result.bytes;
-          _isProcessing = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Perspective corrected'),
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 1),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Crop & perspective applied'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 1),
+            ),
+          );
+          Navigator.of(context).pop();
+        }
       } else {
         if (mounted) {
           setState(() => _isProcessing = false);

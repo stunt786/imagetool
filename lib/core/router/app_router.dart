@@ -94,7 +94,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'crop',
                     pageBuilder: (context, state) =>
-                        _MaterialPage(child: PerspectiveCorrectionScreen()),
+                        const _MaterialPage(child: PerspectiveCorrectionScreen()),
+                  ),
+                  GoRoute(
+                    path: 'perspective',
+                    pageBuilder: (context, state) =>
+                        const _MaterialPage(child: PerspectiveCorrectionScreen()),
                   ),
                   GoRoute(
                     path: 'magic-remove',

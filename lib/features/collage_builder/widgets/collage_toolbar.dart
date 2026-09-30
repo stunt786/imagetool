@@ -1,14 +1,18 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/interstitial_tracker.dart';
-import '../../../core/services/operation_recorder.dart';
 import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/output_saver.dart';
+import '../../../core/services/public_storage.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-import '../../../shared/utils/image_saver.dart';
 import '../models/collage_palette.dart';
 import '../notifiers/collage_notifier.dart';
 import 'collage_text_dialog.dart';
@@ -418,31 +422,28 @@ class CollageToolbar extends ConsumerWidget {
       if (bytes == null) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final saved = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.collage,
+        entries: [
+          OutputEntry.bytes(
+            bytes: bytes,
+            fileName: fileName,
+            publicKind: PublicFileKind.image,
+          ),
+        ],
+      );
 
-      // Keep an app-owned copy inside an operation folder so the collage is
-      // grouped and manageable in Files.
-      try {
-        final session = await OperationRecorder(
-          ref.read(operationStoreProvider),
-        ).start(OperationKind.collage, expectedItems: 1);
-        await session.saveBytes(bytes, fileName);
-        await session.complete();
-      } catch (_) {
-        // Grouping in Files is best effort; the gallery export below runs
-        // regardless.
-      }
-
-      final saveResult = await saveImageBytes(bytes, fileName: fileName);
-
-      if (context.mounted) {
+      if (context.mounted && saved.isNotEmpty) {
+        final out = saved.first;
         ref.read(editHistoryProvider.notifier).addEntry(
               EditHistoryItem(
-                fileName: saveResult.fileName,
+                fileName: fileName,
                 toolUsed: 'Collage Builder',
                 editedAt: DateTime.now(),
                 toolIcon: Icons.dashboard_customize_rounded,
-                filePath: saveResult.path,
-                thumbnailPath: saveResult.path,
+                filePath: out.localPath,
+                thumbnailPath: out.localPath,
               ),
             );
         ScaffoldMessenger.of(context).showSnackBar(
@@ -469,12 +470,12 @@ class CollageToolbar extends ConsumerWidget {
       if (bytes == null) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final result = await saveImageBytes(bytes, fileName: fileName);
-
-      if (result.path == null) return;
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File(path.join(tempDir.path, fileName));
+      await tempFile.writeAsBytes(bytes, flush: true);
 
       await Share.shareXFiles(
-        [XFile(result.path!)],
+        [XFile(tempFile.path)],
         subject: 'Check out this collage from PixelTools',
         text: 'Collage created with PixelTools',
       );
