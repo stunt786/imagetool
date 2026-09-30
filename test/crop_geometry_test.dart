@@ -1,5 +1,4 @@
-import 'dart:ui';
-
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pixeltools/features/image_resize/models/crop_geometry.dart';
 
@@ -262,6 +261,152 @@ void main() {
       expect(result.right, lessThanOrEqualTo(imageWidth.toDouble()));
       expect(result.bottom, lessThanOrEqualTo(imageHeight.toDouble()));
       expect(result.width / result.height, closeTo(4 / 3, 1e-6));
+    });
+
+    test('shrinks smoothly when dragging corner inwards with aspect ratio locked', () {
+      // Regression test: corner dragging must not lock up or refuse to shrink
+      const squareStart = CropRect(left: 100, top: 100, right: 700, bottom: 700);
+      final result = CropGeometry.applyDrag(
+        start: squareStart,
+        handle: CropHandle.bottomRight,
+        screenDelta: const Offset(-80, -30),
+        viewport: viewport,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+        aspectRatio: 1,
+      );
+      expect(result.width, closeTo(result.height, 1e-6));
+      expect(result.width, lessThan(squareStart.width));
+      expect(result.height, lessThan(squareStart.height));
+      expect(result.left, squareStart.left);
+      expect(result.top, squareStart.top);
+    });
+
+    test('shrinks smoothly when dragging topLeft corner inwards with aspect ratio locked', () {
+      final result = CropGeometry.applyDrag(
+        start: start,
+        handle: CropHandle.topLeft,
+        screenDelta: const Offset(40, 20),
+        viewport: viewport,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+        aspectRatio: 4 / 3,
+      );
+      expect(result.width / result.height, closeTo(4 / 3, 1e-6));
+      expect(result.width, lessThan(start.width));
+      expect(result.height, lessThan(start.height));
+      expect(result.right, start.right);
+      expect(result.bottom, start.bottom);
+    });
+  });
+
+  group('CropGeometry edge segment hit-testing', () {
+    final crop = const CropRect(left: 100, top: 100, right: 900, bottom: 700);
+
+    test('detects edges along the entire boundary, not just at the center', () {
+      // Top edge at 25% across and 75% across
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(300, 100)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.top,
+      );
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(700, 100)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.top,
+      );
+
+      // Bottom edge at 30% and 70% across
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(350, 700)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.bottom,
+      );
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(650, 700)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.bottom,
+      );
+
+      // Left edge at 25% and 75% down
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(100, 250)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.left,
+      );
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(100, 550)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.left,
+      );
+
+      // Right edge at 25% and 75% down
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(900, 250)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.right,
+      );
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: viewport.toScreen(const Offset(900, 550)),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.right,
+      );
+    });
+
+    test('corner hit targets have priority and generous touch radius', () {
+      // Offset slightly away from corner (15px screen delta) still hits the corner
+      final cornerPos = viewport.toScreen(const Offset(100, 100));
+      expect(
+        CropGeometry.hitTest(
+          screenPosition: cornerPos + const Offset(15, 15),
+          crop: crop,
+          viewport: viewport,
+        ),
+        CropHandle.topLeft,
+      );
+    });
+  });
+
+  group('CropViewport with padding (unclipped preview)', () {
+    const paddedViewport = CropViewport(
+      imageSize: Size(1000, 800),
+      viewportSize: Size(500, 400),
+      padding: EdgeInsets.all(20),
+    );
+
+    test('insets image so corners are never cropped by preview boundary', () {
+      final fullCrop = CropRect.full(1000, 800);
+      final screenRect = paddedViewport.cropToScreen(fullCrop);
+
+      // Must be at least 20px away from the widget's outer boundary
+      expect(screenRect.left, greaterThanOrEqualTo(20));
+      expect(screenRect.top, greaterThanOrEqualTo(20));
+      expect(screenRect.right, lessThanOrEqualTo(500 - 20));
+      expect(screenRect.bottom, lessThanOrEqualTo(400 - 20));
     });
   });
 }

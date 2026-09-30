@@ -529,7 +529,10 @@ class CollageNotifier extends Notifier<CollageState> {
   }
 
   Future<Uint8List?> exportCollage() async {
+    if (state.isExporting) return null;
     state = state.copyWith(isExporting: true, exportProgress: 0.0);
+    // Yield to the event loop so listeners update before synchronous image processing
+    await Future<void>.delayed(Duration.zero);
 
     try {
       final canvasWidth = state.canvasWidth;
@@ -550,18 +553,21 @@ class CollageNotifier extends Notifier<CollageState> {
 
       img.fill(canvas, color: img.ColorRgb8(bgR, bgG, bgB));
 
-      for (int i = 0; i < state.layout.slotCount; i++) {
+      final slotCount = state.layout.slotCount;
+      for (int i = 0; i < slotCount; i++) {
+        if (i >= state.images.length) continue;
         final slot = state.images[i];
         if (!slot.hasImage) continue;
 
+        if (i >= state.layout.slotRects.length) continue;
         final rect = state.layout.slotRects[i];
-        final x = (rect.left * canvasWidth + gapPx).toInt();
-        final y = (rect.top * canvasHeight + gapPx).toInt();
-        final w = ((rect.width) * canvasWidth - gapPx * 2).toInt();
-        final h = ((rect.height) * canvasHeight - gapPx * 2).toInt();
+        final x = (rect.left * canvasWidth + gapPx).toInt().clamp(0, canvasWidth - 1);
+        final y = (rect.top * canvasHeight + gapPx).toInt().clamp(0, canvasHeight - 1);
+        final w = math.max(1, math.min(canvasWidth - x, ((rect.width) * canvasWidth - gapPx * 2).toInt()));
+        final h = math.max(1, math.min(canvasHeight - y, ((rect.height) * canvasHeight - gapPx * 2).toInt()));
 
         var decoded = img.decodeImage(slot.imageBytes!);
-        if (decoded == null) continue;
+        if (decoded == null || decoded.width <= 0 || decoded.height <= 0) continue;
 
         if (slot.rotation != 0.0) {
           decoded = img.copyRotate(decoded, angle: slot.rotation.toInt());
@@ -578,20 +584,20 @@ class CollageNotifier extends Notifier<CollageState> {
             int cropW, cropH, cropX, cropY;
             if (srcAspect > dstAspect) {
               cropH = srcH;
-              cropW = (srcH * dstAspect).toInt();
+              cropW = (srcH * dstAspect).toInt().clamp(1, srcW);
               cropX = ((srcW - cropW) / 2).toInt() + (slot.offsetX * srcW * 0.1).toInt();
               cropY = 0;
             } else {
               cropW = srcW;
-              cropH = (srcW / dstAspect).toInt();
+              cropH = (srcW / dstAspect).toInt().clamp(1, srcH);
               cropX = 0;
               cropY = ((srcH - cropH) / 2).toInt() + (slot.offsetY * srcH * 0.1).toInt();
             }
 
-            cropX = cropX.clamp(0, srcW - 1);
-            cropY = cropY.clamp(0, srcH - 1);
-            cropW = cropW.clamp(1, srcW - cropX);
-            cropH = cropH.clamp(1, srcH - cropY);
+            cropX = cropX.clamp(0, math.max(0, srcW - cropW));
+            cropY = cropY.clamp(0, math.max(0, srcH - cropH));
+            cropW = cropW.clamp(1, math.max(1, srcW - cropX));
+            cropH = cropH.clamp(1, math.max(1, srcH - cropY));
 
             final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
             resized = img.copyResize(cropped, width: w, height: h);
@@ -608,8 +614,8 @@ class CollageNotifier extends Notifier<CollageState> {
         img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
 
         if (slot.fitMode == ImageFitMode.contain) {
-          final offsetX = ((w - resized.width) / 2).toInt();
-          final offsetY = ((h - resized.height) / 2).toInt();
+          final offsetX = math.max(0, ((w - resized.width) / 2).toInt());
+          final offsetY = math.max(0, ((h - resized.height) / 2).toInt());
           img.compositeImage(slotImage, resized, dstX: offsetX, dstY: offsetY);
         } else {
           img.compositeImage(slotImage, resized);
@@ -621,10 +627,24 @@ class CollageNotifier extends Notifier<CollageState> {
 
         img.compositeImage(canvas, slotImage, dstX: x, dstY: y);
 
-        state = state.copyWith(exportProgress: (i + 1) / state.layout.slotCount);
+        state = state.copyWith(exportProgress: (i + 1) / slotCount);
       }
 
-      for (final layer in state.textLayers) {
+      final allTextLayers = [
+        ...state.textLayers,
+        if (state.captionText != null && state.captionText!.trim().isNotEmpty)
+          CollageTextLayer(
+            id: '__legacy_caption__',
+            text: state.captionText!,
+            color: state.captionColor,
+            fontSize: state.captionSize,
+            fontFamily: state.captionFontFamily,
+            normalizedOffset: state.captionNormalizedOffset,
+            scale: state.captionScale,
+          ),
+      ];
+
+      for (final layer in allTextLayers) {
         if (layer.isEmpty) continue;
 
         final text = layer.text.trim();
@@ -760,7 +780,7 @@ class CollageNotifier extends Notifier<CollageState> {
       state = state.copyWith(isExporting: false, exportProgress: 1.0);
       return Uint8List.fromList(encoded);
     } catch (e) {
-      state = state.copyWith(isExporting: false);
+      state = state.copyWith(isExporting: false, exportProgress: 0.0);
       rethrow;
     }
   }

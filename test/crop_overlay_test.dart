@@ -312,5 +312,104 @@ void main() {
       expect(imageLayerOrigin(tester), const Offset(0, 100));
       expect(viewport(tester).fittedSize, const Size(400, 200));
     });
+
+    testWidgets('padded overlay insets image so corner handles are not cropped by window',
+        (tester) async {
+      tester.view.physicalSize = surface;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CropOverlay(
+              imageBytes: bytes,
+              imageWidth: 800,
+              imageHeight: 800,
+              crop: const CropRect(left: 0, top: 0, right: 800, bottom: 800),
+              padding: const EdgeInsets.all(20),
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      // In a 400x400 frame with 20px padding, available size is 360x360.
+      expect(imageLayerSize(tester), const Size(360, 360));
+      expect(imageLayerOrigin(tester), const Offset(20, 20));
+      expect(viewport(tester).padding, const EdgeInsets.all(20));
+    });
+
+    testWidgets('onDragStateChanged fires true on drag start and false on drag end',
+        (tester) async {
+      tester.view.physicalSize = surface;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final dragStates = <bool>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CropOverlay(
+              imageBytes: bytes,
+              imageWidth: imageWidth,
+              imageHeight: imageHeight,
+              crop: initialCrop,
+              onDragStateChanged: dragStates.add,
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      // Drag the top handle at (200, 100)
+      await dragBy(tester, const Offset(200, 100), const Offset(0, -30));
+
+      expect(dragStates, contains(true));
+      expect(dragStates.last, isFalse);
+    });
+
+    testWidgets('dragging edge from non-center point along boundary works smoothly',
+        (tester) async {
+      final commits = <CropRect>[];
+      tester.view.physicalSize = surface;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CropOverlay(
+              imageBytes: bytes,
+              imageWidth: imageWidth,
+              imageHeight: imageHeight,
+              crop: initialCrop,
+              onCropCommitted: commits.add,
+            ),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      // Top edge extends from x=100 to x=300 at y=100.
+      // Drag at x=140 (40px away from the center x=200):
+      await dragBy(tester, const Offset(140, 100), const Offset(0, -40));
+
+      expect(commits, isNotEmpty);
+      final last = commits.last;
+      expect(last.top, lessThan(initialCrop.top));
+      expect(last.left, initialCrop.left);
+      expect(last.right, initialCrop.right);
+      expect(last.bottom, initialCrop.bottom);
+    });
   });
 }

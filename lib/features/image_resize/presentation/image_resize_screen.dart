@@ -120,6 +120,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _isOneClickOpening = false;
   List<PickedFile> _batchFiles = <PickedFile>[];
   bool _isBatchMode = false;
+  bool _isCropDragging = false;
 
   @override
   void initState() {
@@ -1970,6 +1971,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
+          physics: _isCropDragging
+              ? const NeverScrollableScrollPhysics()
+              : const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
           padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -2241,6 +2247,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                 flipH: _flipPreviewH,
                 flipV: _flipPreviewV,
                 onCropUpdate: _updateCropFromDrag,
+                onCropDragStateChanged: (dragging) {
+                  if (_isCropDragging != dragging) {
+                    setState(() => _isCropDragging = dragging);
+                  }
+                },
               ),
               const SizedBox(height: 10),
               _buildPrimaryToolStrip(),
@@ -3888,6 +3899,7 @@ class _InteractiveImagePreview extends StatefulWidget {
     required this.cropAspectRatio,
     required this.rotationDegrees,
     required this.onCropUpdate,
+    this.onCropDragStateChanged,
     this.flipH = false,
     this.flipV = false,
   });
@@ -3904,6 +3916,7 @@ class _InteractiveImagePreview extends StatefulWidget {
   final double rotationDegrees;
   final bool flipH;
   final bool flipV;
+  final ValueChanged<bool>? onCropDragStateChanged;
   final void Function({
     required int x,
     required int y,
@@ -3926,11 +3939,22 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
         final normalizedRotation = widget.rotationDegrees % 360;
         final isCropMode = widget.activePanel == _EditorPanel.crop;
         final maxPreviewHeight =
-            MediaQuery.of(context).size.height * (isCropMode ? 0.45 : 0.22);
-        final basePreviewHeight = math
-            .min(maxWidth * (widget.imageHeight / widget.imageWidth),
-                maxPreviewHeight)
-            .toDouble();
+            MediaQuery.of(context).size.height * (isCropMode ? 0.48 : 0.22);
+        final basePreviewHeight = isCropMode
+            ? math
+                .min(
+                  (maxWidth - 44) * (widget.imageHeight / widget.imageWidth) +
+                      36,
+                  maxPreviewHeight,
+                )
+                .clamp(160.0, maxPreviewHeight)
+                .toDouble()
+            : math
+                .min(
+                  maxWidth * (widget.imageHeight / widget.imageWidth),
+                  maxPreviewHeight,
+                )
+                .toDouble();
         final baseScale = math.min(
           maxWidth / math.max(widget.imageWidth, 1),
           basePreviewHeight / math.max(widget.imageHeight, 1),
@@ -3990,6 +4014,12 @@ class _InteractiveImagePreviewState extends State<_InteractiveImagePreview> {
                                 aspectRatio: widget.cropAspectRatio,
                                 flipH: widget.flipH,
                                 flipV: widget.flipV,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 18,
+                                ),
+                                onDragStateChanged:
+                                    widget.onCropDragStateChanged,
                                 onCropChanged: (crop) => widget.onCropUpdate(
                                   x: crop.left.round(),
                                   y: crop.top.round(),

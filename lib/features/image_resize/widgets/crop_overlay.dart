@@ -1,18 +1,19 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/crop_geometry.dart';
 
 /// Interactive crop editor.
 ///
-/// Gesture ownership is deliberately exclusive so the reported bug (dragging a
-/// crop handle also moving the image/workspace) cannot happen:
+/// Gesture ownership is deliberately exclusive so dragging handles never
+/// moves the image or accidentally triggers parent scrolling.
 ///
 ///  * dragging a handle changes **only** that crop boundary;
 ///  * dragging inside the crop rectangle moves the rectangle;
-///  * dragging outside the rectangle pans the image;
+///  * dragging outside the rectangle pans the image when zoomed;
 ///  * a two-finger pinch zooms the image around the pinch focal point.
 ///
 /// All crop math happens in original image pixel coordinates through
@@ -29,8 +30,10 @@ class CropOverlay extends StatefulWidget {
     this.flipH = false,
     this.flipV = false,
     this.minSize = CropGeometry.defaultMinSize,
+    this.padding = EdgeInsets.zero,
     this.onCropChanged,
     this.onCropCommitted,
+    this.onDragStateChanged,
   });
 
   final Uint8List imageBytes;
@@ -47,11 +50,19 @@ class CropOverlay extends StatefulWidget {
   final bool flipV;
   final double minSize;
 
+  /// Padding around the preview image to give handles breathing room
+  /// and prevent corner points from clipping with the preview boundary.
+  final EdgeInsets padding;
+
   /// Called continuously while the crop rectangle changes.
   final ValueChanged<CropRect>? onCropChanged;
 
   /// Called once when a crop gesture finishes.
   final ValueChanged<CropRect>? onCropCommitted;
+
+  /// Called when a crop drag gesture starts (true) or ends (false),
+  /// allowing parent scrolling to be paused seamlessly.
+  final ValueChanged<bool>? onDragStateChanged;
 
   @override
   State<CropOverlay> createState() => CropOverlayState();
@@ -106,6 +117,7 @@ class CropOverlayState extends State<CropOverlay> {
         viewportSize: _viewportSize,
         scale: _scale,
         pan: _pan,
+        padding: widget.padding,
       );
 
   void resetZoom() {
@@ -127,6 +139,11 @@ class CropOverlayState extends State<CropOverlay> {
       crop: _crop,
       viewport: _viewport,
     );
+    if (_activeHandle != null) {
+      widget.onDragStateChanged?.call(true);
+      HapticFeedback.selectionClick();
+      setState(() {});
+    }
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -176,11 +193,14 @@ class CropOverlayState extends State<CropOverlay> {
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
+    widget.onDragStateChanged?.call(false);
     if (_activeHandle != null) {
       widget.onCropCommitted?.call(_crop);
     }
-    _activeHandle = null;
-    _isZooming = false;
+    setState(() {
+      _activeHandle = null;
+      _isZooming = false;
+    });
   }
 
   @override
@@ -209,96 +229,192 @@ class CropOverlayState extends State<CropOverlay> {
         final devicePixelRatio =
             MediaQuery.devicePixelRatioOf(context).clamp(1.0, 3.0);
         final cacheWidth = math.min(
-          widget.imageWidth,
-          (onScreenWidth * devicePixelRatio).ceil().clamp(1, 8192),
-        );
+            widget.imageWidth,
+            (onScreenWidth * devicePixelRatio).ceil().clamp(1, 8192),
+          );
         final cacheHeight = math.min(
-          widget.imageHeight,
-          (onScreenHeight * devicePixelRatio).ceil().clamp(1, 8192),
-        );
+            widget.imageHeight,
+            (onScreenHeight * devicePixelRatio).ceil().clamp(1, 8192),
+          );
 
         return ClipRect(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onScaleStart: _onScaleStart,
-            onScaleUpdate: _onScaleUpdate,
-            onScaleEnd: _onScaleEnd,
-            onDoubleTap: resetZoom,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned(
-                  left: viewport.translation.dx,
-                  top: viewport.translation.dy,
-                  width: onScreenWidth,
-                  height: onScreenHeight,
-                  child: Transform.scale(
-                    scaleX: widget.flipH ? -1.0 : 1.0,
-                    scaleY: widget.flipV ? -1.0 : 1.0,
-                    child: Image.memory(
-                      key: CropOverlayState.imageLayerKey,
-                      widget.imageBytes,
-                      fit: BoxFit.fill,
-                      cacheWidth: cacheWidth,
-                      cacheHeight: cacheHeight,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.low,
-                      errorBuilder: (context, error, stackTrace) => ColoredBox(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
+          child: Listener(
+            onPointerDown: (event) {
+              if (_viewportSize.isEmpty) return;
+              final handle = CropGeometry.hitTest(
+                screenPosition: event.localPosition,
+                crop: _crop,
+                viewport: _viewport,
+              );
+              if (handle != null) {
+                widget.onDragStateChanged?.call(true);
+              }
+            },
+            onPointerUp: (_) {
+              if (_activeHandle == null) {
+                widget.onDragStateChanged?.call(false);
+              }
+            },
+            onPointerCancel: (_) {
+              widget.onDragStateChanged?.call(false);
+            },
+            child: RawGestureDetector(
+              gestures: <Type, GestureRecognizerFactory>{
+                _CropScaleGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<_CropScaleGestureRecognizer>(
+                  () => _CropScaleGestureRecognizer(debugOwner: this),
+                  (_CropScaleGestureRecognizer instance) {
+                    instance.shouldClaimImmediately = (Offset globalPos) {
+                      final box = context.findRenderObject() as RenderBox?;
+                      if (box == null || _viewportSize.isEmpty) return false;
+                      final local = box.globalToLocal(globalPos);
+                      final handle = CropGeometry.hitTest(
+                        screenPosition: local,
+                        crop: _crop,
+                        viewport: _viewport,
+                      );
+                      // Claim handles immediately on pointer down to defeat any vertical scroll recognizer
+                      return handle != null && handle != CropHandle.move;
+                    };
+                    instance.onStart = _onScaleStart;
+                    instance.onUpdate = _onScaleUpdate;
+                    instance.onEnd = _onScaleEnd;
+                  },
+                ),
+                DoubleTapGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+                  () => DoubleTapGestureRecognizer(debugOwner: this),
+                  (DoubleTapGestureRecognizer instance) {
+                    instance.onDoubleTap = resetZoom;
+                  },
+                ),
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    left: viewport.translation.dx,
+                    top: viewport.translation.dy,
+                    width: onScreenWidth,
+                    height: onScreenHeight,
+                    child: Transform.scale(
+                      scaleX: widget.flipH ? -1.0 : 1.0,
+                      scaleY: widget.flipV ? -1.0 : 1.0,
+                      child: Image.memory(
+                        key: CropOverlayState.imageLayerKey,
+                        widget.imageBytes,
+                        fit: BoxFit.fill,
+                        cacheWidth: cacheWidth,
+                        cacheHeight: cacheHeight,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.low,
+                        errorBuilder: (context, error, stackTrace) => ColoredBox(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                CustomPaint(
-                  painter: CropOverlayPainter(
-                    cropScreenRect: viewport.cropToScreen(_crop),
-                    accent: const Color(0xFF8B1BFF),
+                  CustomPaint(
+                    painter: CropOverlayPainter(
+                      cropScreenRect: viewport.cropToScreen(_crop),
+                      accent: const Color(0xFF8B1BFF),
+                      activeHandle: _activeHandle,
+                    ),
                   ),
-                ),
-                if (_scale > 1.02)
-                  Positioned(
-                    left: 10,
-                    bottom: 10,
-                    child: IgnorePointer(
+                  if (_activeHandle != null)
+                    Positioned(
+                      top: 10,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: IgnorePointer(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.70),
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '${_crop.width.round()} × ${_crop.height.round()} px',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_scale > 1.02)
+                    Positioned(
+                      left: 10,
+                      bottom: 10,
                       child: _ZoomBadge(
                         scale: _scale,
                         onReset: resetZoom,
                       ),
                     ),
-                  ),
-                if (_activeHandle == null && _scale <= 1.02)
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Drag edges to crop · pinch to zoom',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                  if (_activeHandle == null && _scale <= 1.02)
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Text(
+                            'Drag handles or edges to crop · pinch to zoom',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
     );
+  }
+}
+
+class _CropScaleGestureRecognizer extends ScaleGestureRecognizer {
+  _CropScaleGestureRecognizer({super.debugOwner});
+
+  bool Function(Offset position)? shouldClaimImmediately;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    if (shouldClaimImmediately?.call(event.position) == true) {
+      resolve(GestureDisposition.accepted);
+    }
   }
 }
 
@@ -345,13 +461,15 @@ class CropOverlayPainter extends CustomPainter {
   const CropOverlayPainter({
     required this.cropScreenRect,
     required this.accent,
+    this.activeHandle,
     this.handleRadius = 12,
-    this.edgeBarLong = 44,
-    this.edgeBarShort = 16,
+    this.edgeBarLong = 40,
+    this.edgeBarShort = 6,
   });
 
   final Rect cropScreenRect;
   final Color accent;
+  final CropHandle? activeHandle;
   final double handleRadius;
   final double edgeBarLong;
   final double edgeBarShort;
@@ -377,13 +495,13 @@ class CropOverlayPainter extends CustomPainter {
       crop,
       Paint()
         ..color = Colors.white
-        ..strokeWidth = 2.5
+        ..strokeWidth = 2.0
         ..style = PaintingStyle.stroke,
     );
 
     // Rule of thirds.
     final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.4)
+      ..color = Colors.white.withValues(alpha: 0.35)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     for (final factor in <double>[1 / 3, 2 / 3]) {
@@ -399,46 +517,138 @@ class CropOverlayPainter extends CustomPainter {
       );
     }
 
-    // Edge bars.
+    // Corner L-brackets (draw along inside edges of crop rect)
+    final bracketLen = math.min(22.0, math.min(crop.width, crop.height) / 3);
+    if (bracketLen > 4) {
+      final bracketShadow = Paint()
+        ..color = Colors.black.withValues(alpha: 0.45)
+        ..strokeWidth = 4.5
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+      final bracketPaint = Paint()
+        ..color = Colors.white
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+
+      final pTL = Path()
+        ..moveTo(crop.left, crop.top + bracketLen)
+        ..lineTo(crop.left, crop.top)
+        ..lineTo(crop.left + bracketLen, crop.top);
+      final pTR = Path()
+        ..moveTo(crop.right - bracketLen, crop.top)
+        ..lineTo(crop.right, crop.top)
+        ..lineTo(crop.right, crop.top + bracketLen);
+      final pBL = Path()
+        ..moveTo(crop.left, crop.bottom - bracketLen)
+        ..lineTo(crop.left, crop.bottom)
+        ..lineTo(crop.left + bracketLen, crop.bottom);
+      final pBR = Path()
+        ..moveTo(crop.right - bracketLen, crop.bottom)
+        ..lineTo(crop.right, crop.bottom)
+        ..lineTo(crop.right - bracketLen, crop.bottom);
+
+      for (final p in [pTL, pTR, pBL, pBR]) {
+        canvas.drawPath(p, bracketShadow);
+        canvas.drawPath(p, bracketPaint);
+      }
+    }
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+
+    // Edge bars
     final barFill = Paint()..color = Colors.white;
     final barStroke = Paint()
       ..color = accent
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
+      ..strokeWidth = 2.2;
+    final activeBarPaint = Paint()
+      ..color = accent
+      ..style = PaintingStyle.fill;
 
-    void bar(Offset centre, double width, double height) {
+    void drawBar(Offset centre, double width, double height, bool isActive) {
+      final safeCenter = Offset(
+        centre.dx.clamp(width / 2, size.width - width / 2),
+        centre.dy.clamp(height / 2, size.height - height / 2),
+      );
       final rrect = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: centre, width: width, height: height),
+        Rect.fromCenter(center: safeCenter, width: width, height: height),
         const Radius.circular(8),
       );
-      canvas.drawRRect(rrect, barFill);
-      canvas.drawRRect(rrect, barStroke);
+      canvas.drawRRect(rrect.shift(const Offset(0, 1)), shadowPaint);
+      canvas.drawRRect(rrect, isActive ? activeBarPaint : barFill);
+      if (!isActive) {
+        canvas.drawRRect(rrect, barStroke);
+      }
     }
 
-    bar(Offset(crop.center.dx, crop.top), edgeBarLong, edgeBarShort);
-    bar(Offset(crop.center.dx, crop.bottom), edgeBarLong, edgeBarShort);
-    bar(Offset(crop.left, crop.center.dy), edgeBarShort, edgeBarLong);
-    bar(Offset(crop.right, crop.center.dy), edgeBarShort, edgeBarLong);
+    drawBar(
+      Offset(crop.center.dx, crop.top),
+      edgeBarLong,
+      edgeBarShort,
+      activeHandle == CropHandle.top,
+    );
+    drawBar(
+      Offset(crop.center.dx, crop.bottom),
+      edgeBarLong,
+      edgeBarShort,
+      activeHandle == CropHandle.bottom,
+    );
+    drawBar(
+      Offset(crop.left, crop.center.dy),
+      edgeBarShort,
+      edgeBarLong,
+      activeHandle == CropHandle.left,
+    );
+    drawBar(
+      Offset(crop.right, crop.center.dy),
+      edgeBarShort,
+      edgeBarLong,
+      activeHandle == CropHandle.right,
+    );
 
-    // Corner circles, drawn last so they sit above the bars.
+    // Corner circular handles with shadows, safe clamping and active highlight
     final cornerFill = Paint()..color = Colors.white;
     final cornerStroke = Paint()
       ..color = accent
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    for (final corner in <Offset>[
-      crop.topLeft,
-      crop.topRight,
-      crop.bottomLeft,
-      crop.bottomRight,
-    ]) {
-      canvas.drawCircle(corner, handleRadius, cornerFill);
-      canvas.drawCircle(corner, handleRadius, cornerStroke);
+      ..strokeWidth = 3.0;
+    final activeCornerStroke = Paint()
+      ..color = accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.5;
+
+    final cornerMap = <CropHandle, Offset>{
+      CropHandle.topLeft: crop.topLeft,
+      CropHandle.topRight: crop.topRight,
+      CropHandle.bottomLeft: crop.bottomLeft,
+      CropHandle.bottomRight: crop.bottomRight,
+    };
+
+    for (final entry in cornerMap.entries) {
+      final corner = entry.value;
+      final isActive = activeHandle == entry.key;
+      final radius = isActive ? handleRadius + 2.0 : handleRadius;
+      final safeCenter = Offset(
+        corner.dx.clamp(radius, size.width - radius),
+        corner.dy.clamp(radius, size.height - radius),
+      );
+
+      canvas.drawCircle(safeCenter + const Offset(0, 1), radius, shadowPaint);
+      canvas.drawCircle(safeCenter, radius, cornerFill);
+      canvas.drawCircle(
+        safeCenter,
+        radius,
+        isActive ? activeCornerStroke : cornerStroke,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant CropOverlayPainter oldDelegate) =>
       oldDelegate.cropScreenRect != cropScreenRect ||
-      oldDelegate.accent != accent;
+      oldDelegate.accent != accent ||
+      oldDelegate.activeHandle != activeHandle;
 }

@@ -93,13 +93,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   ),
                   GoRoute(
                     path: 'crop',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PerspectiveCorrectionScreen()),
+                    pageBuilder: (context, state) => const _MaterialPage(
+                        child: PerspectiveCorrectionScreen()),
                   ),
                   GoRoute(
                     path: 'perspective',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PerspectiveCorrectionScreen()),
+                    pageBuilder: (context, state) => const _MaterialPage(
+                        child: PerspectiveCorrectionScreen()),
                   ),
                   GoRoute(
                     path: 'magic-remove',
@@ -146,15 +146,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ),
             ],
           ),
-          StatefulShellBranch(
-            routes: <RouteBase>[
-              GoRoute(
-                path: '/settings',
-                builder: (context, state) => const SettingsScreen(),
-              ),
-            ],
-          ),
         ],
+      ),
+
+      // Settings route (opened from top-left button on Home)
+      GoRoute(
+        path: '/settings',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (context, state) =>
+            const _MaterialPage(child: SettingsScreen()),
       ),
 
       // Tool routes (full-screen pages)

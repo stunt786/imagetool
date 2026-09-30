@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,13 +18,23 @@ import '../models/collage_palette.dart';
 import '../notifiers/collage_notifier.dart';
 import 'collage_text_dialog.dart';
 
-class CollageToolbar extends ConsumerWidget {
+class CollageToolbar extends ConsumerStatefulWidget {
   const CollageToolbar({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CollageToolbar> createState() => _CollageToolbarState();
+}
+
+class _CollageToolbarState extends ConsumerState<CollageToolbar> {
+  bool _isSharing = false;
+  final GlobalKey _shareButtonKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(collageProvider);
     final scheme = Theme.of(context).colorScheme;
+    final isBusy = state.isExporting || _isSharing;
+    final canPerformAction = !isBusy && state.imageCount > 0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -50,7 +61,7 @@ class CollageToolbar extends ConsumerWidget {
                       child: _ToolbarButton(
                         icon: Icons.grid_on,
                         label: 'Gap',
-                        onTap: () => _showGapSlider(context, ref),
+                        onTap: isBusy ? null : () => _showGapSlider(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -58,7 +69,7 @@ class CollageToolbar extends ConsumerWidget {
                       child: _ToolbarButton(
                         icon: Icons.rounded_corner,
                         label: 'Radius',
-                        onTap: () => _showRadiusSlider(context, ref),
+                        onTap: isBusy ? null : () => _showRadiusSlider(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -66,7 +77,7 @@ class CollageToolbar extends ConsumerWidget {
                       child: _ToolbarButton(
                         icon: Icons.palette,
                         label: 'Color',
-                        onTap: () => _showColorPicker(context, ref),
+                        onTap: isBusy ? null : () => _showColorPicker(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -74,7 +85,7 @@ class CollageToolbar extends ConsumerWidget {
                       child: _ToolbarButton(
                         icon: Icons.title,
                         label: 'Text',
-                        onTap: () => showCollageTextDialog(context),
+                        onTap: isBusy ? null : () => showCollageTextDialog(context),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -82,7 +93,7 @@ class CollageToolbar extends ConsumerWidget {
                       child: _ToolbarButton(
                         icon: Icons.add_photo_alternate,
                         label: 'Add',
-                        onTap: state.imageCount >= CollageNotifier.maxCollageImages
+                        onTap: isBusy || state.imageCount >= CollageNotifier.maxCollageImages
                             ? null
                             : () {
                                 ref
@@ -100,30 +111,44 @@ class CollageToolbar extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: state.isExporting
-                            ? null
-                            : () => _exportCollage(context, ref),
-                        icon: state.isExporting
+                        onPressed: canPerformAction
+                            ? () => _exportCollage(context, ref)
+                            : null,
+                        icon: (state.isExporting && !_isSharing)
                             ? SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  value: state.exportProgress,
+                                  value: state.exportProgress > 0
+                                      ? state.exportProgress
+                                      : null,
                                 ),
                               )
                             : const Icon(Icons.photo_library_rounded),
-                        label: Text(state.isExporting ? 'Saving...' : 'Save to Gallery'),
+                        label: Text((state.isExporting && !_isSharing)
+                            ? 'Saving...'
+                            : 'Save to Gallery'),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: state.imageCount == 0
-                            ? null
-                            : () => _shareCollage(context, ref),
-                        icon: const Icon(Icons.share),
-                        label: const Text('Share'),
+                        key: _shareButtonKey,
+                        onPressed: canPerformAction
+                            ? () => _shareCollage(context, ref)
+                            : null,
+                        icon: _isSharing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.share),
+                        label: Text(_isSharing ? 'Sharing...' : 'Share'),
                       ),
                     ),
                   ],
@@ -417,9 +442,11 @@ class CollageToolbar extends ConsumerWidget {
 
 
   Future<void> _exportCollage(BuildContext context, WidgetRef ref) async {
+    if (_isSharing || ref.read(collageProvider).isExporting) return;
+
     try {
       final bytes = await ref.read(collageProvider.notifier).exportCollage();
-      if (bytes == null) return;
+      if (bytes == null || bytes.isEmpty) return;
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final saved = await saveToolOutputs(
@@ -465,20 +492,73 @@ class CollageToolbar extends ConsumerWidget {
   }
 
   Future<void> _shareCollage(BuildContext context, WidgetRef ref) async {
+    if (_isSharing || ref.read(collageProvider).isExporting) return;
+
+    setState(() {
+      _isSharing = true;
+    });
+
     try {
       final bytes = await ref.read(collageProvider.notifier).exportCollage();
-      if (bytes == null) return;
+      if (bytes == null || bytes.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to generate collage image.')),
+          );
+        }
+        return;
+      }
 
       final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(path.join(tempDir.path, fileName));
-      await tempFile.writeAsBytes(bytes, flush: true);
+      tempFile.writeAsBytesSync(bytes, flush: true);
 
-      await Share.shareXFiles(
-        [XFile(tempFile.path)],
-        subject: 'Check out this collage from PixelTools',
-        text: 'Collage created with PixelTools',
+      if (!tempFile.existsSync() || tempFile.lengthSync() == 0) {
+        throw Exception('Collage image file could not be created');
+      }
+
+      Rect? sharePositionOrigin;
+      final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+        sharePositionOrigin = box.localToGlobal(Offset.zero) & box.size;
+      }
+      if (sharePositionOrigin == null && context.mounted) {
+        final size = MediaQuery.sizeOf(context);
+        sharePositionOrigin = Rect.fromCenter(
+          center: Offset(size.width / 2, size.height / 2),
+          width: 1,
+          height: 1,
+        );
+      }
+
+      final xFile = XFile(
+        tempFile.path,
+        mimeType: 'image/jpeg',
+        name: fileName,
       );
+
+      try {
+        await Share.shareXFiles(
+          [xFile],
+          subject: 'Collage created with PixelTools',
+          sharePositionOrigin: sharePositionOrigin,
+        );
+      } on UnimplementedError catch (_) {
+        if (!kIsWeb && Platform.isLinux) {
+          await Process.run('xdg-open', [tempFile.path]);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Opened collage: ${tempFile.path}')),
+            );
+          }
+        } else {
+          rethrow;
+        }
+      }
+
+      _cleanupOldTempCollages(tempDir, fileName);
+
       InterstitialTracker.instance.trackAction();
     } catch (e) {
       if (context.mounted) {
@@ -486,7 +566,32 @@ class CollageToolbar extends ConsumerWidget {
           SnackBar(content: Text('Error sharing: $e')),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSharing = false;
+        });
+      }
     }
+  }
+
+  void _cleanupOldTempCollages(Directory tempDir, String currentFileName) {
+    try {
+      final list = tempDir.listSync();
+      final now = DateTime.now();
+      for (final entity in list) {
+        if (entity is File &&
+            path.basename(entity.path).startsWith('collage_') &&
+            path.basename(entity.path).endsWith('.jpg') &&
+            path.basename(entity.path) != currentFileName) {
+          try {
+            if (now.difference(entity.lastModifiedSync()).inMinutes > 15) {
+              entity.deleteSync();
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 }
 

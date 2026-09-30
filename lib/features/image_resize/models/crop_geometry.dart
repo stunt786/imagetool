@@ -1,7 +1,7 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 
 /// Which part of the crop rectangle a gesture grabbed.
 enum CropHandle {
@@ -114,6 +114,7 @@ class CropViewport {
     required this.viewportSize,
     this.scale = 1.0,
     this.pan = Offset.zero,
+    this.padding = EdgeInsets.zero,
   });
 
   /// Original image size in pixels.
@@ -128,13 +129,23 @@ class CropViewport {
   /// User pan in screen pixels, applied after fitting.
   final Offset pan;
 
-  /// Scale that fits the image inside the viewport.
+  /// Padding around the image inside the viewport to keep handles visible and unclipped.
+  final EdgeInsets padding;
+
+  /// Available size for the image inside the viewport.
+  Size get availableSize => Size(
+        math.max(0.0, viewportSize.width - padding.horizontal),
+        math.max(0.0, viewportSize.height - padding.vertical),
+      );
+
+  /// Scale that fits the image inside the available viewport area.
   double get fitScale {
     if (imageSize.width <= 0 || imageSize.height <= 0) return 1;
-    if (viewportSize.width <= 0 || viewportSize.height <= 0) return 1;
+    final avail = availableSize;
+    if (avail.width <= 0 || avail.height <= 0) return 1;
     return math.min(
-      viewportSize.width / imageSize.width,
-      viewportSize.height / imageSize.height,
+      avail.width / imageSize.width,
+      avail.height / imageSize.height,
     );
   }
 
@@ -148,8 +159,8 @@ class CropViewport {
 
   /// Top-left of the fitted image inside the viewport before panning.
   Offset get fittedOrigin => Offset(
-        (viewportSize.width - fittedSize.width) / 2,
-        (viewportSize.height - fittedSize.height) / 2,
+        padding.left + (availableSize.width - fittedSize.width) / 2,
+        padding.top + (availableSize.height - fittedSize.height) / 2,
       );
 
   /// Top-left of the transformed image in viewport coordinates.
@@ -191,6 +202,7 @@ class CropViewport {
       viewportSize: viewportSize,
       scale: clamped,
       pan: newPan,
+      padding: padding,
     );
   }
 
@@ -203,13 +215,14 @@ class CropViewport {
         viewportSize: viewportSize,
         scale: 1.0,
         pan: Offset.zero,
+        padding: padding,
       );
     }
     final scaledW = fittedSize.width * scale;
     final scaledH = fittedSize.height * scale;
     // Allow panning only within the overflow created by zooming.
-    final maxDx = math.max(0.0, (scaledW - viewportSize.width) / 2);
-    final maxDy = math.max(0.0, (scaledH - viewportSize.height) / 2);
+    final maxDx = math.max(0.0, (scaledW - availableSize.width) / 2);
+    final maxDy = math.max(0.0, (scaledH - availableSize.height) / 2);
     return CropViewport(
       imageSize: imageSize,
       viewportSize: viewportSize,
@@ -218,14 +231,21 @@ class CropViewport {
         pan.dx.clamp(-maxDx, maxDx),
         pan.dy.clamp(-maxDy, maxDy),
       ),
+      padding: padding,
     );
   }
 
-  CropViewport copyWith({double? scale, Offset? pan}) => CropViewport(
+  CropViewport copyWith({
+    double? scale,
+    Offset? pan,
+    EdgeInsets? padding,
+  }) =>
+      CropViewport(
         imageSize: imageSize,
         viewportSize: viewportSize,
         scale: scale ?? this.scale,
         pan: pan ?? this.pan,
+        padding: padding ?? this.padding,
       );
 }
 
@@ -235,8 +255,8 @@ abstract final class CropGeometry {
 
   /// Resolves which handle (if any) is under [screenPosition].
   ///
-  /// [touchSlop] is expressed in screen pixels so the grab area stays
-  /// comfortable regardless of zoom.
+  /// Corners have priority with a generous hit zone, and each edge boundary
+  /// can be dragged anywhere along its entire line segment.
   static CropHandle? hitTest({
     required Offset screenPosition,
     required CropRect crop,
@@ -249,34 +269,79 @@ abstract final class CropGeometry {
     final bl = viewport.toScreen(Offset(crop.left, crop.bottom));
     final br = viewport.toScreen(Offset(crop.right, crop.bottom));
 
-    final handles = <CropHandle, Offset>{
+    final corners = <CropHandle, Offset>{
       CropHandle.topLeft: tl,
       CropHandle.topRight: tr,
       CropHandle.bottomLeft: bl,
       CropHandle.bottomRight: br,
-      CropHandle.top: Offset((tl.dx + tr.dx) / 2, tl.dy),
-      CropHandle.bottom: Offset((bl.dx + br.dx) / 2, bl.dy),
-      CropHandle.left: Offset(tl.dx, (tl.dy + bl.dy) / 2),
-      CropHandle.right: Offset(tr.dx, (tr.dy + br.dy) / 2),
     };
 
-    // Corners first: they are the most precise targets and win ties.
-    const order = <CropHandle>[
-      CropHandle.topLeft,
-      CropHandle.topRight,
-      CropHandle.bottomLeft,
-      CropHandle.bottomRight,
-      CropHandle.top,
-      CropHandle.bottom,
-      CropHandle.left,
-      CropHandle.right,
-    ];
-    for (final handle in order) {
-      if ((screenPosition - handles[handle]!).distance <= touchSlop) {
-        return handle;
+    // 1. Corners first: generous touch target (corners win ties and have larger grab zones).
+    final cornerSlop = math.max(touchSlop, 36.0);
+    CropHandle? closestCorner;
+    double minCornerDist = double.infinity;
+    for (final entry in corners.entries) {
+      final d = (screenPosition - entry.value).distance;
+      if (d <= cornerSlop && d < minCornerDist) {
+        minCornerDist = d;
+        closestCorner = entry.key;
       }
     }
+    if (closestCorner != null) {
+      return closestCorner;
+    }
 
+    // 2. Entire edge segments: allow dragging from anywhere along each edge.
+    final leftX = math.min(tl.dx, tr.dx);
+    final rightX = math.max(tl.dx, tr.dx);
+    final topY = math.min(tl.dy, bl.dy);
+    final bottomY = math.max(tl.dy, bl.dy);
+
+    final px = screenPosition.dx;
+    final py = screenPosition.dy;
+
+    // Top edge segment
+    final clampedTopX = px.clamp(leftX, rightX);
+    final topDist = (screenPosition - Offset(clampedTopX, topY)).distance;
+
+    // Bottom edge segment
+    final clampedBottomX = px.clamp(leftX, rightX);
+    final bottomDist = (screenPosition - Offset(clampedBottomX, bottomY)).distance;
+
+    // Left edge segment
+    final clampedLeftY = py.clamp(topY, bottomY);
+    final leftDist = (screenPosition - Offset(leftX, clampedLeftY)).distance;
+
+    // Right edge segment
+    final clampedRightY = py.clamp(topY, bottomY);
+    final rightDist = (screenPosition - Offset(rightX, clampedRightY)).distance;
+
+    final edgeSlop = math.max(touchSlop, 26.0);
+    double minEdgeDist = edgeSlop;
+    CropHandle? closestEdge;
+
+    if (topDist <= minEdgeDist) {
+      minEdgeDist = topDist;
+      closestEdge = CropHandle.top;
+    }
+    if (bottomDist <= minEdgeDist) {
+      minEdgeDist = bottomDist;
+      closestEdge = CropHandle.bottom;
+    }
+    if (leftDist <= minEdgeDist) {
+      minEdgeDist = leftDist;
+      closestEdge = CropHandle.left;
+    }
+    if (rightDist <= minEdgeDist) {
+      minEdgeDist = rightDist;
+      closestEdge = CropHandle.right;
+    }
+
+    if (closestEdge != null) {
+      return closestEdge;
+    }
+
+    // 3. Inside the rectangle: moves it without resizing.
     if (viewport.cropToScreen(crop).contains(screenPosition)) {
       return CropHandle.move;
     }
@@ -424,12 +489,16 @@ abstract final class CropGeometry {
     double w;
     double h;
     if (isCorner) {
-      w = result.width;
-      h = result.height;
-      // Follow the dominant axis so the drag feels natural.
-      final fromWidth = w / aspectRatio;
-      h = fromWidth > h ? fromWidth : h;
-      w = h * aspectRatio;
+      // Follow the dominant gesture direction so shrinking and expanding both feel natural
+      final dw = (result.width - start.width).abs();
+      final dh = (result.height - start.height).abs();
+      if (dw >= dh * aspectRatio) {
+        w = result.width;
+        h = w / aspectRatio;
+      } else {
+        h = result.height;
+        w = h * aspectRatio;
+      }
     } else if (movesLeft || movesRight) {
       w = result.width;
       h = w / aspectRatio;

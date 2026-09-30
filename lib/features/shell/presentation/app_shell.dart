@@ -16,8 +16,7 @@ class AppShell extends StatelessWidget {
     final currentPath = GoRouterState.of(context).uri.path;
     final isMainScreen = currentPath == '/tools' ||
         currentPath == '/camera' ||
-        currentPath == '/pdfs' ||
-        currentPath == '/settings';
+        currentPath == '/pdfs';
     final isCameraScreen = currentPath == '/camera';
 
     return Scaffold(
@@ -52,62 +51,137 @@ class _BottomNavBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final destinations = [
-      _NavItemData(
-        label: 'Home',
-        icon: Icons.home_outlined,
-        selectedIcon: Icons.home_rounded,
-      ),
-      _NavItemData(
-        label: 'Camera',
-        icon: Icons.camera_alt_outlined,
-        selectedIcon: Icons.camera_alt_rounded,
-      ),
-      _NavItemData(
-        label: 'Files',
-        icon: Icons.folder_outlined,
-        selectedIcon: Icons.folder_rounded,
-      ),
-      _NavItemData(
-        label: 'Settings',
-        icon: Icons.settings_outlined,
-        selectedIcon: Icons.settings_rounded,
-      ),
-    ];
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final currentIndex = navigationShell.currentIndex;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLowest.withValues(alpha: 0.94),
+        color: isDark
+            ? const Color(0xFF0B101D).withValues(alpha: 0.95)
+            : scheme.surfaceContainerLowest.withValues(alpha: 0.95),
         border: Border(
           top: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: 0.5),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : scheme.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(destinations.length, (index) {
-          final item = destinations[index];
-          final selected = navigationShell.currentIndex == index;
-          return _NavItem(
-            data: item,
-            selected: selected,
+        children: [
+          // Home
+          _NavItem(
+            label: 'Home',
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home_rounded,
+            selected: currentIndex == 0,
             onTap: () {
-              if (index == 1) {
-                ref.read(cameraLaunchTriggerProvider.notifier).state++;
-                navigationShell.goBranch(1, initialLocation: true);
-              } else {
+              navigationShell.goBranch(
+                0,
+                initialLocation: currentIndex == 0,
+              );
+            },
+          ),
+          // Camera in middle - larger size with curved border
+          _CameraCenterButton(
+            selected: currentIndex == 1,
+            onTap: () {
+              ref.read(cameraLaunchTriggerProvider.notifier).state++;
+              navigationShell.goBranch(1, initialLocation: true);
+            },
+          ),
+          // Files
+          _NavItem(
+            label: 'Files',
+            icon: Icons.folder_outlined,
+            selectedIcon: Icons.folder_rounded,
+            selected: currentIndex == 2,
+            onTap: () {
+              if (navigationShell.route.branches.length > 2) {
                 navigationShell.goBranch(
-                  index,
-                  initialLocation: index == navigationShell.currentIndex,
+                  2,
+                  initialLocation: currentIndex == 2,
                 );
               }
             },
-          );
-        }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CameraCenterButton extends StatelessWidget {
+  const _CameraCenterButton({
+    required this.selected,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Semantics(
+      button: true,
+      label: 'Camera',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            width: 58,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: selected
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF2563EB), Color(0xFF0284C7)],
+                    )
+                  : null,
+              color: selected
+                  ? null
+                  : isDark
+                      ? const Color(0xFF1E293B)
+                      : scheme.primaryContainer.withValues(alpha: 0.45),
+              border: Border.all(
+                color: selected
+                    ? Colors.white.withValues(alpha: 0.5)
+                    : scheme.primary.withValues(alpha: 0.7),
+                width: 1.8,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: selected
+                      ? const Color(0xFF2563EB).withValues(alpha: 0.4)
+                      : scheme.shadow.withValues(alpha: 0.08),
+                  blurRadius: selected ? 12 : 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Icon(
+                selected ? Icons.camera_alt_rounded : Icons.camera_alt_rounded,
+                size: 28,
+                color: selected ? Colors.white : scheme.primary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -115,12 +189,16 @@ class _BottomNavBar extends ConsumerWidget {
 
 class _NavItem extends StatelessWidget {
   const _NavItem({
-    required this.data,
+    required this.label,
+    required this.icon,
+    required this.selectedIcon,
     required this.selected,
     required this.onTap,
   });
 
-  final _NavItemData data;
+  final String label;
+  final IconData icon;
+  final IconData selectedIcon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -134,7 +212,7 @@ class _NavItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: selected
@@ -145,14 +223,14 @@ class _NavItem extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              selected ? data.selectedIcon : data.icon,
+              selected ? selectedIcon : icon,
               size: 22,
               color: selected ? scheme.primary : scheme.onSurfaceVariant,
             ),
             if (selected) ...[
               const SizedBox(width: 6),
               Text(
-                data.label,
+                label,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: scheme.primary,
@@ -165,16 +243,4 @@ class _NavItem extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NavItemData {
-  const _NavItemData({
-    required this.label,
-    required this.icon,
-    required this.selectedIcon,
-  });
-
-  final String label;
-  final IconData icon;
-  final IconData selectedIcon;
 }

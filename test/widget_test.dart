@@ -31,12 +31,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('All Tools'), findsOneWidget);
-    expect(find.text('Fast, Simple & Powerful'), findsOneWidget);
+    expect(find.text('PixelTools'), findsOneWidget);
+    expect(find.text('Work Smarter'), findsOneWidget);
     expect(find.text('Resize'), findsOneWidget);
     expect(find.text('Compress'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
-    expect(find.byIcon(Icons.camera_alt_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
     expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
