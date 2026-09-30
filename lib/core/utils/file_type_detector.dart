@@ -41,6 +41,24 @@ class DetectedFileType {
 /// some pickers return files without an extension), so signature bytes win
 /// whenever they are available.
 abstract final class FileTypeDetector {
+  /// Maximum PDF size allowed across all PDF modules (20 MB).
+  static const int maxPdfSizeBytes = 20 * 1024 * 1024;
+
+  /// Maximum number of PDFs allowed in PDF Merge (3 files).
+  static const int maxMergePdfCount = 3;
+
+  /// Maximum combined pages allowed in PDF Merge (1200 pages).
+  static const int maxMergeCombinedPages = 1200;
+
+  /// Maximum number of images allowed for Image Resize at a time (25 images).
+  static const int maxResizeImageCount = 25;
+
+  /// Maximum number of images allowed for Format Conversion at a time (25 images).
+  static const int maxFormatConvertImageCount = 25;
+
+  /// Maximum number of images allowed for Image to PDF conversion at a time (20 images).
+  static const int maxImageToPdfCount = 20;
+
   /// Canonical extension for each supported image signature.
   static const Set<String> imageExtensions = <String>{
     'jpg',
@@ -221,7 +239,8 @@ abstract final class FileTypeDetector {
     return null;
   }
 
-  static bool _looksLikePdf(Uint8List bytes) {
+  /// True when the given [bytes] start with the standard `%PDF-` signature.
+  static bool looksLikePdf(Uint8List bytes) {
     final limit = bytes.length < 1024 ? bytes.length : 1024;
     for (var i = 0; i + 5 <= limit; i++) {
       if (bytes[i] == 0x25 &&
@@ -234,6 +253,12 @@ abstract final class FileTypeDetector {
     }
     return false;
   }
+
+  static bool _looksLikePdf(Uint8List bytes) => looksLikePdf(bytes);
+
+  /// True when [bytes] has a recognized image header.
+  static bool isSupportedImage(Uint8List bytes) =>
+      imageFormatFromSignature(bytes) != null;
 
   /// Lower-case extension of [fileName] without the dot.
   static String extensionOf(String? fileName) {

@@ -77,6 +77,7 @@ class CollageImageSlot {
     this.scale = 1.0,
     this.offsetX = 0.0,
     this.offsetY = 0.0,
+    this.rotation = 0.0,
     this.fitMode = ImageFitMode.cover,
   });
 
@@ -86,6 +87,7 @@ class CollageImageSlot {
   final double scale;
   final double offsetX;
   final double offsetY;
+  final double rotation;
   final ImageFitMode fitMode;
 
   bool get hasImage => imageBytes != null;
@@ -96,6 +98,7 @@ class CollageImageSlot {
     double? scale,
     double? offsetX,
     double? offsetY,
+    double? rotation,
     ImageFitMode? fitMode,
   }) {
     return CollageImageSlot(
@@ -105,6 +108,7 @@ class CollageImageSlot {
       scale: scale ?? this.scale,
       offsetX: offsetX ?? this.offsetX,
       offsetY: offsetY ?? this.offsetY,
+      rotation: rotation ?? this.rotation,
       fitMode: fitMode ?? this.fitMode,
     );
   }
@@ -117,6 +121,7 @@ class CollageImageSlot {
       scale: 1.0,
       offsetX: 0.0,
       offsetY: 0.0,
+      rotation: 0.0,
       fitMode: ImageFitMode.cover,
     );
   }

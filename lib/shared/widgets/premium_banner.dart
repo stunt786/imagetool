@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class PremiumBanner extends StatelessWidget {
-  const PremiumBanner();
+  const PremiumBanner({super.key});
 
   @override
   Widget build(BuildContext context) {

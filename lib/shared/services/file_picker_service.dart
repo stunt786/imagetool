@@ -17,9 +17,10 @@ class FilePickerService {
     required BuildContext context,
     required PickTarget target,
     required bool allowMultiple,
+    int? maxAssets,
   }) async {
     if (target == PickTarget.images) {
-      return _pickAssets(context, allowMultiple);
+      return _pickAssets(context, allowMultiple, maxAssets: maxAssets);
     }
 
     final result = await FilePicker.pickFiles(
@@ -79,8 +80,9 @@ class FilePickerService {
 
   Future<List<PickedFile>> _pickAssets(
     BuildContext context,
-    bool allowMultiple,
-  ) async {
+    bool allowMultiple, {
+    int? maxAssets,
+  }) async {
     final PermissionState ps = await PhotoManager.requestPermissionExtend(
       requestOption: const PermissionRequestOption(
         androidPermission: AndroidPermission(
@@ -94,10 +96,11 @@ class FilePickerService {
     }
     if (!context.mounted) return [];
 
+    final limit = maxAssets != null && maxAssets > 0 ? maxAssets : (allowMultiple ? 100 : 1);
     final List<AssetEntity>? result = await AssetPicker.pickAssets(
       context,
       pickerConfig: AssetPickerConfig(
-        maxAssets: allowMultiple ? 100 : 1,
+        maxAssets: allowMultiple ? limit : 1,
         requestType: RequestType.image,
       ),
     );

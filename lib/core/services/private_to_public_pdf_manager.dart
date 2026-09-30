@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../../shared/models/picked_file.dart';
+import '../utils/file_type_detector.dart';
 import 'public_storage.dart';
 
 /// Orchestrates the two-phase "Sandbox-to-Public" PDF pipeline:
@@ -42,7 +43,7 @@ class PrivateToPublicPdfManager {
   /// Returns the sandbox path.
   Future<String> copyToSandbox(String sourcePath) async {
     final dir = await _getSandboxDir();
-    final baseName = path.basename(sourcePath);
+    final baseName = path.basename(sourcePath).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final destPath = path.join(dir.path, '${timestamp}_$baseName');
     await File(sourcePath).copy(destPath);
@@ -54,8 +55,9 @@ class PrivateToPublicPdfManager {
   /// Returns the sandbox path.
   Future<String> writeToSandbox(Uint8List bytes, String fileName) async {
     final dir = await _getSandboxDir();
+    final safeName = path.basename(fileName).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final destPath = path.join(dir.path, '${timestamp}_$fileName');
+    final destPath = path.join(dir.path, '${timestamp}_$safeName');
     await File(destPath).writeAsBytes(bytes, flush: true);
     _sandboxFiles.add(destPath);
     return destPath;
@@ -66,13 +68,27 @@ class PrivateToPublicPdfManager {
   /// actionable message when neither a readable path nor bytes exist, instead
   /// of surfacing a raw PathNotFound/FileSystemException.
   Future<String> importPickedFile(PickedFile file) async {
+    if (file.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
+      throw StateError(
+        'File "${file.name}" exceeds the 20 MB size limit.',
+      );
+    }
+
     final sourcePath = file.path;
     if (sourcePath != null && sourcePath.isNotEmpty) {
       try {
-        if (await File(sourcePath).exists()) {
+        final srcFile = File(sourcePath);
+        if (await srcFile.exists()) {
+          final len = await srcFile.length();
+          if (len > FileTypeDetector.maxPdfSizeBytes) {
+            throw StateError(
+              'File "${file.name}" exceeds the 20 MB size limit.',
+            );
+          }
           return copyToSandbox(sourcePath);
         }
-      } catch (_) {
+      } catch (e) {
+        if (e is StateError) rethrow;
         // Fall through to the bytes path below.
       }
       if (file.bytes == null) {
@@ -86,6 +102,11 @@ class PrivateToPublicPdfManager {
     if (bytes == null || bytes.isEmpty) {
       throw StateError(
         'Could not read "${file.name}". Please pick the file again.',
+      );
+    }
+    if (bytes.length > FileTypeDetector.maxPdfSizeBytes) {
+      throw StateError(
+        'File "${file.name}" exceeds the 20 MB size limit.',
       );
     }
     return writeToSandbox(bytes, file.name);
@@ -102,7 +123,7 @@ class PrivateToPublicPdfManager {
     if (!await file.exists()) return null;
 
     final bytes = await file.readAsBytes();
-    final name = suggestedName ?? path.basename(sandboxPath);
+    final name = path.basename(suggestedName ?? path.basename(sandboxPath)).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
 
     final outputPath = await FilePicker.saveFile(
       dialogTitle: 'Save PDF',

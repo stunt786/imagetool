@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/collage_state.dart';
@@ -52,7 +53,8 @@ class CollageNotifier extends Notifier<CollageState> {
 
   Future<void> pickImages(BuildContext context) async {
     // Guard: enforce 9-image maximum for 3x3 support
-    if (state.imageCount >= maxCollageImages) {
+    final maxNew = maxCollageImages - state.imageCount;
+    if (maxNew <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Maximum 9 photos allowed in a collage.'),
@@ -67,24 +69,40 @@ class CollageNotifier extends Notifier<CollageState> {
       context: context,
       target: PickTarget.images,
       allowMultiple: true,
+      maxAssets: maxNew,
     );
 
     if (picked.isEmpty) return;
 
     final bytesList = <Uint8List>[];
     final names = <String>[];
+    int unsupportedCount = 0;
 
     for (final file in picked) {
       if (file.bytes != null) {
+        if (!FileTypeDetector.isSupportedImage(file.bytes!)) {
+          unsupportedCount++;
+          continue;
+        }
         bytesList.add(file.bytes!);
         names.add(file.name);
       }
     }
 
+    if (unsupportedCount > 0 && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$unsupportedCount unsupported file(s) skipped. Only JPG, PNG, WebP, GIF, BMP are supported.',
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+
     if (bytesList.isEmpty) return;
 
     // Cap total images to maxCollageImages (9)
-    final maxNew = maxCollageImages - state.imageCount;
     if (bytesList.length > maxNew) {
       final overflow = bytesList.length - maxNew;
       bytesList.removeRange(maxNew, bytesList.length);
@@ -134,6 +152,7 @@ class CollageNotifier extends Notifier<CollageState> {
           scale: state.images[i].scale,
           offsetX: state.images[i].offsetX,
           offsetY: state.images[i].offsetY,
+          rotation: state.images[i].rotation,
           fitMode: state.images[i].fitMode,
         ));
       }
@@ -219,6 +238,18 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (picked.isEmpty || picked.first.bytes == null) return;
 
+    if (!FileTypeDetector.isSupportedImage(picked.first.bytes!)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unsupported file format. Please select a valid image.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
     final bytes = picked.first.bytes!;
 
     final newImages = List<CollageImageSlot>.from(state.images);
@@ -270,6 +301,7 @@ class CollageNotifier extends Notifier<CollageState> {
       scale: toSlot.scale,
       offsetX: toSlot.offsetX,
       offsetY: toSlot.offsetY,
+      rotation: toSlot.rotation,
       fitMode: toSlot.fitMode,
     );
     newImages[toIndex] = CollageImageSlot(
@@ -279,6 +311,7 @@ class CollageNotifier extends Notifier<CollageState> {
       scale: fromSlot.scale,
       offsetX: fromSlot.offsetX,
       offsetY: fromSlot.offsetY,
+      rotation: fromSlot.rotation,
       fitMode: fromSlot.fitMode,
     );
 
@@ -306,6 +339,7 @@ class CollageNotifier extends Notifier<CollageState> {
           scale: state.images[i].scale,
           offsetX: state.images[i].offsetX,
           offsetY: state.images[i].offsetY,
+          rotation: state.images[i].rotation,
           fitMode: state.images[i].fitMode,
         ));
       } else if (i < allAvailable.length) {
@@ -317,6 +351,7 @@ class CollageNotifier extends Notifier<CollageState> {
           scale: src.scale,
           offsetX: src.offsetX,
           offsetY: src.offsetY,
+          rotation: src.rotation,
           fitMode: src.fitMode,
         ));
       } else {
@@ -328,6 +363,16 @@ class CollageNotifier extends Notifier<CollageState> {
       images: newImages,
       layout: newLayout,
     );
+  }
+
+  void rotateSlot(int slotIndex, [double degrees = 90.0]) {
+    if (slotIndex < 0 || slotIndex >= state.images.length) return;
+    final newImages = List<CollageImageSlot>.from(state.images);
+    final currentRotation = newImages[slotIndex].rotation;
+    final newRotation = (currentRotation + degrees) % 360.0;
+    newImages[slotIndex] = newImages[slotIndex].copyWith(rotation: newRotation);
+    _syncCachedSlots(newImages);
+    state = state.copyWith(images: newImages);
   }
 
   void setScale(int slotIndex, double scale) {
@@ -515,10 +560,12 @@ class CollageNotifier extends Notifier<CollageState> {
         final w = ((rect.width) * canvasWidth - gapPx * 2).toInt();
         final h = ((rect.height) * canvasHeight - gapPx * 2).toInt();
 
-        if (w <= 0 || h <= 0) continue;
-
-        final decoded = img.decodeImage(slot.imageBytes!);
+        var decoded = img.decodeImage(slot.imageBytes!);
         if (decoded == null) continue;
+
+        if (slot.rotation != 0.0) {
+          decoded = img.copyRotate(decoded, angle: slot.rotation.toInt());
+        }
 
         img.Image resized;
         switch (slot.fitMode) {

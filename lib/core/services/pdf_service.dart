@@ -37,8 +37,10 @@ class PdfService {
 
   /// Generates a unique filename with the given extension.
   static String _generateFileName(String baseName, String extension) {
+    final sanitizedBase =
+        path.basename(baseName).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return 'pixeltools_${baseName}_$timestamp.$extension';
+    return 'pixeltools_${sanitizedBase}_$timestamp.$extension';
   }
 
   /// Generates a PNG thumbnail for page 1 of a PDF file using pdfx.
@@ -64,6 +66,7 @@ class PdfService {
         width: 250,
         height: (page.height * scale).clamp(100.0, 500.0),
         format: pdfx.PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
       );
       await page.close();
       await pdfDoc.close();
@@ -202,6 +205,7 @@ class PdfService {
             width: renderWidth,
             height: renderHeight,
             format: pdfx.PdfPageImageFormat.png,
+            backgroundColor: '#FFFFFF',
           );
           if (rendered == null) return null;
 
@@ -304,11 +308,22 @@ class PdfService {
       }
     }
     final quality = (params['quality'] as num?)?.toInt() ?? 70;
+    final solid = _flattenAlpha(decoded);
     return <String, dynamic>{
-      'bytes': Uint8List.fromList(img.encodeJpg(decoded, quality: quality)),
-      'width': decoded.width,
-      'height': decoded.height,
+      'bytes': Uint8List.fromList(img.encodeJpg(solid, quality: quality)),
+      'width': solid.width,
+      'height': solid.height,
     };
+  }
+
+  /// Composites [image] onto a solid white background if it has transparency,
+  /// preventing blank black image outputs in formats that don't support alpha.
+  static img.Image _flattenAlpha(img.Image image) {
+    if (!image.hasAlpha) return image;
+    final flattened = img.Image(width: image.width, height: image.height);
+    img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(flattened, image);
+    return flattened;
   }
 
   // ─── Merge PDFs ─────────────────────────────────────────────────────
@@ -336,8 +351,12 @@ class PdfService {
     final outputPath =
         path.join(saveDir.path, _generateFileName(outputBaseName, 'pdf'));
 
-    // Use Syncfusion for reliable PDF merging
+    // Use Syncfusion for reliable, fast PDF merging with section reuse
     final mergedDoc = syncfusion.PdfDocument();
+    mergedDoc.pageSettings.margins.all = 0;
+
+    syncfusion.PdfSection? currentSection;
+    ui.Size? currentSectionSize;
 
     for (int i = 0; i < inputPaths.length; i++) {
       final inputBytes = File(inputPaths[i]).readAsBytesSync();
@@ -345,13 +364,18 @@ class PdfService {
 
       for (int j = 0; j < doc.pages.count; j++) {
         final page = doc.pages[j];
-        final template = page.createTemplate();
         final pageSize = page.size;
 
-        final section = mergedDoc.sections!.add();
-        section.pageSettings.size = pageSize;
-        section.pageSettings.margins.all = 0;
-        final newPage = section.pages.add();
+        if (currentSection == null || currentSectionSize != pageSize) {
+          final newSection = mergedDoc.sections!.add();
+          newSection.pageSettings.size = pageSize;
+          newSection.pageSettings.margins.all = 0;
+          currentSection = newSection;
+          currentSectionSize = pageSize;
+        }
+
+        final newPage = currentSection.pages.add();
+        final template = page.createTemplate();
         newPage.graphics.drawPdfTemplate(
           template,
           ui.Offset.zero,
@@ -560,20 +584,22 @@ class PdfService {
         width: page.width * scale,
         height: page.height * scale,
         format: pdfx.PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
       );
 
       if (pageImage != null) {
         final decodedImage = img.decodeImage(pageImage.bytes);
         if (decodedImage != null) {
+          final solidImage = _flattenAlpha(decodedImage);
           Uint8List outputBytes;
           String extension;
 
           if (format == 'jpg') {
             outputBytes =
-                Uint8List.fromList(img.encodeJpg(decodedImage, quality: 95));
+                Uint8List.fromList(img.encodeJpg(solidImage, quality: 95));
             extension = 'jpg';
           } else {
-            outputBytes = Uint8List.fromList(img.encodePng(decodedImage));
+            outputBytes = Uint8List.fromList(img.encodePng(solidImage));
             extension = 'png';
           }
 
@@ -659,6 +685,7 @@ class PdfService {
         width: page.width * scale,
         height: page.height * scale,
         format: pdfx.PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
       );
 
       await pdfDoc.close();
@@ -938,10 +965,11 @@ class PdfService {
   }
 
   /// Merge worker for background isolate execution.
-  /// Params: files (List<Uint8List>)
+  /// Params: files (`List<Uint8List>`) or filePaths (`List<String>`)
   static Future<Uint8List> isolateMergeWorker(
       Map<String, dynamic> params) async {
-    final filesData = (params['files'] as List<dynamic>).cast<Uint8List>();
+    final filesData = (params['files'] as List<dynamic>?)?.cast<Uint8List>();
+    final filePaths = (params['filePaths'] as List<dynamic>?)?.cast<String>();
     final applyWatermark = _workerWatermarkEnabled(params);
     final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
@@ -951,18 +979,35 @@ class PdfService {
     final useAppLogo = params['useWatermarkLogo'] as bool? ?? true;
 
     final mergedDoc = syncfusion.PdfDocument();
+    mergedDoc.pageSettings.margins.all = 0;
 
-    for (final fileBytes in filesData) {
-      final doc = syncfusion.PdfDocument(inputBytes: fileBytes);
+    syncfusion.PdfSection? currentSection;
+    ui.Size? currentSectionSize;
+
+    final count = filePaths?.length ?? filesData?.length ?? 0;
+
+    for (int i = 0; i < count; i++) {
+      final syncfusion.PdfDocument doc;
+      if (filePaths != null) {
+        doc = syncfusion.PdfDocument(
+            inputBytes: File(filePaths[i]).readAsBytesSync());
+      } else {
+        doc = syncfusion.PdfDocument(inputBytes: filesData![i]);
+      }
+
       for (int j = 0; j < doc.pages.count; j++) {
         final page = doc.pages[j];
-        final template = page.createTemplate();
         final pageSize = page.size;
 
-        final section = mergedDoc.sections!.add();
-        section.pageSettings.size = pageSize;
-        section.pageSettings.margins.all = 0;
-        final newPage = section.pages.add();
+        if (currentSection == null || currentSectionSize != pageSize) {
+          currentSection = mergedDoc.sections!.add();
+          currentSection.pageSettings.size = pageSize;
+          currentSection.pageSettings.margins.all = 0;
+          currentSectionSize = pageSize;
+        }
+
+        final newPage = currentSection.pages.add();
+        final template = page.createTemplate();
         newPage.graphics.drawPdfTemplate(
           template,
           ui.Offset.zero,
@@ -990,7 +1035,7 @@ class PdfService {
 
   /// Split all pages worker for background isolate execution.
   /// Params: inputBytes (Uint8List)
-  /// Returns: List<Uint8List> — one per page
+  /// Returns: List of Uint8List — one per page
   static Future<List<Uint8List>> isolateSplitAllPagesWorker(
       Map<String, dynamic> params) async {
     final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
@@ -1041,7 +1086,7 @@ class PdfService {
   }
 
   /// Extract pages worker for background isolate execution.
-  /// Params: inputBytes (Uint8List), pageNumbers (List<int>) — 1-indexed
+  /// Params: inputBytes (Uint8List), pageNumbers (List of int) — 1-indexed
   static Future<Uint8List> isolateExtractPagesWorker(
       Map<String, dynamic> params) async {
     final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
@@ -1093,7 +1138,7 @@ class PdfService {
 
   /// Split by chunks worker for background isolate execution.
   /// Params: inputBytes (Uint8List), pageSize (int)
-  /// Returns: List<Uint8List> — one per chunk
+  /// Returns: List of Uint8List — one per chunk
   static Future<List<Uint8List>> isolateSplitByChunksWorker(
       Map<String, dynamic> params) async {
     final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
@@ -1151,8 +1196,8 @@ class PdfService {
 
   /// Split selected pages worker for background isolate execution.
   /// Each selected page becomes its own independent PDF.
-  /// Params: inputBytes (Uint8List), pageNumbers (List<int>) — 1-indexed
-  /// Returns: List<Uint8List> — one per selected page
+  /// Params: inputBytes (Uint8List), pageNumbers (List of int) — 1-indexed
+  /// Returns: List of Uint8List — one per selected page
   static Future<List<Uint8List>> isolateSplitSelectedPagesWorker(
       Map<String, dynamic> params) async {
     final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
@@ -1205,7 +1250,7 @@ class PdfService {
 
   /// Convert to images worker for background isolate execution.
   /// Handles image encoding (JPEG/PNG) off the main thread.
-  /// Params: renderedPages (List<Uint8List>), format (String)
+  /// Params: renderedPages (List of Uint8List), format (String)
   static Future<List<Uint8List>> isolateEncodeImagesWorker(
       Map<String, dynamic> params) async {
     final renderedPages =
@@ -1216,11 +1261,12 @@ class PdfService {
     for (final pageBytes in renderedPages) {
       final decodedImage = img.decodeImage(pageBytes);
       if (decodedImage != null) {
+        final solid = _flattenAlpha(decodedImage);
         if (format == 'jpg') {
           results.add(
-              Uint8List.fromList(img.encodeJpg(decodedImage, quality: 95)));
+              Uint8List.fromList(img.encodeJpg(solid, quality: 95)));
         } else {
-          results.add(Uint8List.fromList(img.encodePng(decodedImage)));
+          results.add(Uint8List.fromList(img.encodePng(solid)));
         }
       }
     }
@@ -1399,7 +1445,9 @@ class PdfService {
     if (!dir.existsSync()) {
       dir.createSync(recursive: true);
     }
-    final filePath = '${dir.path}/$baseName.$extension';
+    final sanitizedBase =
+        path.basename(baseName).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
+    final filePath = path.join(dir.path, '$sanitizedBase.$extension');
     File(filePath).writeAsBytesSync(bytes, flush: true);
     return filePath;
   }

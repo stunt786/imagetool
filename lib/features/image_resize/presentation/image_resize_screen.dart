@@ -23,6 +23,7 @@ import '../models/crop_geometry.dart';
 import '../models/social_presets.dart';
 import '../services/image_processor_service.dart';
 import '../widgets/crop_overlay.dart';
+import '../../../core/utils/file_type_detector.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -152,6 +153,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     super.dispose();
   }
 
+  static const int _maxBatchCount = FileTypeDetector.maxResizeImageCount;
+
   Future<void> _pickImage({bool allowMultiple = true}) async {
     if (_isPicking) return;
     setState(() => _isPicking = true);
@@ -162,14 +165,49 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         context: context,
         target: PickTarget.images,
         allowMultiple: allowMultiple,
+        maxAssets: allowMultiple ? _maxBatchCount : 1,
       );
 
       if (picked.isEmpty) return;
 
-      _batchFiles = List<PickedFile>.from(picked);
-      _isBatchMode = picked.length > 1;
+      final validImages = <PickedFile>[];
+      var unsupportedCount = 0;
+      for (final file in picked) {
+        final detected = FileTypeDetector.detect(
+          path: file.path,
+          name: file.name,
+          bytes: file.bytes,
+        );
+        if (detected.isImage) {
+          validImages.add(file);
+        } else {
+          unsupportedCount++;
+        }
+      }
 
-      final file = picked.first;
+      if (unsupportedCount > 0) {
+        _showSnack(
+          unsupportedCount == 1
+              ? '1 file was skipped because it is an unsupported file type.'
+              : '$unsupportedCount files were skipped because they are unsupported file types.',
+        );
+      }
+
+      if (validImages.isEmpty) {
+        _showSnack('No supported image files were found in the selection.');
+        return;
+      }
+
+      var finalSelection = validImages;
+      if (validImages.length > _maxBatchCount) {
+        finalSelection = validImages.take(_maxBatchCount).toList();
+        _showSnack('Only up to $_maxBatchCount images can be resized at a time.');
+      }
+
+      _batchFiles = List<PickedFile>.from(finalSelection);
+      _isBatchMode = _batchFiles.length > 1;
+
+      final file = _batchFiles.first;
       if (file.bytes == null || file.bytes!.isEmpty) {
         _showSnack('Unable to read that image.');
         return;
@@ -198,23 +236,59 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   Future<void> _addMoreImages() async {
     if (_isPicking) return;
+    if (_batchFiles.length >= _maxBatchCount) {
+      _showSnack('Maximum limit of $_maxBatchCount images reached.');
+      return;
+    }
     setState(() => _isPicking = true);
 
     try {
+      final remaining = _maxBatchCount - _batchFiles.length;
       final service = ref.read(filePickerServiceProvider);
       final picked = await service.pick(
         context: context,
         target: PickTarget.images,
         allowMultiple: true,
+        maxAssets: remaining,
       );
 
       if (picked.isEmpty) return;
 
+      var unsupportedCount = 0;
+      final validPicked = <PickedFile>[];
+      for (final file in picked) {
+        final detected = FileTypeDetector.detect(
+          path: file.path,
+          name: file.name,
+          bytes: file.bytes,
+        );
+        if (detected.isImage) {
+          validPicked.add(file);
+        } else {
+          unsupportedCount++;
+        }
+      }
+
+      if (unsupportedCount > 0) {
+        _showSnack(
+          unsupportedCount == 1
+              ? '1 file was skipped because it is an unsupported file type.'
+              : '$unsupportedCount files were skipped because they are unsupported file types.',
+        );
+      }
+
       final existingNames = _batchFiles.map((f) => f.name).toSet();
       final newFiles =
-          picked.where((f) => !existingNames.contains(f.name)).toList();
+          validPicked.where((f) => !existingNames.contains(f.name)).toList();
+
       if (newFiles.isNotEmpty) {
-        _batchFiles.addAll(newFiles);
+        final availableSlots = _maxBatchCount - _batchFiles.length;
+        if (newFiles.length > availableSlots) {
+          _batchFiles.addAll(newFiles.take(availableSlots));
+          _showSnack('Only up to $_maxBatchCount images can be selected in total.');
+        } else {
+          _batchFiles.addAll(newFiles);
+        }
       }
       _isBatchMode = _batchFiles.length > 1;
 

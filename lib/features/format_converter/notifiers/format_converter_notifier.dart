@@ -287,7 +287,19 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
   /// Registers images immediately (so they appear in the UI) and then loads
   /// metadata, previews and dimensions progressively in the background.
   Future<void> addImages(List<Map<String, dynamic>> imageFiles) async {
+    final currentCount = state.images.length;
+    final maxAllowed = FileTypeDetector.maxFormatConvertImageCount;
+    if (currentCount >= maxAllowed) {
+      state = state.copyWith(
+        errorMessage: 'Maximum limit of $maxAllowed images reached.',
+        clearInfo: true,
+      );
+      return;
+    }
+
     final newImages = <ConvertibleImage>[];
+    var unsupportedCount = 0;
+    final remainingSlots = maxAllowed - currentCount;
 
     for (final file in imageFiles) {
       final path = (file['path'] as String?) ?? '';
@@ -300,7 +312,14 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         name: name,
         bytes: bytes,
       );
-      if (!detected.isImage) continue;
+      if (!detected.isImage) {
+        unsupportedCount++;
+        continue;
+      }
+
+      if (newImages.length >= remainingSlots) {
+        break;
+      }
 
       newImages.add(
         ConvertibleImage(
@@ -314,10 +333,27 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       );
     }
 
-    if (newImages.isEmpty) return;
+    String? notice;
+    if (unsupportedCount > 0) {
+      notice = unsupportedCount == 1
+          ? '1 file was skipped because it is an unsupported file type.'
+          : '$unsupportedCount files were skipped because they are unsupported file types.';
+    }
+    if (imageFiles.length - unsupportedCount > remainingSlots) {
+      final limitMsg = 'Only up to $maxAllowed images can be converted at a time.';
+      notice = notice != null ? '$notice $limitMsg' : limitMsg;
+    }
+
+    if (newImages.isEmpty) {
+      if (notice != null) {
+        state = state.copyWith(errorMessage: notice, clearInfo: true);
+      }
+      return;
+    }
 
     state = state.copyWith(
       images: [...state.images, ...newImages],
+      infoMessage: notice,
       clearError: true,
     );
 

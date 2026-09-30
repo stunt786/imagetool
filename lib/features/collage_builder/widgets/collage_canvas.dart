@@ -232,7 +232,8 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
               transform: Matrix4.identity()
                 ..translateByVector3(
                     vec.Vector3(clampedOffsetX, clampedOffsetY, 0))
-                ..scaleByDouble(scale, scale, 1.0, 1.0),
+                ..scaleByDouble(scale, scale, 1.0, 1.0)
+                ..rotateZ(slot.rotation * (math.pi / 180.0)),
               alignment: Alignment.center,
               child: Image.memory(
                 slot.imageBytes!,
@@ -857,6 +858,14 @@ class _SlotOptionsSheet extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              _OptionButton(
+                icon: Icons.rotate_right,
+                label: 'Rotate',
+                onTap: () {
+                  ref.read(collageProvider.notifier).rotateSlot(slotIndex);
+                  Navigator.pop(context);
+                },
+              ),
               _OptionButton(
                 icon: Icons.image,
                 label: 'Replace',

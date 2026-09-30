@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
@@ -10,6 +11,7 @@ import '../../../core/services/output_saver.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_compress_state.dart';
@@ -50,6 +52,23 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     final file = picked.first;
     if (file.bytes == null && file.path == null) {
       state = state.copyWith(errorMessage: 'Could not read the selected file');
+      return;
+    }
+
+    final fileSize = file.sizeBytes > 0
+        ? file.sizeBytes
+        : (file.path != null
+            ? File(file.path!).lengthSync()
+            : (file.bytes?.length ?? 0));
+    if (fileSize > FileTypeDetector.maxPdfSizeBytes) {
+      state = state.copyWith(
+        errorMessage: 'Selected PDF exceeds the 20 MB size limit.',
+      );
+      return;
+    }
+
+    if (file.bytes != null && !FileTypeDetector.looksLikePdf(file.bytes!)) {
+      state = state.copyWith(errorMessage: 'Selected file is not a valid PDF.');
       return;
     }
 
@@ -302,6 +321,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
   String _pdfBaseName(String? name) {
     final value = name ?? 'compressed';
     final dot = value.lastIndexOf('.');
-    return dot > 0 ? value.substring(0, dot) : value;
+    final rawBase = dot > 0 ? value.substring(0, dot) : value;
+    return path.basename(rawBase).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
   }
 }

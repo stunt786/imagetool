@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/utils/file_type_detector.dart';
+
 /// Full in-app PDF viewer: continuous vertical pages, pinch-to-zoom, page
 /// indicator, loading and error states.
 ///
@@ -50,6 +52,14 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         _isLoading = false;
         _fileExists = false;
         _error = 'This file is no longer available.';
+      });
+      return;
+    }
+
+    if (file.lengthSync() > FileTypeDetector.maxPdfSizeBytes) {
+      setState(() {
+        _isLoading = false;
+        _error = 'This PDF exceeds the 20 MB size limit.';
       });
       return;
     }

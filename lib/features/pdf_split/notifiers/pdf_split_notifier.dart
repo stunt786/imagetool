@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as path;
 
 import '../../../core/services/pdf_service.dart';
 import '../../../core/models/operation_folder.dart';
@@ -10,6 +11,7 @@ import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_split_state.dart';
@@ -39,6 +41,23 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
     if (file.path == null && file.bytes == null) {
       state =
           state.copyWith(errorMessage: 'Could not access the selected file');
+      return;
+    }
+
+    final fileSize = file.sizeBytes > 0
+        ? file.sizeBytes
+        : (file.path != null
+            ? File(file.path!).lengthSync()
+            : (file.bytes?.length ?? 0));
+    if (fileSize > FileTypeDetector.maxPdfSizeBytes) {
+      state = state.copyWith(
+        errorMessage: 'Selected PDF exceeds the 20 MB size limit.',
+      );
+      return;
+    }
+
+    if (file.bytes != null && !FileTypeDetector.looksLikePdf(file.bytes!)) {
+      state = state.copyWith(errorMessage: 'Selected file is not a valid PDF.');
       return;
     }
 
@@ -112,7 +131,9 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
     try {
       final selectedName = state.selectedFileName!;
       final dot = selectedName.lastIndexOf('.');
-      final baseName = dot > 0 ? selectedName.substring(0, dot) : selectedName;
+      final rawBase = dot > 0 ? selectedName.substring(0, dot) : selectedName;
+      final baseName =
+          path.basename(rawBase).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
       final inputBytes = File(state.selectedFilePath!).readAsBytesSync();
       state = state.copyWith(progress: 0.1);
 

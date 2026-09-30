@@ -45,14 +45,25 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
   Future<void> _pickImages() async {
     if (_isPicking) return;
+    final currentCount = ref.read(formatConverterProvider).images.length;
+    if (currentCount >= 25) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maximum limit of 25 images reached for conversion.'),
+        ),
+      );
+      return;
+    }
     setState(() => _isPicking = true);
 
     try {
+      final remaining = 25 - currentCount;
       final service = ref.read(filePickerServiceProvider);
       final pickedFiles = await service.pick(
         context: context,
         target: PickTarget.images,
         allowMultiple: true,
+        maxAssets: remaining,
       );
 
       if (pickedFiles.isEmpty) return;

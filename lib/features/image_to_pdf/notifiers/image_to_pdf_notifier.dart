@@ -55,20 +55,48 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
   /// Picks images and registers them immediately, then prepares previews and
   /// dimensions in the background so the list appears instantly.
   Future<void> pickImages(BuildContext context) async {
+    final currentCount = state.images.length;
+    final maxAllowed = FileTypeDetector.maxImageToPdfCount;
+    if (currentCount >= maxAllowed) {
+      state = state.copyWith(
+        errorMessage: 'Maximum limit of $maxAllowed images reached.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
+
+    final remaining = maxAllowed - currentCount;
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
       context: context,
       target: PickTarget.images,
       allowMultiple: true,
+      maxAssets: remaining,
     );
 
     if (picked.isEmpty) return;
 
     final newItems = <ImageToPdfItem>[];
+    var unsupportedCount = 0;
+
     for (final file in picked) {
       final hasPath = (file.path ?? '').isNotEmpty;
       final hasBytes = file.bytes != null && file.bytes!.isNotEmpty;
       if (!hasPath && !hasBytes) continue;
+
+      final detected = FileTypeDetector.detect(
+        path: file.path,
+        name: file.name,
+        bytes: file.bytes,
+      );
+      if (!detected.isImage) {
+        unsupportedCount++;
+        continue;
+      }
+
+      if (newItems.length >= remaining) {
+        break;
+      }
 
       newItems.add(
         ImageToPdfItem(
@@ -83,9 +111,20 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       );
     }
 
+    String? notice;
+    if (unsupportedCount > 0) {
+      notice = unsupportedCount == 1
+          ? '1 file was skipped because it is an unsupported file type.'
+          : '$unsupportedCount files were skipped because they are unsupported file types.';
+    }
+    if (picked.length - unsupportedCount > remaining) {
+      final limitMsg = 'Only up to $maxAllowed images can be converted to PDF at a time.';
+      notice = notice != null ? '$notice $limitMsg' : limitMsg;
+    }
+
     if (newItems.isEmpty) {
       state = state.copyWith(
-        errorMessage: 'None of the selected files could be read.',
+        errorMessage: notice ?? 'None of the selected files could be read.',
         clearGeneratedPath: true,
       );
       return;
@@ -93,7 +132,7 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
 
     state = state.copyWith(
       images: [...state.images, ...newItems],
-      clearError: true,
+      errorMessage: notice,
       clearGeneratedPath: true,
     );
 
@@ -101,10 +140,28 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
   }
 
   Future<void> addImageFromPath(String path) async {
+    final maxAllowed = FileTypeDetector.maxImageToPdfCount;
+    if (state.images.length >= maxAllowed) {
+      state = state.copyWith(
+        errorMessage: 'Maximum limit of $maxAllowed images reached.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
+
     final file = File(path);
     final name = path.split(Platform.pathSeparator).last;
     final exists = await file.exists();
     final sizeBytes = exists ? await file.length() : 0;
+
+    final detected = FileTypeDetector.detect(path: path, name: name);
+    if (!detected.isImage) {
+      state = state.copyWith(
+        errorMessage: 'The selected file is not a supported image format.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
 
     final newItem = ImageToPdfItem(
       id: _nextId(),
@@ -129,6 +186,24 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
     required String name,
     String? path,
   }) async {
+    final maxAllowed = FileTypeDetector.maxImageToPdfCount;
+    if (state.images.length >= maxAllowed) {
+      state = state.copyWith(
+        errorMessage: 'Maximum limit of $maxAllowed images reached.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
+
+    final detected = FileTypeDetector.detect(path: path, name: name, bytes: bytes);
+    if (!detected.isImage) {
+      state = state.copyWith(
+        errorMessage: 'The selected file is not a supported image format.',
+        clearGeneratedPath: true,
+      );
+      return;
+    }
+
     final hasPath = (path ?? '').isNotEmpty;
     final newItem = ImageToPdfItem(
       id: _nextId(),

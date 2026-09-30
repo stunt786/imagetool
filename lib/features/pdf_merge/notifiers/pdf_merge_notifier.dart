@@ -14,6 +14,8 @@ import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/pdf_merge_state.dart';
 
+import '../../../core/utils/file_type_detector.dart';
+
 final pdfMergeProvider = NotifierProvider<PdfMergeNotifier, PdfMergeState>(
   PdfMergeNotifier.new,
 );
@@ -26,6 +28,16 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
 
   /// Picks multiple PDF files and copies them into the sandbox cache.
   Future<void> pickFiles(BuildContext context) async {
+    const maxCount = FileTypeDetector.maxMergePdfCount;
+    final currentCount = state.files.length;
+    if (currentCount >= maxCount) {
+      state = state.copyWith(
+        errorMessage: 'Only up to $maxCount PDFs can be merged at a time.',
+      );
+      return;
+    }
+
+    final remaining = maxCount - currentCount;
     final service = ref.read(filePickerServiceProvider);
     final picked = await service.pick(
       context: context,
@@ -36,7 +48,31 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     if (picked.isEmpty) return;
 
     final newFiles = <MergePdfItem>[];
+    var sizeExceededCount = 0;
+    var duplicateCount = 0;
+    var countCapped = false;
+
     for (final file in picked) {
+      if (file.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
+        sizeExceededCount++;
+        continue;
+      }
+
+      final isDuplicate = state.files.any((f) =>
+              f.name == file.name &&
+              (f.sizeBytes == file.sizeBytes || f.path == file.path)) ||
+          newFiles.any((f) =>
+              f.name == file.name && f.sizeBytes == file.sizeBytes);
+      if (isDuplicate) {
+        duplicateCount++;
+        continue;
+      }
+
+      if (newFiles.length >= remaining) {
+        countCapped = true;
+        break;
+      }
+
       try {
         final sandboxPath = await _manager.importPickedFile(file);
 
@@ -50,28 +86,73 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       }
     }
 
-    if (newFiles.isEmpty) {
-      state =
-          state.copyWith(errorMessage: 'Could not access the selected files');
+    var pagesExceeded = false;
+    final validFilesToAdd = <MergePdfItem>[];
+    var currentTotalPages =
+        state.files.fold<int>(0, (sum, f) => sum + (f.pageCount ?? 0));
+
+    for (final item in newFiles) {
+      int? pageCount;
+      try {
+        pageCount = await PdfService.instance.getPageCount(item.path);
+      } catch (_) {}
+
+      final pages = pageCount ?? 0;
+      if (currentTotalPages + pages > FileTypeDetector.maxMergeCombinedPages) {
+        pagesExceeded = true;
+        try {
+          await File(item.path).delete();
+        } catch (_) {}
+        continue;
+      }
+
+      currentTotalPages += pages;
+      validFilesToAdd.add(item.copyWith(pageCount: pageCount));
+    }
+
+    final notices = <String>[];
+    if (duplicateCount > 0) {
+      notices.add(
+        duplicateCount == 1
+            ? '1 duplicate PDF was skipped.'
+            : '$duplicateCount duplicate PDFs were skipped.',
+      );
+    }
+    if (sizeExceededCount > 0) {
+      notices.add(
+        sizeExceededCount == 1
+            ? '1 PDF exceeded the 20 MB size limit and was skipped.'
+            : '$sizeExceededCount PDFs exceeded the 20 MB size limit and were skipped.',
+      );
+    }
+    if (pagesExceeded) {
+      notices.add(
+        'Some files could not be added because combined pages cannot exceed ${FileTypeDetector.maxMergeCombinedPages} pages.',
+      );
+    }
+    if (countCapped) {
+      notices.add('Only up to $maxCount PDFs can be merged at a time.');
+    }
+
+    final noticeMsg = notices.isNotEmpty ? notices.join(' ') : null;
+
+    if (validFilesToAdd.isEmpty) {
+      state = state.copyWith(
+        errorMessage: noticeMsg ?? 'Could not access the selected files.',
+      );
       return;
     }
 
     state = state.copyWith(
-      files: [...state.files, ...newFiles],
-      errorMessage: null,
+      files: [...state.files, ...validFilesToAdd],
+      errorMessage: noticeMsg,
       outputPath: null,
       publicExportPath: null,
     );
-
-    for (int i = state.files.length - newFiles.length;
-        i < state.files.length;
-        i++) {
-      await _loadPageCount(i);
-    }
   }
 
   /// Loads the page count for a file at the given index.
-  Future<void> _loadPageCount(int index) async {
+  Future<void> loadPageCount(int index) async {
     if (index < 0 || index >= state.files.length) return;
 
     final item = state.files[index];
@@ -98,7 +179,33 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
   /// The result stays in the sandbox until [exportFile] is called.
   Future<String?> merge() async {
     if (state.files.length < 2) {
-      state = state.copyWith(errorMessage: 'At least 2 PDF files are required');
+      state = state.copyWith(errorMessage: 'At least 2 PDF files are required to merge.');
+      return null;
+    }
+
+    if (state.files.length > FileTypeDetector.maxMergePdfCount) {
+      state = state.copyWith(
+        errorMessage: 'Only up to ${FileTypeDetector.maxMergePdfCount} PDFs can be merged at a time.',
+      );
+      return null;
+    }
+
+    for (final file in state.files) {
+      if (file.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
+        state = state.copyWith(
+          errorMessage: 'File "${file.name}" exceeds the 20 MB size limit.',
+        );
+        return null;
+      }
+    }
+
+    final totalPages =
+        state.files.fold<int>(0, (sum, f) => sum + (f.pageCount ?? 0));
+    if (totalPages > FileTypeDetector.maxMergeCombinedPages) {
+      state = state.copyWith(
+        errorMessage:
+            'Combined page count ($totalPages) exceeds the limit of ${FileTypeDetector.maxMergeCombinedPages} pages.',
+      );
       return null;
     }
 
@@ -113,10 +220,7 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     try {
       state = state.copyWith(progress: 0.1);
 
-      final filesData = state.files
-          .map((f) => File(f.path).readAsBytesSync())
-          .map((b) => Uint8List.fromList(b))
-          .toList();
+      final filePaths = state.files.map((f) => f.path).toList();
 
       state = state.copyWith(progress: 0.3);
 
@@ -128,7 +232,7 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       final resultBytes = await compute(
         PdfService.isolateMergeWorker,
         {
-          'files': filesData,
+          'filePaths': filePaths,
           'applyWatermark': appSettings.enableGlobalWatermark,
           'watermarkText': appSettings.watermarkText,
           'watermarkPosition': appSettings.watermarkPosition,

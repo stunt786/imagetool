@@ -135,6 +135,7 @@ class PdfOcrService {
           width: page.width * scale,
           height: page.height * scale,
           format: pdfx.PdfPageImageFormat.png,
+          backgroundColor: '#FFFFFF',
         );
         await page.close();
 
