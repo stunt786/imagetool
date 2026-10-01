@@ -34,10 +34,10 @@ void main() {
     expect(find.text('PixelTools'), findsOneWidget);
     expect(find.text('Work Smarter'), findsOneWidget);
     expect(find.text('Resize'), findsOneWidget);
-    expect(find.text('Compress'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.byIcon(Icons.camera_alt_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.home_rounded), findsOneWidget);
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 
