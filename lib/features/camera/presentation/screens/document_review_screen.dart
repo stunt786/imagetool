@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/models/operation_folder.dart';
@@ -14,7 +16,6 @@ import '../../../../core/services/public_storage.dart';
 import '../../../../core/settings/app_settings.dart';
 import '../../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../../shared/services/watermark_helper.dart';
-import '../../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../models/document_batch.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
@@ -51,7 +52,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       if (!outcome.isSuccess || !mounted) return;
       final notifier = ref.read(documentBatchProvider.notifier);
       for (final file in outcome.files) {
-        await notifier.addPageFromPath(file.path);
+        await notifier.addPageFromPath(file.path, skipExifFix: true);
       }
       if (mounted) {
         setState(() => _selectedIndex =
@@ -79,6 +80,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         await ref.read(documentBatchProvider.notifier).replacePageFromPath(
               _selectedIndex,
               outcome.files.first.path,
+              skipExifFix: true,
             );
       }
     } catch (error) {
@@ -306,7 +308,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       builder: (context) => _ExportSheet(
         onPdf: () {
           Navigator.pop(context);
-          _navigateAfterCamera(() => _openPdfExport(pages));
+          _navigateAfterCamera(() => _saveAsPdf(pages));
         },
         onImages: () {
           Navigator.pop(context);
@@ -370,22 +372,119 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     context.go('/pdfs');
   }
 
-  Future<void> _openPdfExport(List<ScannedPage> pages) async {
-    final notifier = ref.read(imageToPdfProvider.notifier);
-    notifier.clearAll();
-    for (final page in pages) {
-      await notifier.addImageFromBytes(
-        bytes: page.displayBytes,
-        name: page.name,
-        path: page.path,
-      );
+  Future<void> _saveAsPdf(List<ScannedPage> pages) async {
+    if (pages.isEmpty) {
+      _showError('The scanned pages could not be saved as PDF.');
+      return;
     }
-    await ref.read(documentBatchProvider.notifier).clearBatch();
-    if (mounted) {
-      if (context.canPop()) {
-        context.pop();
+    setState(() => _isBusy = true);
+    final settings = ref.read(appSettingsProvider);
+    try {
+      if (WatermarkHelper.cachedIconBytes == null) {
+        await WatermarkHelper.loadIconBytes();
       }
-      context.push('/images/to-pdf');
+
+      final doc = pw.Document();
+      for (final page in pages) {
+        final imageBytes = WatermarkHelper.applyGlobalWatermarkIfNeeded(
+          page.displayBytes,
+          settings,
+        );
+        final pdfImage = pw.MemoryImage(imageBytes);
+        final width = (page.width ?? 1200).toDouble();
+        final height = (page.height ?? 1600).toDouble();
+        const pointsPerPixel = 72.0 / 150.0;
+        final pageFormat = PdfPageFormat(
+          width * pointsPerPixel,
+          height * pointsPerPixel,
+        );
+
+        doc.addPage(
+          pw.Page(
+            pageFormat: pageFormat,
+            margin: pw.EdgeInsets.zero,
+            build: (ctx) {
+              final content = pw.FullPage(
+                ignoreMargins: true,
+                child: pw.Image(pdfImage, fit: pw.BoxFit.contain),
+              );
+
+              if (settings.enableGlobalWatermark) {
+                return pw.Stack(
+                  children: [
+                    content,
+                    WatermarkHelper.buildPdfWatermarkWidget(
+                      iconBytes: WatermarkHelper.cachedIconBytes,
+                      text: settings.watermarkText,
+                      colorHex: settings.watermarkColor,
+                      opacity: settings.watermarkOpacity,
+                      positionIndex: settings.watermarkPosition,
+                      useAppLogo: settings.useWatermarkLogo,
+                    ),
+                  ],
+                );
+              }
+              return content;
+            },
+          ),
+        );
+      }
+
+      final pdfBytes = await doc.save();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'scan_$timestamp.pdf';
+
+      final results = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.scan,
+        entries: [
+          OutputEntry.bytes(
+            bytes: pdfBytes,
+            fileName: fileName,
+            publicKind: PublicFileKind.document,
+          ),
+        ],
+      );
+
+      final localPath = results.isNotEmpty ? results.first.localPath : null;
+
+      if (localPath != null) {
+        ref.read(editHistoryProvider.notifier).addGroup(
+              toolName: 'Camera Scan',
+              toolIcon: Icons.picture_as_pdf_outlined,
+              count: pages.length,
+              filePath: localPath,
+              thumbnailPath: pages.first.path,
+              pagePaths: pages
+                  .map((p) => p.path)
+                  .where((p) => p.isNotEmpty)
+                  .toList(),
+            );
+      }
+
+      await ref.read(documentBatchProvider.notifier).clearBatch();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('PDF saved to Documents & Files'),
+          behavior: SnackBarBehavior.floating,
+          action: localPath != null
+              ? SnackBarAction(
+                  label: 'Share',
+                  onPressed: () {
+                    Share.shareXFiles([XFile(localPath)], text: fileName);
+                  },
+                )
+              : null,
+        ),
+      );
+      if (mounted) {
+        _exitToHome();
+      }
+    } catch (error) {
+      _showError('Saving PDF failed: $error');
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
     }
   }
 

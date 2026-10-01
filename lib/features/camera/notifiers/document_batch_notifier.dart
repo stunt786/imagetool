@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
@@ -96,7 +96,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     _syncUndoDepths();
   }
 
-  Future<void> addPageFromPath(String filePath) async {
+  Future<void> addPageFromPath(String filePath, {bool skipExifFix = false}) async {
     final file = File(filePath);
     if (!await file.exists()) return;
 
@@ -104,15 +104,13 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     final name = p.basename(filePath);
     final sizeBytes = bytes.length;
 
-    // Fix EXIF orientation by decoding and re-encoding
-    try {
-      final decoded = img.decodeImage(bytes);
-      if (decoded != null) {
-        // Re-encode as JPEG with proper orientation (EXIF stripped)
-        bytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
+    // Fix EXIF orientation off the UI isolate if needed (skip for scanner outputs)
+    if (!skipExifFix) {
+      try {
+        bytes = await compute(_fixOrientationWorker, bytes);
+      } catch (_) {
+        // If decode fails, use original bytes
       }
-    } catch (_) {
-      // If decode fails, use original bytes
     }
 
     var savedPath = filePath;
@@ -155,7 +153,7 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     _syncUndoDepths();
   }
 
-  Future<void> replacePageFromPath(int index, String filePath) async {
+  Future<void> replacePageFromPath(int index, String filePath, {bool skipExifFix = false}) async {
     final oldPage = state.pages.elementAtOrNull(index);
     if (oldPage != null && oldPage.path.isNotEmpty) {
       await BatchStorageService.deletePageFile(oldPage.path);
@@ -168,15 +166,13 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
     final name = p.basename(filePath);
     final sizeBytes = bytes.length;
 
-    // Fix EXIF orientation by decoding and re-encoding
-    try {
-      final decoded = img.decodeImage(bytes);
-      if (decoded != null) {
-        // Re-encode as JPEG with proper orientation (EXIF stripped)
-        bytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
+    // Fix EXIF orientation off the UI isolate if needed (skip for scanner outputs)
+    if (!skipExifFix) {
+      try {
+        bytes = await compute(_fixOrientationWorker, bytes);
+      } catch (_) {
+        // If decode fails, use original bytes
       }
-    } catch (_) {
-      // If decode fails, use original bytes
     }
 
     var savedPath = filePath;
@@ -350,4 +346,14 @@ class DocumentBatchNotifier extends Notifier<DocumentBatch> {
   }
 
   String? get batchId => state.id.isEmpty ? null : state.id;
+}
+
+Uint8List _fixOrientationWorker(Uint8List bytes) {
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded != null) {
+      return Uint8List.fromList(img.encodeJpg(decoded, quality: 95));
+    }
+  } catch (_) {}
+  return bytes;
 }

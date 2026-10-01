@@ -286,7 +286,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await _startNewBatchIfNeeded();
       final notifier = ref.read(documentBatchProvider.notifier);
       for (final file in outcome.files) {
-        await notifier.addPageFromPath(file.path);
+        await notifier.addPageFromPath(file.path, skipExifFix: true);
       }
       if (mounted) {
         HapticFeedback.lightImpact();
@@ -392,9 +392,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildGoogleScannerView() {
-    return const Scaffold(
-      backgroundColor: Colors.black,
-      body: SizedBox.expand(),
+    return Scaffold(
+      backgroundColor: const Color(0xFF121418),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(
+              color: Color(0xFF00E5FF),
+              strokeWidth: 3,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _isScanningDocument
+                  ? 'Preparing scanned document...'
+                  : 'Opening scanner...',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

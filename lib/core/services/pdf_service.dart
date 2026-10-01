@@ -695,6 +695,47 @@ class PdfService {
     }
   }
 
+  /// Renders a specific page at high resolution (e.g. dpi 200) as image bytes (JPG or PNG).
+  Future<Uint8List?> renderPageAsImage({
+    required String inputPath,
+    required int pageNumber,
+    int dpi = 200,
+    String format = 'jpg',
+  }) async {
+    try {
+      final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
+      if (pageNumber < 1 || pageNumber > pdfDoc.pagesCount) {
+        await pdfDoc.close();
+        return null;
+      }
+
+      final page = await pdfDoc.getPage(pageNumber);
+      final scale = dpi / 72.0;
+
+      final pageImage = await page.render(
+        width: page.width * scale,
+        height: page.height * scale,
+        format: pdfx.PdfPageImageFormat.png,
+        backgroundColor: '#FFFFFF',
+      );
+
+      await pdfDoc.close();
+      if (pageImage == null) return null;
+
+      final decodedImage = img.decodeImage(pageImage.bytes);
+      if (decodedImage == null) return pageImage.bytes;
+      final solidImage = _flattenAlpha(decodedImage);
+
+      if (format.toLowerCase() == 'png') {
+        return Uint8List.fromList(img.encodePng(solidImage));
+      } else {
+        return Uint8List.fromList(img.encodeJpg(solidImage, quality: 95));
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Gets file size in bytes.
   Future<int> getFileSize(String filePath) async {
     return File(filePath).length();

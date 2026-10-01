@@ -162,6 +162,12 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         label: isPdf ? 'Export' : 'Save',
         onTap: _saveOrExportFile,
       ),
+      if (isPdf)
+        _ActionSpec(
+          icon: Icons.photo_library_outlined,
+          label: 'To Images',
+          onTap: _exportPdfPagesAsImages,
+        ),
       if (_isPageGroup)
         _ActionSpec(
           icon: Icons.picture_as_pdf_outlined,
@@ -352,6 +358,63 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
           await saveImageBytes(bytes, fileName: item.fileName);
           if (mounted) _showSnack('Saved to gallery');
         }
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Export failed: $e');
+    }
+  }
+
+  Future<void> _exportPdfPagesAsImages() async {
+    final item = _currentItem;
+    final path = item.filePath ?? item.thumbnailPath;
+    if (path == null || !File(path).existsSync()) {
+      _showSnack('File not found on storage');
+      return;
+    }
+
+    _showSnack('Saving pages as images...');
+
+    try {
+      final base = item.fileName.replaceAll(
+        RegExp(r'\.pdf$', caseSensitive: false),
+        '',
+      );
+      final outputPaths = await PdfService.instance.convertPdfToImages(
+        inputPath: path,
+        format: 'jpg',
+        outputBaseName: base,
+        dpi: 200,
+      );
+
+      var saved = 0;
+      final savedFiles = <XFile>[];
+      for (final p in outputPaths) {
+        try {
+          final fileName = p.split(Platform.pathSeparator).last;
+          await PublicStorage.publishFile(
+            sourcePath: p,
+            fileName: fileName,
+            kind: PublicFileKind.image,
+          );
+          saved++;
+          savedFiles.add(XFile(p));
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$saved page image(s) saved to Gallery'),
+            behavior: SnackBarBehavior.floating,
+            action: savedFiles.isNotEmpty
+                ? SnackBarAction(
+                    label: 'Share',
+                    onPressed: () => Share.shareXFiles(savedFiles),
+                  )
+                : null,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) _showSnack('Export failed: $e');
