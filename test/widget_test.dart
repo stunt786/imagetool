@@ -40,4 +40,29 @@ void main() {
     expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
+
+  testWidgets('First time app launch shows onboarding and does not bypass it',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appSettingsProvider.overrideWith(
+            (ref) => AppSettingsNotifier(
+              const AppSettingsState(
+                savePath: '/test/path',
+                hasCompletedOnboarding: false,
+              ),
+            ),
+          ),
+        ],
+        child: const PixelToolsApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Privacy First'), findsOneWidget);
+    expect(find.text('Skip'), findsOneWidget);
+    expect(find.text('Work Smarter'), findsNothing);
+  });
 }
+

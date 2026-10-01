@@ -44,7 +44,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final settings = ref.read(appSettingsProvider);
-      if (settings.isLoading) return null;
       final onboardingDone = settings.hasCompletedOnboarding;
       final isOnboardingRoute = state.matchedLocation == '/onboarding';
       if (!onboardingDone && !isOnboardingRoute) {
@@ -215,7 +214,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ),
 
       // Backwards-compatible deep links from the earlier scaffold.
-      GoRoute(path: '/', redirect: (context, state) => '/tools'),
+      GoRoute(
+        path: '/',
+        redirect: (context, state) =>
+            ref.read(appSettingsProvider).hasCompletedOnboarding
+                ? '/tools'
+                : '/onboarding',
+      ),
       GoRoute(path: '/home', redirect: (context, state) => '/tools'),
       GoRoute(
         path: '/image-resizer',

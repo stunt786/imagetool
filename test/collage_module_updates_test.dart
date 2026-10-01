@@ -211,5 +211,76 @@ void main() {
       // Dialog should open
       expect(find.text('Manage Text'), findsOneWidget);
     });
+
+    testWidgets('Slot options bottom sheet stays open across actions until closed', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(collageProvider.notifier);
+      final testJpg = _createSolidTestJpg(color: Colors.blue);
+      notifier.setSlotImage(0, testJpg, 'test.jpg');
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: CollageCanvas(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap slot 0 to open slot options
+      await tester.tap(find.byType(GestureDetector).first);
+      await tester.pumpAndSettle();
+
+      // Verify sheet is open
+      expect(find.text('Slot 1 Options'), findsOneWidget);
+      expect(find.text('Zoom In'), findsOneWidget);
+      expect(find.text('Zoom Out'), findsOneWidget);
+      expect(find.text('Fit Mode'), findsOneWidget);
+      expect(find.text('Rotate'), findsOneWidget);
+
+      // Verify SafeArea is used to prevent hiding behind screen bottom
+      expect(find.byType(SafeArea), findsWidgets);
+
+      // Tap Zoom In -> should update scale and NOT close the sheet
+      final initialScale = container.read(collageProvider).images[0].scale;
+      await tester.tap(find.text('Zoom In'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(collageProvider).images[0].scale, greaterThan(initialScale));
+      expect(find.text('Slot 1 Options'), findsOneWidget); // Sheet is STILL open!
+
+      // Tap Rotate -> should rotate and NOT close the sheet
+      await tester.tap(find.text('Rotate'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(collageProvider).images[0].rotation, 90.0);
+      expect(find.text('Slot 1 Options'), findsOneWidget); // Sheet is STILL open!
+
+      // Tap Fit Mode -> should cycle fit mode and NOT close the sheet
+      await tester.tap(find.text('Fit Mode'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(collageProvider).images[0].fitMode, ImageFitMode.contain);
+      expect(find.text('Slot 1 Options'), findsOneWidget); // Sheet is STILL open!
+
+      // Tap close button -> should close sheet
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Slot 1 Options'), findsNothing); // Sheet is now closed!
+    });
   });
 }
+

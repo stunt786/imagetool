@@ -979,20 +979,34 @@ class _ToolsGrid extends StatelessWidget {
 
   final List<_ToolData> tools;
 
+  static int calculateCrossAxisCount(double width) {
+    if (width >= 900) return 6;
+    if (width >= 620) return 5;
+    if (width >= 470) return 4;
+    return 3;
+  }
+
+  static double calculateMainAxisExtent(double width) {
+    if (width < 340) return 92.0;
+    if (width < 600) return 98.0;
+    return 102.0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final childAspectRatio = width < 340 ? 0.72 : (width < 370 ? 0.78 : 0.84);
+    final crossAxisCount = calculateCrossAxisCount(width);
+    final mainAxisExtent = calculateMainAxisExtent(width);
     final spacing = width < 360 ? 8.0 : 10.0;
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+        crossAxisCount: crossAxisCount,
         crossAxisSpacing: spacing,
         mainAxisSpacing: spacing,
-        childAspectRatio: childAspectRatio,
+        mainAxisExtent: mainAxisExtent,
       ),
       itemCount: tools.length,
       itemBuilder: (context, index) => _ToolCard(data: tools[index]),
@@ -1020,10 +1034,44 @@ class _ToolCardState extends State<_ToolCard> {
     final data = widget.data;
     final gradient = data.effectiveGradient;
     final width = MediaQuery.sizeOf(context).width;
-    final isCompact = width < 360;
-    final iconBoxSize = isCompact ? 36.0 : 42.0;
-    final iconSize = isCompact ? 18.0 : 21.0;
-    final padding = isCompact ? 8.0 : 11.0;
+    final isVeryCompact = width < 340;
+    final isCompact = width < 370;
+
+    final iconBoxSize = isVeryCompact
+        ? 32.0
+        : isCompact
+            ? 35.0
+            : 38.0;
+    final iconSize = isVeryCompact
+        ? 17.0
+        : isCompact
+            ? 18.5
+            : 20.0;
+    final chevronSize = isVeryCompact
+        ? 14.0
+        : isCompact
+            ? 15.5
+            : 17.0;
+    final horizontalPadding = isVeryCompact
+        ? 7.0
+        : isCompact
+            ? 8.5
+            : 10.0;
+    final verticalPadding = isVeryCompact
+        ? 7.0
+        : isCompact
+            ? 8.0
+            : 9.0;
+    final titleFontSize = isVeryCompact
+        ? 12.0
+        : isCompact
+            ? 12.5
+            : 13.5;
+    final subtitleFontSize = isVeryCompact
+        ? 9.5
+        : isCompact
+            ? 10.0
+            : 11.0;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -1043,7 +1091,7 @@ class _ToolCardState extends State<_ToolCard> {
         curve: Curves.easeOutCubic,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             color:
                 isDark ? const Color(0xFF0F172A) : scheme.surfaceContainerLow,
             border: Border.all(
@@ -1056,18 +1104,18 @@ class _ToolCardState extends State<_ToolCard> {
               BoxShadow(
                 color: isDark
                     ? Colors.black.withValues(alpha: 0.25)
-                    : scheme.shadow.withValues(alpha: 0.06),
-                blurRadius: 8,
+                    : scheme.shadow.withValues(alpha: 0.05),
+                blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
               onTap: () {
                 InterstitialTracker.instance.trackNavigation();
                 if (data.onTap != null) {
@@ -1076,74 +1124,91 @@ class _ToolCardState extends State<_ToolCard> {
                   context.push(data.route);
                 }
               },
-              child: Padding(
-                padding: EdgeInsets.all(padding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Top row: rounded icon container on left, chevron on right
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: iconBoxSize,
-                          height: iconBoxSize,
-                          decoration: BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(isCompact ? 11 : 13),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: gradient,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: gradient.first.withValues(alpha: 0.35),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.15,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: horizontalPadding,
+                    vertical: verticalPadding,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Top row: rounded icon container on left, chevron on right
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: iconBoxSize,
+                            height: iconBoxSize,
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                  BorderRadius.circular(isCompact ? 10 : 12),
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: gradient,
                               ),
-                            ],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: gradient.first.withValues(alpha: 0.3),
+                                  blurRadius: 5,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              data.icon,
+                              size: iconSize,
+                              color: Colors.white,
+                            ),
                           ),
-                          child: Icon(data.icon,
-                              size: iconSize, color: Colors.white),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: isCompact ? 16 : 18,
-                          color: isDark
-                              ? const Color(0xFF64748B)
-                              : scheme.onSurfaceVariant.withValues(alpha: 0.6),
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    // Bottom: title and subtitle, left-aligned
-                    Text(
-                      data.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : scheme.onSurface,
-                        fontSize: isCompact ? 13 : 14.5,
-                        letterSpacing: -0.2,
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: chevronSize,
+                            color: isDark
+                                ? const Color(0xFF64748B)
+                                : scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      data.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: isDark
-                            ? const Color(0xFF94A3B8)
-                            : scheme.onSurfaceVariant,
-                        fontSize: isCompact ? 10 : 11,
+                      // Bottom: title and subtitle, left-aligned
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              data.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : scheme.onSurface,
+                                fontSize: titleFontSize,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const SizedBox(height: 1.5),
+                            Text(
+                              data.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w400,
+                                color: isDark
+                                    ? const Color(0xFF94A3B8)
+                                    : scheme.onSurfaceVariant,
+                                fontSize: subtitleFontSize,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

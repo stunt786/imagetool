@@ -107,9 +107,9 @@ class AdService {
   /// when using production ad unit IDs.
   /// See: https://developers.google.com/admob/flutter/test-ads#enable_test_devices
   Future<void> initialize({List<String>? testDeviceIds}) async {
-    // google_mobile_ads is not supported on web.
-    if (kIsWeb) {
-      debugPrint('[AdService] Skipping AdMob init on web');
+    // google_mobile_ads is only supported on Android and iOS.
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+      debugPrint('[AdService] Skipping AdMob init on non-mobile platform');
       return;
     }
 

@@ -293,7 +293,7 @@ final appSettingsProvider =
 
 class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
   AppSettingsNotifier([AppSettingsState? initial])
-      : super(initial ?? const AppSettingsState(savePath: '')) {
+      : super(initial ?? const AppSettingsState(savePath: '', isLoading: true)) {
     if (initial == null) {
       _load();
     }
@@ -301,37 +301,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
 
   Future<void> _load() async {
     state = state.copyWith(isLoading: true);
-    final savePath = await AppSettingsState.loadPath();
-    final oneClick = await AppSettingsState.loadOneClick();
-    final themeMode = await AppSettingsState.loadThemeMode();
-    final stripExif = await AppSettingsState.loadStripExif();
-    final completedOnboarding =
-        await AppSettingsState.loadCompletedOnboarding();
-    final enableGlobalWatermark =
-        await AppSettingsState.loadEnableGlobalWatermark();
-    final useWatermarkLogo = await AppSettingsState.loadUseWatermarkLogo();
-    final useImageVerticalSidebar =
-        await AppSettingsState.loadUseImageVerticalSidebar();
-    final watermarkText = await AppSettingsState.loadWatermarkText();
-    final watermarkColorHex = await AppSettingsState.loadWatermarkColorHex();
-    final watermarkOpacity = await AppSettingsState.loadWatermarkOpacity();
-    final watermarkPositionIndex =
-        await AppSettingsState.loadWatermarkPositionIndex();
-    state = AppSettingsState(
-      savePath: savePath,
-      isLoading: false,
-      oneClickOpen: oneClick,
-      themeMode: themeMode,
-      stripExif: stripExif,
-      hasCompletedOnboarding: completedOnboarding,
-      enableGlobalWatermark: enableGlobalWatermark,
-      useWatermarkLogo: useWatermarkLogo,
-      useImageVerticalSidebar: useImageVerticalSidebar,
-      watermarkText: watermarkText,
-      watermarkColorHex: watermarkColorHex,
-      watermarkOpacity: watermarkOpacity,
-      watermarkPositionIndex: watermarkPositionIndex,
-    );
+    final prefs = await SharedPreferences.getInstance();
+    final loaded = await AppSettingsState.loadInitial(prefs);
+    state = loaded;
   }
 
   Future<void> setSavePath(String savePath) async {

@@ -107,4 +107,55 @@ void main() {
       await expectNoOverflow(tester, const SettingsScreen(), size);
     });
   }
+
+  testWidgets('HomeScreen grid dynamically scales columns and keeps cards compact', (tester) async {
+    final sizesAndExpectedColumns = <Size, int>{
+      const Size(360, 640): 3,
+      const Size(500, 800): 4,
+      const Size(640, 360): 5,
+      const Size(800, 1280): 5,
+      const Size(1024, 768): 6,
+    };
+
+    for (final entry in sizesAndExpectedColumns.entries) {
+      tester.view.physicalSize = entry.key;
+      tester.view.devicePixelRatio = 1.0;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            operationStoreProvider.overrideWithValue(
+              OperationStore(baseDirectoryProvider: () async => base),
+            ),
+          ],
+          child: const MaterialApp(home: HomeScreen()),
+        ),
+      );
+      await tester.pump();
+
+      final gridViewFinder = find.byType(GridView);
+      expect(gridViewFinder, findsOneWidget);
+
+      final gridView = tester.widget<GridView>(gridViewFinder);
+      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+      expect(
+        delegate.crossAxisCount,
+        entry.value,
+        reason: 'Failed column count at size ${entry.key}',
+      );
+      expect(
+        delegate.mainAxisExtent,
+        isNotNull,
+        reason: 'mainAxisExtent must be set to prevent oversized cards',
+      );
+      expect(
+        delegate.mainAxisExtent!,
+        lessThanOrEqualTo(105.0),
+        reason: 'Card height should remain compact (< 105px)',
+      );
+    }
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
 }

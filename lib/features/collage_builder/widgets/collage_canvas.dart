@@ -354,6 +354,8 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
   void _showSlotOptions(BuildContext context, int index) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => _SlotOptionsSheet(slotIndex: index),
     );
   }
@@ -801,92 +803,206 @@ class _SlotOptionsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(collageProvider);
+    if (slotIndex >= state.images.length || !state.images[slotIndex].hasImage) {
+      return const SizedBox.shrink();
+    }
     final slot = state.images[slotIndex];
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Slot ${slotIndex + 1} Options',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _OptionButton(
-                icon: Icons.zoom_in,
-                label: 'Zoom In',
-                onTap: () {
-                  ref.read(collageProvider.notifier).setScale(
-                        slotIndex,
-                        (slot.scale + 0.2).clamp(1.0, 5.0),
-                      );
-                  if (slot.scale <= 1.0) {
-                    ref.read(collageProvider.notifier).setOffset(slotIndex, 0.0, 0.0);
-                  }
-                  Navigator.pop(context);
-                },
-              ),
-              _OptionButton(
-                icon: Icons.zoom_out,
-                label: 'Zoom Out',
-                onTap: () {
-                  final newScale = (slot.scale - 0.2).clamp(1.0, 5.0);
-                  ref.read(collageProvider.notifier).setScale(slotIndex, newScale);
-                  if (newScale <= 1.0) {
-                    ref.read(collageProvider.notifier).setOffset(slotIndex, 0.0, 0.0);
-                  }
-                  Navigator.pop(context);
-                },
-              ),
-              _OptionButton(
-                icon: Icons.fit_screen,
-                label: 'Fit Mode',
-                onTap: () {
-                  ref.read(collageProvider.notifier).cycleFitMode(slotIndex);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _OptionButton(
-                icon: Icons.rotate_right,
-                label: 'Rotate',
-                onTap: () {
-                  ref.read(collageProvider.notifier).rotateSlot(slotIndex);
-                  Navigator.pop(context);
-                },
-              ),
-              _OptionButton(
-                icon: Icons.image,
-                label: 'Replace',
-                onTap: () {
-                  Navigator.pop(context);
-                  ref.read(collageProvider.notifier).addImageToSlot(context, slotIndex);
-                },
-              ),
-              _OptionButton(
-                icon: Icons.delete,
-                label: 'Remove',
-                color: Colors.red,
-                onTap: () {
-                  ref.read(collageProvider.notifier).removeImageFromSlot(slotIndex);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
         ],
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: true,
+        minimum: const EdgeInsets.only(bottom: 14),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            8 + (bottomInset > 0 ? 6 : 10),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Grab handle
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.25)
+                      : Colors.black.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Header with Title, zoom badge, and Close Button
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Slot ${slotIndex + 1} Options',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${(slot.scale * 100).toInt()}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Row 1: Zoom In, Zoom Out, Fit Mode (keeps menu open)
+              Row(
+                children: [
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.zoom_in_rounded,
+                      label: 'Zoom In',
+                      subtitle: '${(slot.scale * 100).toInt()}%',
+                      onTap: () {
+                        ref.read(collageProvider.notifier).setScale(
+                              slotIndex,
+                              (slot.scale + 0.2).clamp(1.0, 5.0),
+                            );
+                        if (slot.scale <= 1.0) {
+                          ref
+                              .read(collageProvider.notifier)
+                              .setOffset(slotIndex, 0.0, 0.0);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.zoom_out_rounded,
+                      label: 'Zoom Out',
+                      subtitle: slot.scale > 1.0 ? '-20%' : '100%',
+                      onTap: () {
+                        final newScale = (slot.scale - 0.2).clamp(1.0, 5.0);
+                        ref
+                            .read(collageProvider.notifier)
+                            .setScale(slotIndex, newScale);
+                        if (newScale <= 1.0) {
+                          ref
+                              .read(collageProvider.notifier)
+                              .setOffset(slotIndex, 0.0, 0.0);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.fit_screen_rounded,
+                      label: 'Fit Mode',
+                      subtitle: switch (slot.fitMode) {
+                        ImageFitMode.cover => 'Cover',
+                        ImageFitMode.contain => 'Contain',
+                        ImageFitMode.fill => 'Fill',
+                      },
+                      onTap: () {
+                        ref
+                            .read(collageProvider.notifier)
+                            .cycleFitMode(slotIndex);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Row 2: Rotate, Replace, Remove (keeps menu open except on Remove)
+              Row(
+                children: [
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.rotate_right_rounded,
+                      label: 'Rotate',
+                      subtitle: '+90°',
+                      onTap: () {
+                        ref
+                            .read(collageProvider.notifier)
+                            .rotateSlot(slotIndex);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.image_rounded,
+                      label: 'Replace',
+                      subtitle: 'Gallery',
+                      onTap: () {
+                        ref
+                            .read(collageProvider.notifier)
+                            .addImageToSlot(context, slotIndex);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _OptionButton(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Remove',
+                      subtitle: 'Clear slot',
+                      color: Colors.redAccent,
+                      onTap: () {
+                        ref
+                            .read(collageProvider.notifier)
+                            .removeImageFromSlot(slotIndex);
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -895,39 +1011,68 @@ class _SlotOptionsSheet extends ConsumerWidget {
 class _OptionButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
   final Color? color;
 
   const _OptionButton({
     required this.icon,
     required this.label,
+    this.subtitle,
     required this.onTap,
     this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: (color ?? Theme.of(context).colorScheme.primary).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color ?? Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: color ?? Theme.of(context).colorScheme.primary,
-              ),
+    final theme = Theme.of(context);
+    final primaryColor = color ?? theme.colorScheme.primary;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          decoration: BoxDecoration(
+            color: primaryColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: primaryColor.withValues(alpha: 0.22),
+              width: 1,
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: primaryColor),
+              const SizedBox(height: 5),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: primaryColor,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: primaryColor.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

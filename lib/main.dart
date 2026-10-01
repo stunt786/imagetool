@@ -1,37 +1,18 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/app/pixeltools_app.dart';
-import 'core/services/ad_service.dart';
 import 'core/settings/app_settings.dart';
-import 'shared/services/watermark_helper.dart';
 import 'splash_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await WatermarkHelper.loadIconBytes();
 
-  final prefs = await SharedPreferences.getInstance();
-  final initialSettings = await AppSettingsState.loadInitial(prefs);
-
-  if (!kIsWeb) {
-    await AdService.instance.initialize();
-  }
-
-  // Permissions are requested in context (camera when the camera opens, photo
-  // access when the gallery picker runs) per current Android policy — never
-  // as a burst on first launch.
-
+  // Launch Flutter immediately so the animated splash screen and loading UI
+  // render in the very first frame without any native black screen delay.
   runApp(
-    ProviderScope(
-      overrides: [
-        appSettingsProvider.overrideWith(
-          (ref) => AppSettingsNotifier(initialSettings),
-        ),
-      ],
-      child: const AppEntry(),
+    const ProviderScope(
+      child: AppEntry(),
     ),
   );
 }
@@ -46,10 +27,19 @@ class AppEntry extends ConsumerStatefulWidget {
 class _AppEntryState extends ConsumerState<AppEntry> {
   bool _showSplash = true;
 
+  @override
+  void initState() {
+    super.initState();
+    // Warm up settings notifier immediately upon app startup in parallel with splash animation
+    ref.read(appSettingsProvider.notifier);
+  }
+
   void _onSplashComplete() {
-    setState(() {
-      _showSplash = false;
-    });
+    if (mounted) {
+      setState(() {
+        _showSplash = false;
+      });
+    }
   }
 
   @override
@@ -57,6 +47,9 @@ class _AppEntryState extends ConsumerState<AppEntry> {
     if (_showSplash) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: const Color(0xFF0F172A),
+        ),
         home: SplashScreen(onSplashComplete: _onSplashComplete),
       );
     }
