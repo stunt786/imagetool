@@ -79,6 +79,7 @@ class CropOverlayState extends State<CropOverlay> {
   double _scaleAtGestureStart = 1.0;
   CropHandle? _activeHandle;
   bool _isZooming = false;
+  bool _hasDraggedCrop = false;
   Size _viewportSize = Size.zero;
 
   /// Current zoom factor (1.0 = fitted). Exposed for tests and badges.
@@ -130,6 +131,7 @@ class CropOverlayState extends State<CropOverlay> {
   void _onScaleStart(ScaleStartDetails details) {
     _scaleAtGestureStart = _scale;
     _isZooming = false;
+    _hasDraggedCrop = false;
     if (_viewportSize.isEmpty) {
       _activeHandle = null;
       return;
@@ -188,18 +190,22 @@ class CropOverlayState extends State<CropOverlay> {
       aspectRatio: widget.aspectRatio,
       minSize: widget.minSize,
     );
-    setState(() => _crop = next);
-    widget.onCropChanged?.call(next);
+    if (next != _crop) {
+      _hasDraggedCrop = true;
+      setState(() => _crop = next);
+      widget.onCropChanged?.call(next);
+    }
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
     widget.onDragStateChanged?.call(false);
-    if (_activeHandle != null) {
+    if (_activeHandle != null && _hasDraggedCrop && !_isZooming) {
       widget.onCropCommitted?.call(_crop);
     }
     setState(() {
       _activeHandle = null;
       _isZooming = false;
+      _hasDraggedCrop = false;
     });
   }
 
@@ -273,7 +279,8 @@ class CropOverlayState extends State<CropOverlay> {
                         crop: _crop,
                         viewport: _viewport,
                       );
-                      // Claim handles immediately on pointer down to defeat any vertical scroll recognizer
+                      // Claim resize handles immediately on pointer down to defeat any vertical scroll recognizer.
+                      // CropHandle.move is not claimed immediately so DoubleTapGestureRecognizer can win double-taps.
                       return handle != null && handle != CropHandle.move;
                     };
                     instance.onStart = _onScaleStart;
@@ -348,7 +355,9 @@ class CropOverlayState extends State<CropOverlay> {
                               ],
                             ),
                             child: Text(
-                              '${_crop.width.round()} × ${_crop.height.round()} px',
+                              _activeHandle == CropHandle.move
+                                  ? 'Moving · X: ${_crop.left.round()}  Y: ${_crop.top.round()} (${_crop.width.round()} × ${_crop.height.round()})'
+                                  : '${_crop.width.round()} × ${_crop.height.round()} px',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -384,7 +393,7 @@ class CropOverlayState extends State<CropOverlay> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: const Text(
-                            'Drag handles or edges to crop · pinch to zoom',
+                            'Drag handles to resize · drag box to move · pinch to zoom',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -490,18 +499,22 @@ class CropOverlayPainter extends CustomPainter {
       Paint()..color = Colors.black.withValues(alpha: 0.45),
     );
 
+    final isMoving = activeHandle == CropHandle.move;
+
     // Border.
     canvas.drawRect(
       crop,
       Paint()
-        ..color = Colors.white
-        ..strokeWidth = 2.0
+        ..color = isMoving ? accent : Colors.white
+        ..strokeWidth = isMoving ? 2.5 : 2.0
         ..style = PaintingStyle.stroke,
     );
 
     // Rule of thirds.
     final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.35)
+      ..color = isMoving
+          ? accent.withValues(alpha: 0.50)
+          : Colors.white.withValues(alpha: 0.35)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     for (final factor in <double>[1 / 3, 2 / 3]) {
@@ -515,6 +528,36 @@ class CropOverlayPainter extends CustomPainter {
         Offset(crop.right, crop.top + crop.height * factor),
         grid,
       );
+    }
+
+    // Move affordance in center of the crop rectangle
+    if (crop.width >= 56 && crop.height >= 56) {
+      final movePaint = Paint()
+        ..color = isMoving ? accent : Colors.white.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isMoving ? 2.2 : 1.6
+        ..strokeCap = StrokeCap.round;
+
+      final center = crop.center;
+      const arm = 9.0;
+      const head = 3.5;
+
+      // Crossbars
+      canvas.drawLine(Offset(center.dx - arm, center.dy), Offset(center.dx + arm, center.dy), movePaint);
+      canvas.drawLine(Offset(center.dx, center.dy - arm), Offset(center.dx, center.dy + arm), movePaint);
+
+      // Arrowheads (Left, Right, Up, Down)
+      canvas.drawLine(Offset(center.dx - arm, center.dy), Offset(center.dx - arm + head, center.dy - head), movePaint);
+      canvas.drawLine(Offset(center.dx - arm, center.dy), Offset(center.dx - arm + head, center.dy + head), movePaint);
+
+      canvas.drawLine(Offset(center.dx + arm, center.dy), Offset(center.dx + arm - head, center.dy - head), movePaint);
+      canvas.drawLine(Offset(center.dx + arm, center.dy), Offset(center.dx + arm - head, center.dy + head), movePaint);
+
+      canvas.drawLine(Offset(center.dx, center.dy - arm), Offset(center.dx - head, center.dy - arm + head), movePaint);
+      canvas.drawLine(Offset(center.dx, center.dy - arm), Offset(center.dx + head, center.dy - arm + head), movePaint);
+
+      canvas.drawLine(Offset(center.dx, center.dy + arm), Offset(center.dx - head, center.dy + arm - head), movePaint);
+      canvas.drawLine(Offset(center.dx, center.dy + arm), Offset(center.dx + head, center.dy + arm - head), movePaint);
     }
 
     // Corner L-brackets (draw along inside edges of crop rect)

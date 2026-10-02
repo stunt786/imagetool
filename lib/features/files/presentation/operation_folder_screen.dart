@@ -3,10 +3,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as path;
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/services/output_saver.dart';
+import '../../../core/services/pdf_service.dart';
+import '../../../core/services/public_storage.dart';
 import '../../collage_builder/notifiers/collage_notifier.dart';
-import '../../image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../notifiers/operation_library_notifier.dart';
 import '../services/file_actions.dart';
 import '../widgets/ai_document_sheet.dart';
@@ -116,6 +120,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         SnackBar(
           content: Text('Renamed to "$name"'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -136,23 +141,100 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
   Future<void> _createPdfFromItems(List<AppFileItem> items) async {
     if (items.isEmpty) return;
-    final notifier = ref.read(imageToPdfProvider.notifier);
-    notifier.clearAll();
-    for (final item in items) {
-      try {
-        final file = File(item.path);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          await notifier.addImageFromBytes(
-            bytes: bytes,
-            name: item.fileName,
-            path: item.path,
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Creating PDF from selected images...'),
+            ],
+          ),
+          duration: Duration(seconds: 10),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final imagePaths = items
+          .where((item) => item.isImage || !item.isPdf)
+          .map((item) => item.path)
+          .where((p) => p.isNotEmpty && File(p).existsSync())
+          .toList();
+
+      if (imagePaths.isEmpty) {
+        messenger.hideCurrentSnackBar();
+        if (mounted) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('No readable images selected.'),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 3),
+            ),
           );
         }
-      } catch (_) {}
-    }
-    if (mounted) {
-      context.push('/images/to-pdf');
+        return;
+      }
+
+      final outPath = await PdfService.instance.createPdfFromImages(
+        imagePaths: imagePaths,
+        outputBaseName: 'images_document',
+      );
+
+      final saved = await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.imageToPdf,
+        entries: [
+          OutputEntry.file(
+            sourcePath: outPath,
+            fileName: path.basename(outPath),
+            publicKind: PublicFileKind.document,
+          ),
+        ],
+      );
+
+      await ref.read(operationLibraryProvider.notifier).reload();
+      messenger.hideCurrentSnackBar();
+
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('PDF created successfully'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            action: saved.isNotEmpty
+                ? SnackBarAction(
+                    label: 'Share',
+                    onPressed: () =>
+                        Share.shareXFiles([XFile(saved.first.localPath)]),
+                  )
+                : null,
+          ),
+        );
+        _clearSelection();
+      }
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Could not create PDF: $e'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

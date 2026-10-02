@@ -32,11 +32,22 @@ class PdfOcrService {
         onProgress?.call((i + 1) / nativePages.length);
       }
     } else {
-      final pages = await _ocrAllPages(
-        inputPath: inputPath,
-        dpi: _defaultDpi,
-        onProgress: onProgress,
-      );
+      List<RecognizedText> pages = [];
+      try {
+        pages = await _ocrAllPages(
+          inputPath: inputPath,
+          dpi: _defaultDpi,
+          onProgress: onProgress,
+        );
+      } catch (_) {
+        if (nativePages.isNotEmpty) {
+          for (int i = 0; i < nativePages.length; i++) {
+            if (i > 0) buffer.writeln();
+            buffer.writeln('--- Page ${i + 1} ---');
+            buffer.writeln(nativePages[i].trim());
+          }
+        }
+      }
       for (int i = 0; i < pages.length; i++) {
         if (i > 0) buffer.writeln();
         buffer.writeln('--- Page ${i + 1} ---');
@@ -57,7 +68,7 @@ class PdfOcrService {
     void Function(double progress)? onProgress,
   }) async {
     final nativePages = await _extractNativeTextPages(inputPath);
-    final String documentXml;
+    String documentXml;
     if (_hasUsableNativeText(nativePages)) {
       // Embedded PDF text retains its original Unicode code points. In
       // particular, this avoids asking the Latin-only mobile OCR recognizer
@@ -67,12 +78,19 @@ class PdfOcrService {
         onProgress?.call((i + 1) / nativePages.length);
       }
     } else {
-      final pages = await _ocrAllPages(
-        inputPath: inputPath,
-        dpi: _defaultDpi,
-        onProgress: onProgress,
-      );
-      documentXml = _buildDocxDocument(pages);
+      List<RecognizedText> pages = [];
+      try {
+        pages = await _ocrAllPages(
+          inputPath: inputPath,
+          dpi: _defaultDpi,
+          onProgress: onProgress,
+        );
+        documentXml = _buildDocxDocument(pages);
+      } catch (_) {
+        documentXml = nativePages.isNotEmpty
+            ? _buildDocxDocumentFromText(nativePages)
+            : _buildDocxDocument(pages);
+      }
     }
 
     final archive = Archive();
@@ -123,41 +141,90 @@ class PdfOcrService {
     final scale = dpi / 72.0;
     final tempDir = await getTemporaryDirectory();
 
-    final latin = TextRecognizer(script: TextRecognitionScript.latin);
-    // NOTE: this package spells the enum value `devanagiri`.
-    final devanagari =
-        TextRecognizer(script: TextRecognitionScript.devanagiri);
+    TextRecognizer? latin;
+    TextRecognizer? devanagari;
+    TextRecognizer? chinese;
+
+    try {
+      latin = TextRecognizer(script: TextRecognitionScript.latin);
+    } catch (_) {}
+    try {
+      devanagari = TextRecognizer(script: TextRecognitionScript.devanagiri);
+    } catch (_) {}
+    try {
+      chinese = TextRecognizer(script: TextRecognitionScript.chinese);
+    } catch (_) {}
 
     try {
       for (int i = 1; i <= pageCount; i++) {
-        final page = await pdfDoc.getPage(i);
-        final pageImage = await page.render(
-          width: page.width * scale,
-          height: page.height * scale,
-          format: pdfx.PdfPageImageFormat.png,
-          backgroundColor: '#FFFFFF',
-        );
-        await page.close();
+        pdfx.PdfPage? page;
+        pdfx.PdfPageImage? pageImage;
+        try {
+          page = await pdfDoc.getPage(i);
+          pageImage = await page.render(
+            width: page.width * scale,
+            height: page.height * scale,
+            format: pdfx.PdfPageImageFormat.png,
+            backgroundColor: '#FFFFFF',
+          );
+        } catch (_) {} finally {
+          try {
+            await page?.close();
+          } catch (_) {}
+        }
 
         if (pageImage != null) {
           final tempFile = File(path.join(tempDir.path, 'ocr_page_$i.png'));
           await tempFile.writeAsBytes(pageImage.bytes);
 
           final inputImage = InputImage.fromFile(tempFile);
-          final latinResult = await latin.processImage(inputImage);
-          var best = latinResult;
-          if (_needsDevanagariRetry(latinResult.text)) {
+          RecognizedText? latinResult;
+          try {
+            if (latin != null) {
+              latinResult = await latin.processImage(inputImage);
+            }
+          } catch (_) {}
+
+          var best = latinResult ?? RecognizedText(text: '', blocks: []);
+          var bestLen = _recognizedLength(best.text);
+
+          // Retry with specialized non-Latin models when Latin OCR is sparse or non-Latin script detected
+          final hasDevanagari = _containsDevanagari(best.text);
+          final hasChinese = _containsChinese(best.text);
+
+          if (bestLen < 25 || hasDevanagari) {
             try {
-              final devResult = await devanagari.processImage(inputImage);
-              if (_recognizedLength(devResult.text) >
-                  _recognizedLength(latinResult.text)) {
-                best = devResult;
+              if (devanagari != null) {
+                final devResult = await devanagari.processImage(inputImage);
+                final devLen = _recognizedLength(devResult.text);
+                if (devLen > bestLen ||
+                    (_containsDevanagari(devResult.text) && devLen >= 3)) {
+                  best = devResult;
+                  bestLen = devLen;
+                }
               }
             } catch (_) {}
           }
+
+          if (bestLen < 25 || hasChinese) {
+            try {
+              if (chinese != null) {
+                final chineseResult = await chinese.processImage(inputImage);
+                final chLen = _recognizedLength(chineseResult.text);
+                if (chLen > bestLen ||
+                    (_containsChinese(chineseResult.text) && chLen >= 3)) {
+                  best = chineseResult;
+                  bestLen = chLen;
+                }
+              }
+            } catch (_) {}
+          }
+
           results.add(best);
 
-          await tempFile.delete();
+          try {
+            await tempFile.delete();
+          } catch (_) {}
         } else {
           results.add(RecognizedText(text: '', blocks: []));
         }
@@ -165,9 +232,18 @@ class PdfOcrService {
         onProgress?.call(i / pageCount);
       }
     } finally {
-      await latin.close();
-      await devanagari.close();
-      await pdfDoc.close();
+      try {
+        await latin?.close();
+      } catch (_) {}
+      try {
+        await devanagari?.close();
+      } catch (_) {}
+      try {
+        await chinese?.close();
+      } catch (_) {}
+      try {
+        await pdfDoc.close();
+      } catch (_) {}
     }
     return results;
   }
@@ -176,16 +252,16 @@ class PdfOcrService {
       text.replaceAll(RegExp(r'\s+'), '').runes.length;
 
   bool _containsDevanagari(String text) => RegExp(
-        '[\u0900-\u097F]',
+        r'[\u0900-\u097F]',
       ).hasMatch(text);
 
-  /// Retry with the Devanagari model when Latin OCR produced almost nothing
-  /// (typical for scanned Hindi/Marathi documents) or produced Latin gibberish
-  /// where the page likely contains Indic scripts.
-  bool _needsDevanagariRetry(String latinText) {
-    if (_containsDevanagari(latinText)) return false;
-    return _recognizedLength(latinText) < 12;
-  }
+  bool _containsChinese(String text) => RegExp(
+        r'[\u4E00-\u9FFF]',
+      ).hasMatch(text);
+
+  bool _containsArabic(String text) => RegExp(
+        r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]',
+      ).hasMatch(text);
 
   /// Uses the PDF's text layer before falling back to OCR. This is both faster
   /// and more faithful for digital documents, where OCR would lose Unicode
@@ -342,9 +418,11 @@ class PdfOcrService {
       );
       for (final cell in rows[r]) {
         final text = _escapeXml(cell);
+        final isRtl = _containsArabic(cell);
+        final rtlProp = isRtl ? '<w:rtl/>' : '';
         buf.writeln(
           '<w:tc>'
-          '<w:p><w:r><w:rPr>${_fontRunProps()}</w:rPr>'
+          '<w:p><w:r><w:rPr>${_fontRunProps()}$rtlProp</w:rPr>'
           '<w:t xml:space="preserve">$text</w:t></w:r></w:p>'
           '</w:tc>',
         );
@@ -355,9 +433,9 @@ class PdfOcrService {
   }
 
   /// Font run keeps Latin text on Calibri while complex scripts
-  /// (Devanagari etc.) fall back to Noto Sans Devanagari when present.
+  /// (Devanagari, Chinese, Arabic) fall back to appropriate fonts.
   String _fontRunProps() =>
-      '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Noto Sans Devanagari"/>'
+      '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="SimSun" w:cs="Arial, Noto Sans Devanagari, Noto Sans Arabic"/>'
       '<w:sz w:val="22"/><w:szCs w:val="22"/>';
 
   void _writePageHeading(StringBuffer buf, int pageNumber) {
@@ -385,8 +463,11 @@ class PdfOcrService {
 
   void _writeParagraph(StringBuffer buf, String text) {
     final escaped = _escapeXml(text);
+    final isRtl = _containsArabic(text);
+    final rtlProp = isRtl ? '<w:rtl/>' : '';
+    final pPr = isRtl ? '<w:pPr><w:bidi/></w:pPr>' : '';
     buf.writeln(
-      '<w:p><w:r><w:rPr>${_fontRunProps()}</w:rPr>'
+      '<w:p>$pPr<w:r><w:rPr>${_fontRunProps()}$rtlProp</w:rPr>'
       '<w:t xml:space="preserve">$escaped</w:t></w:r></w:p>',
     );
   }
@@ -419,9 +500,12 @@ class PdfOcrService {
 
       for (final cell in row) {
         final text = _escapeXml(cell.text.trim());
+        final isRtl = _containsArabic(cell.text);
+        final rtlProp = isRtl ? '<w:rtl/>' : '';
         buf.writeln(
           '<w:tc>'
-          '<w:p><w:r><w:t xml:space="preserve">$text</w:t></w:r></w:p>'
+          '<w:p><w:r><w:rPr>${_fontRunProps()}$rtlProp</w:rPr>'
+          '<w:t xml:space="preserve">$text</w:t></w:r></w:p>'
           '</w:tc>',
         );
       }

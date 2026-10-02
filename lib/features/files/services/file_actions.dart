@@ -27,6 +27,7 @@ abstract final class FileActions {
         const SnackBar(
           content: Text('Those files are no longer available.'),
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
         ),
       );
       return;
@@ -41,6 +42,7 @@ abstract final class FileActions {
         const SnackBar(
           content: Text('Could not share those files.'),
           behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
         ),
       );
     }
@@ -175,60 +177,99 @@ abstract final class FileActions {
     required String title,
     required String initialValue,
     String label = 'Name',
-  }) async {
-    final controller = TextEditingController(text: initialValue);
-    final formKey = GlobalKey<FormState>();
-    final result = await showDialog<String>(
+  }) {
+    return showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              labelText: label,
-              border: const OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Please enter a name';
-              }
-              return null;
-            },
-            onFieldSubmitted: (_) {
-              if (formKey.currentState?.validate() == true) {
-                Navigator.of(dialogContext).pop(controller.text.trim());
-              }
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() == true) {
-                Navigator.of(dialogContext).pop(controller.text.trim());
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => _PromptForNameDialog(
+        title: title,
+        initialValue: initialValue,
+        label: label,
       ),
     );
-    controller.dispose();
-    return result;
   }
 
   static void _message(BuildContext context, String text) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+}
+
+class _PromptForNameDialog extends StatefulWidget {
+  const _PromptForNameDialog({
+    required this.title,
+    required this.initialValue,
+    required this.label,
+  });
+
+  final String title;
+  final String initialValue;
+  final String label;
+
+  @override
+  State<_PromptForNameDialog> createState() => _PromptForNameDialogState();
+}
+
+class _PromptForNameDialogState extends State<_PromptForNameDialog> {
+  late final TextEditingController _controller;
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState?.validate() == true) {
+      Navigator.of(context).pop(_controller.text.trim());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            border: const OutlineInputBorder(),
+          ),
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Please enter a name';
+            }
+            return null;
+          },
+          onFieldSubmitted: (_) => _submit(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/interstitial_tracker.dart';
+import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
@@ -380,6 +383,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
       notifier.clearAll();
       _showPDFSavedDialog(context, pdfPath);
       InterstitialTracker.instance.trackAction();
+      AppReviewService.instance.notifyOperationCompleted(context);
     } else {
       final state = ref.read(imageToPdfProvider);
       if (!context.mounted) return;
@@ -396,6 +400,14 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
   void _showPDFSavedDialog(BuildContext context, String pdfPath) {
     final fileName = pdfPath.split('/').last;
+    int fileSize = 0;
+    try {
+      final file = File(pdfPath);
+      if (file.existsSync()) {
+        fileSize = file.lengthSync();
+      }
+    } catch (_) {}
+    final sizeStr = fileSize > 0 ? '${PdfService.formatFileSize(fileSize)} · ' : '';
 
     showDialog(
       context: context,
@@ -438,7 +450,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Saved to Downloads & Files',
+              '${sizeStr}Saved to Downloads & Files',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.w600,

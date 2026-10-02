@@ -276,8 +276,13 @@ abstract final class CropGeometry {
       CropHandle.bottomRight: br,
     };
 
+    final screenCrop = viewport.cropToScreen(crop);
+    final minDim = math.min(screenCrop.width, screenCrop.height);
+
     // 1. Corners first: generous touch target (corners win ties and have larger grab zones).
-    final cornerSlop = math.max(touchSlop, 36.0);
+    final cornerSlop = minDim < 90
+        ? math.min(touchSlop, minDim * 0.35)
+        : math.max(touchSlop, 36.0);
     CropHandle? closestCorner;
     double minCornerDist = double.infinity;
     for (final entry in corners.entries) {
@@ -316,7 +321,13 @@ abstract final class CropGeometry {
     final clampedRightY = py.clamp(topY, bottomY);
     final rightDist = (screenPosition - Offset(rightX, clampedRightY)).distance;
 
-    final edgeSlop = math.max(touchSlop, 26.0);
+    final isInside = screenCrop.contains(screenPosition);
+    final maxInnerEdge = math.min(18.0, minDim * 0.20);
+    final edgeSlop = isInside
+        ? maxInnerEdge
+        : (minDim < 90
+            ? math.min(touchSlop, minDim * 0.25)
+            : math.max(touchSlop, 26.0));
     double minEdgeDist = edgeSlop;
     CropHandle? closestEdge;
 
@@ -342,7 +353,7 @@ abstract final class CropGeometry {
     }
 
     // 3. Inside the rectangle: moves it without resizing.
-    if (viewport.cropToScreen(crop).contains(screenPosition)) {
+    if (isInside) {
       return CropHandle.move;
     }
     return null;

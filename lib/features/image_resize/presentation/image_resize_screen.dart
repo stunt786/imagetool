@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -390,7 +391,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         ImageProcessResult? result;
 
         if (_mode == _ResizeMode.smartCompress) {
-          final targetBytes = _targetSizeKB * 1024;
+          final targetBytes = math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
           result = await ImageProcessorService.compressToTargetSize(
             bytes: file.bytes!,
             targetBytes: targetBytes,
@@ -539,6 +540,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           );
       _showSnack('Batch resize complete. $successCount images saved.');
       InterstitialTracker.instance.trackAction();
+      AppReviewService.instance.notifyOperationCompleted(context);
       _resetScreen();
     }
   }
@@ -958,6 +960,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           );
       _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
       InterstitialTracker.instance.trackAction();
+      AppReviewService.instance.notifyOperationCompleted(context);
+      _resetScreen();
     } catch (error) {
       _showSnack('Resized image is ready, but saving failed: $error');
       InterstitialTracker.instance.trackAction();
@@ -1063,6 +1067,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           );
       _showSnack(
           replaceOriginal ? 'Replaced original' : 'Rotation applied & saved.');
+      _resetScreen();
     } catch (error) {
       _showSnack('Rotation applied, but saving failed: $error');
     }
@@ -1136,6 +1141,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _showSnack(replaceOriginal
           ? 'Replaced original'
           : '$label applied & saved.');
+      _resetScreen();
     } catch (error) {
       _showSnack('$label applied, but saving failed: $error');
     }
@@ -1156,7 +1162,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
     if (replaceOriginal == null || !mounted) return;
 
-    final targetBytes = _targetSizeKB * 1024;
+    final targetBytes = math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
     final appSettings = ref.read(appSettingsProvider);
     final result = await ref
         .read(imageEditProvider.notifier)
@@ -1214,6 +1220,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           '${replaceOriginal ? 'Replaced original with' : 'Compressed to'} ${_formatFileSize(result.fileSize)}.',
         );
       }
+      _resetScreen();
     } catch (error) {
       _showSnack('Compression applied, but saving failed: $error');
     }
@@ -1255,6 +1262,29 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   }
 
   void _setCropPreset(_CropAspectPreset preset) {
+    final state = ref.read(imageEditProvider);
+    if (state.hasImage && preset.ratio != null) {
+      final ratio = preset.ratio!;
+      int newWidth, newHeight;
+      if (state.width / state.height > ratio) {
+        newHeight = state.height;
+        newWidth = (newHeight * ratio).round().clamp(1, state.width);
+      } else {
+        newWidth = state.width;
+        newHeight = (newWidth / ratio).round().clamp(1, state.height);
+      }
+      final newX = ((state.width - newWidth) / 2).round().clamp(0, math.max(0, state.width - 1));
+      final newY = ((state.height - newHeight) / 2).round().clamp(0, math.max(0, state.height - 1));
+      setState(() {
+        _cropPreset = preset;
+        _cropXController.text = newX.toString();
+        _cropYController.text = newY.toString();
+        _cropWidthController.text = newWidth.toString();
+        _cropHeightController.text = newHeight.toString();
+      });
+      _refreshEstimate();
+      return;
+    }
     setState(() => _cropPreset = preset);
     _handleCropWidthChanged(_cropWidthController.text);
   }
@@ -1453,6 +1483,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
           );
       _showSnack(replaceOriginal ? 'Replaced original' : 'Crop applied & saved.');
+      _resetScreen();
     } catch (error) {
       _showSnack('Crop applied, but saving failed: $error');
     }

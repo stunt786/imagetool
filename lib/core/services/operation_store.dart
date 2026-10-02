@@ -231,11 +231,16 @@ class OperationStore extends ChangeNotifier {
     );
     _files.add(item);
 
+    final candidateThumb = thumbnailPath ??
+        (detected.isImage || detected.isPdf ? resolvedPath : null);
     _replaceOperation(
       operation.copyWith(
         itemCount: existing + 1,
         modifiedAt: DateTime.now(),
-        thumbnailPath: operation.thumbnailPath ?? thumbnailPath,
+        thumbnailPath: (operation.thumbnailPath != null &&
+                File(operation.thumbnailPath!).existsSync())
+            ? operation.thumbnailPath
+            : (candidateThumb ?? operation.thumbnailPath),
       ),
     );
     await _persist();
@@ -325,7 +330,16 @@ class OperationStore extends ChangeNotifier {
     }
 
     try {
-      final renamed = await File(item.path).rename(targetPath);
+      File renamed;
+      try {
+        renamed = await File(item.path).rename(targetPath);
+      } on FileSystemException {
+        final copied = await File(item.path).copy(targetPath);
+        try {
+          await File(item.path).delete();
+        } catch (_) {}
+        renamed = copied;
+      }
       final detected = FileTypeDetector.detect(path: targetPath);
       _replaceFile(
         item.copyWith(
@@ -338,10 +352,15 @@ class OperationStore extends ChangeNotifier {
       );
       final operation = operationById(item.operationId);
       if (operation != null) {
-        _replaceOperation(operation.copyWith(modifiedAt: DateTime.now()));
+        _replaceOperation(operation.copyWith(
+          modifiedAt: DateTime.now(),
+          thumbnailPath: operation.thumbnailPath == item.path
+              ? renamed.path
+              : operation.thumbnailPath,
+        ));
       }
       await _persist();
-    notifyListeners();
+      notifyListeners();
       return true;
     } catch (_) {
       return false;
@@ -406,7 +425,14 @@ class OperationStore extends ChangeNotifier {
         final src = File(item.path);
         final dest = await resolveOutputPath(targetDir, item.fileName);
         if (await src.exists()) {
-          await src.rename(dest);
+          try {
+            await src.rename(dest);
+          } on FileSystemException {
+            await src.copy(dest);
+            try {
+              await src.delete();
+            } catch (_) {}
+          }
         }
         _replaceFile(item.copyWith(
           path: dest,

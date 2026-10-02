@@ -30,6 +30,30 @@ class ImageProbeResult {
   final bool isValid;
 }
 
+/// Metadata and thumbnail resulting from a single decode pass.
+@immutable
+class ImageProbeAndThumbnailResult {
+  const ImageProbeAndThumbnailResult({
+    required this.width,
+    required this.height,
+    required this.format,
+    required this.thumbnail,
+  });
+
+  const ImageProbeAndThumbnailResult.invalid()
+      : width = 0,
+        height = 0,
+        format = '',
+        thumbnail = null;
+
+  final int width;
+  final int height;
+  final String format;
+  final Uint8List? thumbnail;
+
+  bool get isValid => width > 0 && height > 0;
+}
+
 /// Options for a decode -> (optional resize) -> encode round trip.
 @immutable
 class ImageTransformRequest {
@@ -146,6 +170,26 @@ abstract final class ImageIsolateService {
         maxHeight: maxSide,
       ),
     );
+  }
+
+  /// Decodes [bytes] once and returns both image metadata and a resized JPEG thumbnail,
+  /// cutting decode overhead and memory usage in half.
+  static Future<ImageProbeAndThumbnailResult> probeAndThumbnail(
+    Uint8List bytes, {
+    int maxSide = 320,
+    int quality = 78,
+  }) async {
+    if (bytes.isEmpty) return const ImageProbeAndThumbnailResult.invalid();
+    try {
+      final result = await compute(_probeAndThumbnailWorker, <String, Object?>{
+        'bytes': bytes,
+        'maxSide': maxSide,
+        'quality': quality,
+      });
+      return result ?? const ImageProbeAndThumbnailResult.invalid();
+    } catch (_) {
+      return const ImageProbeAndThumbnailResult.invalid();
+    }
   }
 
   /// Runs [task] over [items] with at most [concurrency] tasks in flight.
@@ -288,7 +332,54 @@ List<int>? _encode(img.Image image, String target, int quality) {
     case 'tif':
     case 'tiff':
       return img.encodeTiff(image);
+    case 'webp':
+      return img.encodeWebP(
+        image,
+        lossless: quality >= 100,
+        quality: quality.clamp(1, 100),
+      );
     default:
       return null;
   }
+}
+
+ImageProbeAndThumbnailResult? _probeAndThumbnailWorker(
+  Map<String, Object?> params,
+) {
+  final bytes = params['bytes'] as Uint8List;
+  final maxSide = (params['maxSide'] as num?)?.toInt() ?? 320;
+  final quality = (params['quality'] as num?)?.toInt() ?? 78;
+
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return const ImageProbeAndThumbnailResult.invalid();
+
+  final format = FileTypeDetector.imageFormatFromSignature(bytes) ?? 'jpg';
+  final width = decoded.width;
+  final height = decoded.height;
+
+  var thumbImg = decoded;
+  if (width > maxSide || height > maxSide) {
+    thumbImg = img.copyResize(
+      decoded,
+      width: width >= height ? maxSide : null,
+      height: height > width ? maxSide : null,
+      interpolation: img.Interpolation.average,
+    );
+  }
+
+  if (thumbImg.hasAlpha) {
+    final flattened = img.Image(width: thumbImg.width, height: thumbImg.height);
+    img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(flattened, thumbImg);
+    thumbImg = flattened;
+  }
+
+  final thumbBytes =
+      Uint8List.fromList(img.encodeJpg(thumbImg, quality: quality));
+  return ImageProbeAndThumbnailResult(
+    width: width,
+    height: height,
+    format: format,
+    thumbnail: thumbBytes,
+  );
 }

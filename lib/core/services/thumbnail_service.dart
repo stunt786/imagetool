@@ -57,12 +57,14 @@ class ThumbnailService {
     final source = File(filePath);
     if (!await source.exists()) return null;
 
-    final looksLikePdf = isPdf ?? filePath.toLowerCase().endsWith('.pdf');
+    final looksLikePdf = (isPdf ?? false) || filePath.toLowerCase().endsWith('.pdf');
     if (looksLikePdf) {
       // PdfService already caches by file modified time.
       try {
-        return await PdfService.instance.renderPdfThumbnail(filePath);
+        final thumb = await PdfService.instance.renderPdfThumbnail(filePath);
+        if (thumb != null) return thumb;
       } catch (_) {
+        // If PDF thumbnailing fails, return null
         return null;
       }
     }

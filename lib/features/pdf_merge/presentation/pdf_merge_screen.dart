@@ -39,26 +39,21 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final state = ref.read(pdfMergeProvider);
-    if (state.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.errorMessage!),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-          ref.read(pdfMergeProvider.notifier).clearError();
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    ref.listen<PdfMergeState>(pdfMergeProvider, (previous, next) {
+      final msg = next.errorMessage;
+      if (msg != null && msg.isNotEmpty && (previous?.errorMessage != msg)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        ref.read(pdfMergeProvider.notifier).clearError();
+      }
+    });
+
     final state = ref.watch(pdfMergeProvider);
     final notifier = ref.read(pdfMergeProvider.notifier);
 

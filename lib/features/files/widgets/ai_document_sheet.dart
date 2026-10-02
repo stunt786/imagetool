@@ -137,6 +137,7 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
       const SnackBar(
         content: Text('Extracted text copied to clipboard!'),
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 3),
       ),
     );
   }
@@ -442,6 +443,7 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
                         SnackBar(
                           content: Text('Page ${index + 1} copied!'),
                           behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 3),
                         ),
                       );
                     },

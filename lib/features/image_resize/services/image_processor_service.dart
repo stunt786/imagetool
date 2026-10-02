@@ -235,9 +235,9 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final Uint8List bytes = params['bytes'] as Uint8List;
   final int targetBytes = params['targetBytes'] as int;
   // Safety margin: keep the file strictly below target size by a few KB (not higher).
-  // Dynamically scale margin so e.g. 100 KB has ~2 KB margin, 500 KB has ~6 KB margin, 2 MB has ~16 KB margin.
+  // Scaled margin so e.g. 100 KB has ~3.5 KB margin, 500 KB has ~16 KB margin.
   final int safetyMargin =
-      math.max(2048, (targetBytes * 0.012).round().clamp(2048, 16384));
+      math.max(3072, (targetBytes * 0.035).round().clamp(3072, 16384));
   final int budgetBytes = math.max(1024, targetBytes - safetyMargin);
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final SendPort? sendPort = params['sendPort'] as SendPort?;
@@ -289,10 +289,8 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
       if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
         bestUnderTarget = r;
       }
-    } else if (r.fileSize <= targetBytes) {
-      if (bestUnderTarget == null || r.fileSize > bestUnderTarget!.fileSize) {
-        bestUnderTarget = r;
-      }
+    } else if (r.fileSize <= targetBytes && bestUnderTarget == null) {
+      bestUnderTarget = r;
     } else if (smallestOver == null || r.fileSize < smallestOver!.fileSize) {
       smallestOver = r;
     }
@@ -530,11 +528,11 @@ List<int> _encodeImage(
     OutputImageFormat.png =>
       img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9))
           .encode(processed),
-    // image currently supplies a WebP decoder only. Preserve the existing
-    // lossless fallback for cross-platform exports.
-    OutputImageFormat.webp =>
-      img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9))
-          .encode(processed),
+    OutputImageFormat.webp => img.encodeWebP(
+        processed,
+        lossless: clampedQuality >= 100,
+        quality: clampedQuality,
+      ),
   };
 }
 

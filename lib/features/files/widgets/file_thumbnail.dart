@@ -12,13 +12,13 @@ class FileThumbnail extends StatefulWidget {
   const FileThumbnail({
     super.key,
     required this.path,
-    this.isPdf = false,
+    this.isPdf,
     this.size = 56,
     this.borderRadius = 12,
   });
 
   final String path;
-  final bool isPdf;
+  final bool? isPdf;
   final double size;
   final double borderRadius;
 
@@ -44,10 +44,12 @@ class _FileThumbnailState extends State<FileThumbnail> {
   }
 
   void _load() {
+    final actualIsPdf =
+        (widget.isPdf ?? false) || widget.path.toLowerCase().endsWith('.pdf');
     _thumbnail = ThumbnailService.instance.thumbnailFor(
       widget.path,
       maxSide: widget.size <= 80 ? 160 : 360,
-      isPdf: widget.isPdf,
+      isPdf: actualIsPdf,
     );
   }
 
@@ -174,7 +176,7 @@ class _FileThumbnailState extends State<FileThumbnail> {
       );
     }
 
-    if (widget.isPdf || lower.endsWith('.pdf')) {
+    if ((widget.isPdf ?? false) || lower.endsWith('.pdf')) {
       return Container(
         color: const Color(0xFF2B1D1D),
         child: Center(

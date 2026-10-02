@@ -334,6 +334,7 @@ class MainActivity : FlutterActivity() {
             "webp" -> "image/webp"
             "gif" -> "image/gif"
             "bmp" -> "image/bmp"
+            "tiff", "tif" -> "image/tiff"
             "heic" -> "image/heic"
             "heif" -> "image/heif"
             "pdf" -> "application/pdf"

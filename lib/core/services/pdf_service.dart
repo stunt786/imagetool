@@ -357,6 +357,7 @@ class PdfService {
 
     syncfusion.PdfSection? currentSection;
     ui.Size? currentSectionSize;
+    syncfusion.PdfPageRotateAngle? currentSectionRotation;
 
     for (int i = 0; i < inputPaths.length; i++) {
       final inputBytes = File(inputPaths[i]).readAsBytesSync();
@@ -366,19 +367,28 @@ class PdfService {
         final page = doc.pages[j];
         final pageSize = page.size;
 
-        if (currentSection == null || currentSectionSize != pageSize) {
+        if (currentSection == null ||
+            currentSectionSize != pageSize ||
+            currentSectionRotation != page.rotation) {
           final newSection = mergedDoc.sections!.add();
           newSection.pageSettings.size = pageSize;
+          newSection.pageSettings.rotate = page.rotation;
+          newSection.pageSettings.orientation = (pageSize.width > pageSize.height)
+              ? syncfusion.PdfPageOrientation.landscape
+              : syncfusion.PdfPageOrientation.portrait;
           newSection.pageSettings.margins.all = 0;
           currentSection = newSection;
           currentSectionSize = pageSize;
+          currentSectionRotation = page.rotation;
         }
 
         final newPage = currentSection.pages.add();
+        newPage.rotation = page.rotation;
         final template = page.createTemplate();
         newPage.graphics.drawPdfTemplate(
           template,
           ui.Offset.zero,
+          pageSize,
         );
         if (watermark) {
           applyWatermarkToSyncfusionPage(
@@ -402,6 +412,54 @@ class PdfService {
 
     await File(outputPath).writeAsBytes(bytes);
     return outputPath;
+  }
+
+  /// Creates a single PDF document from one or more image files.
+  Future<String> createPdfFromImages({
+    required List<String> imagePaths,
+    String? outputBaseName,
+    void Function(double progress)? onProgress,
+  }) async {
+    final saveDir = await getSaveDir();
+    final base = outputBaseName ??
+        (imagePaths.isNotEmpty
+            ? path.basenameWithoutExtension(imagePaths.first)
+            : 'document');
+    final outName = _generateFileName(base, 'pdf');
+    final outPath = path.join(saveDir.path, outName);
+
+    final doc = syncfusion.PdfDocument();
+    for (int i = 0; i < imagePaths.length; i++) {
+      final imgPath = imagePaths[i];
+      final file = File(imgPath);
+      if (!await file.exists() || await file.length() == 0) continue;
+      final bytes = await file.readAsBytes();
+      syncfusion.PdfBitmap image;
+      try {
+        image = syncfusion.PdfBitmap(bytes);
+      } catch (_) {
+        final decoded = img.decodeImage(bytes);
+        if (decoded == null) continue;
+        final pngBytes = Uint8List.fromList(img.encodePng(decoded));
+        image = syncfusion.PdfBitmap(pngBytes);
+      }
+      final section = doc.sections!.add();
+      section.pageSettings.size =
+          ui.Size(image.width.toDouble(), image.height.toDouble());
+      section.pageSettings.margins.all = 0;
+      final page = section.pages.add();
+      page.graphics.drawImage(
+        image,
+        ui.Rect.fromLTWH(0, 0, page.size.width, page.size.height),
+      );
+      onProgress?.call((i + 1) / imagePaths.length);
+    }
+
+    final bytes = await doc.save();
+    doc.dispose();
+    final outFile = File(outPath);
+    await outFile.writeAsBytes(bytes, flush: true);
+    return outPath;
   }
 
   // ─── Split PDF ──────────────────────────────────────────────────────
@@ -1024,6 +1082,7 @@ class PdfService {
 
     syncfusion.PdfSection? currentSection;
     ui.Size? currentSectionSize;
+    syncfusion.PdfPageRotateAngle? currentSectionRotation;
 
     final count = filePaths?.length ?? filesData?.length ?? 0;
 
@@ -1040,18 +1099,27 @@ class PdfService {
         final page = doc.pages[j];
         final pageSize = page.size;
 
-        if (currentSection == null || currentSectionSize != pageSize) {
+        if (currentSection == null ||
+            currentSectionSize != pageSize ||
+            currentSectionRotation != page.rotation) {
           currentSection = mergedDoc.sections!.add();
           currentSection.pageSettings.size = pageSize;
+          currentSection.pageSettings.rotate = page.rotation;
+          currentSection.pageSettings.orientation = (pageSize.width > pageSize.height)
+              ? syncfusion.PdfPageOrientation.landscape
+              : syncfusion.PdfPageOrientation.portrait;
           currentSection.pageSettings.margins.all = 0;
           currentSectionSize = pageSize;
+          currentSectionRotation = page.rotation;
         }
 
         final newPage = currentSection.pages.add();
+        newPage.rotation = page.rotation;
         final template = page.createTemplate();
         newPage.graphics.drawPdfTemplate(
           template,
           ui.Offset.zero,
+          pageSize,
         );
         if (applyWatermark) {
           applyWatermarkToSyncfusionPage(

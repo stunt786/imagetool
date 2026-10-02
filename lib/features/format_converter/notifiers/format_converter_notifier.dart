@@ -122,6 +122,8 @@ class ConvertibleImage {
     ConvertStatus? status,
     String? error,
     String? note,
+    bool clearError = false,
+    bool clearNote = false,
     int? width,
     int? height,
     int? sizeBytes,
@@ -140,8 +142,8 @@ class ConvertibleImage {
       convertedBytes: convertedBytes ?? this.convertedBytes,
       convertedSizeBytes: convertedSizeBytes ?? this.convertedSizeBytes,
       status: status ?? this.status,
-      error: error,
-      note: note ?? this.note,
+      error: clearError ? null : (error ?? this.error),
+      note: clearNote ? null : (note ?? this.note),
     );
   }
 }
@@ -263,7 +265,46 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
   void setFormat(ConvertFormat format) {
     if (state.selectedFormat == format) return;
-    state = state.copyWith(selectedFormat: format, clearInfo: true);
+    final updated = state.images.map((img) {
+      if (img.status == ConvertStatus.success ||
+          img.status == ConvertStatus.failed ||
+          img.status == ConvertStatus.skipped) {
+        return img.copyWith(
+          status: ConvertStatus.ready,
+          convertedBytes: null,
+          convertedSizeBytes: 0,
+          clearError: true,
+          clearNote: true,
+        );
+      }
+      return img;
+    }).toList();
+    state = state.copyWith(
+      selectedFormat: format,
+      clearInfo: true,
+      images: updated,
+    );
+  }
+
+  void resetStatusForReconversion() {
+    final updated = state.images.map((img) {
+      if (img.status == ConvertStatus.success ||
+          img.status == ConvertStatus.failed ||
+          img.status == ConvertStatus.skipped) {
+        return img.copyWith(
+          status: ConvertStatus.ready,
+          convertedBytes: null,
+          convertedSizeBytes: 0,
+          clearError: true,
+          clearNote: true,
+        );
+      }
+      return img;
+    }).toList();
+    state = state.copyWith(
+      images: updated,
+      clearInfo: true,
+    );
   }
 
   void setQuality(int quality) {
@@ -625,32 +666,33 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       }
 
       Uint8List? converted;
-      if (format == ConvertFormat.webp) {
-        // The pure-Dart encoder cannot write WebP; use the platform encoder
-        // instead of silently writing PNG bytes into a .webp file.
+      if (format == ConvertFormat.webp && Platform.isAndroid) {
+        var imageToEncode = source;
+        final enableWatermark = settings.enableGlobalWatermark;
+        if (enableWatermark) {
+          var decoded = img.decodeImage(source);
+          if (decoded != null) {
+            decoded = WatermarkHelper.applyToImage(
+              decoded,
+              settings,
+              iconBytes: WatermarkHelper.cachedIconBytes,
+            );
+            imageToEncode = Uint8List.fromList(img.encodePng(decoded));
+          }
+        }
         converted = await PlatformImageEncoder.encodeWebP(
-          source,
+          imageToEncode,
           quality: state.quality,
         );
-        if (converted == null) {
-          _replaceImage(
-            image.id,
-            image.copyWith(
-              status: ConvertStatus.failed,
-              error: 'WebP export is not supported on this device.',
-            ),
-          );
-          return;
-        }
-      } else {
-        converted = await compute(_convertWorker, <String, Object?>{
-          'source': source,
-          'target': format.codec,
-          'quality': state.quality,
-          'settings': settings,
-          'iconBytes': WatermarkHelper.cachedIconBytes,
-        });
       }
+
+      converted ??= await compute(_convertWorker, <String, Object?>{
+        'source': source,
+        'target': format.codec,
+        'quality': state.quality,
+        'settings': settings,
+        'iconBytes': WatermarkHelper.cachedIconBytes,
+      });
 
       if (converted == null || converted.isEmpty) {
         _replaceImage(
@@ -794,7 +836,7 @@ Future<Uint8List?> _convertWorker(Map<String, Object?> params) async {
     return _buildPdf(source, decoded, settings, iconBytes);
   }
 
-  if (target == 'jpg' || target == 'jpeg' || target == 'bmp') {
+  if (target == 'jpg' || target == 'jpeg' || target == 'bmp' || target == 'tif' || target == 'tiff') {
     decoded = _flattenAlpha(decoded);
   }
 
@@ -813,6 +855,13 @@ Future<Uint8List?> _convertWorker(Map<String, Object?> params) async {
     case 'tif':
     case 'tiff':
       encoded = img.encodeTiff(decoded);
+      break;
+    case 'webp':
+      encoded = img.encodeWebP(
+        decoded,
+        lossless: quality >= 100,
+        quality: quality.clamp(1, 100),
+      );
       break;
     default:
       return null;

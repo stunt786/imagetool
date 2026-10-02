@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
@@ -531,7 +531,7 @@ class CollageNotifier extends Notifier<CollageState> {
   Future<Uint8List?> exportCollage() async {
     if (state.isExporting) return null;
     state = state.copyWith(isExporting: true, exportProgress: 0.0);
-    // Yield to the event loop so listeners update before synchronous image processing
+    // Yield to the event loop so listeners update before image processing
     await Future<void>.delayed(Duration.zero);
 
     try {
@@ -546,88 +546,25 @@ class CollageNotifier extends Notifier<CollageState> {
       final bgG = (state.backgroundColor.g * 255).round().clamp(0, 255);
       final bgB = (state.backgroundColor.b * 255).round().clamp(0, 255);
 
-      final canvas = img.Image(
-        width: canvasWidth,
-        height: canvasHeight,
-      );
-
-      img.fill(canvas, color: img.ColorRgb8(bgR, bgG, bgB));
-
       final slotCount = state.layout.slotCount;
+      final slots = <_CollageSlotData>[];
       for (int i = 0; i < slotCount; i++) {
         if (i >= state.images.length) continue;
         final slot = state.images[i];
-        if (!slot.hasImage) continue;
-
+        if (!slot.hasImage || slot.imageBytes == null || slot.imageBytes!.isEmpty) continue;
         if (i >= state.layout.slotRects.length) continue;
         final rect = state.layout.slotRects[i];
-        final x = (rect.left * canvasWidth + gapPx).toInt().clamp(0, canvasWidth - 1);
-        final y = (rect.top * canvasHeight + gapPx).toInt().clamp(0, canvasHeight - 1);
-        final w = math.max(1, math.min(canvasWidth - x, ((rect.width) * canvasWidth - gapPx * 2).toInt()));
-        final h = math.max(1, math.min(canvasHeight - y, ((rect.height) * canvasHeight - gapPx * 2).toInt()));
-
-        var decoded = img.decodeImage(slot.imageBytes!);
-        if (decoded == null || decoded.width <= 0 || decoded.height <= 0) continue;
-
-        if (slot.rotation != 0.0) {
-          decoded = img.copyRotate(decoded, angle: slot.rotation.toInt());
-        }
-
-        img.Image resized;
-        switch (slot.fitMode) {
-          case ImageFitMode.cover:
-            final srcW = decoded.width;
-            final srcH = decoded.height;
-            final dstAspect = w / h;
-            final srcAspect = srcW / srcH;
-
-            int cropW, cropH, cropX, cropY;
-            if (srcAspect > dstAspect) {
-              cropH = srcH;
-              cropW = (srcH * dstAspect).toInt().clamp(1, srcW);
-              cropX = ((srcW - cropW) / 2).toInt() + (slot.offsetX * srcW * 0.1).toInt();
-              cropY = 0;
-            } else {
-              cropW = srcW;
-              cropH = (srcW / dstAspect).toInt().clamp(1, srcH);
-              cropX = 0;
-              cropY = ((srcH - cropH) / 2).toInt() + (slot.offsetY * srcH * 0.1).toInt();
-            }
-
-            cropX = cropX.clamp(0, math.max(0, srcW - cropW));
-            cropY = cropY.clamp(0, math.max(0, srcH - cropH));
-            cropW = cropW.clamp(1, math.max(1, srcW - cropX));
-            cropH = cropH.clamp(1, math.max(1, srcH - cropY));
-
-            final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
-            resized = img.copyResize(cropped, width: w, height: h);
-            break;
-          case ImageFitMode.contain:
-            resized = img.copyResize(decoded, width: w, height: h, maintainAspect: true);
-            break;
-          case ImageFitMode.fill:
-            resized = img.copyResize(decoded, width: w, height: h);
-            break;
-        }
-
-        final slotImage = img.Image(width: w, height: h);
-        img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
-
-        if (slot.fitMode == ImageFitMode.contain) {
-          final offsetX = math.max(0, ((w - resized.width) / 2).toInt());
-          final offsetY = math.max(0, ((h - resized.height) / 2).toInt());
-          img.compositeImage(slotImage, resized, dstX: offsetX, dstY: offsetY);
-        } else {
-          img.compositeImage(slotImage, resized);
-        }
-
-        if (radiusPx > 0) {
-          _applyRoundedCorners(slotImage, radiusPx, bgR, bgG, bgB);
-        }
-
-        img.compositeImage(canvas, slotImage, dstX: x, dstY: y);
-
-        state = state.copyWith(exportProgress: (i + 1) / slotCount);
+        slots.add(_CollageSlotData(
+          imageBytes: slot.imageBytes!,
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          rotation: slot.rotation,
+          fitModeIndex: slot.fitMode.index,
+          offsetX: slot.offsetX,
+          offsetY: slot.offsetY,
+        ));
       }
 
       final allTextLayers = [
@@ -644,82 +581,35 @@ class CollageNotifier extends Notifier<CollageState> {
           ),
       ];
 
-      for (final layer in allTextLayers) {
-        if (layer.isEmpty) continue;
-
-        final text = layer.text.trim();
-        final effectiveFontSize = layer.fontSize * layer.scale;
-        final canvasFontSize = effectiveFontSize * (state.canvasWidth / 360.0);
-        final fontFamily = layer.fontFamily == 'Roboto' ? null : layer.fontFamily;
-        final FontWeight fontWeight = layer.bold
-            ? (layer.fontFamily == 'Impact' ||
-                    layer.fontFamily == 'sans-serif'
-                ? FontWeight.w900
-                : FontWeight.bold)
-            : FontWeight.w400;
-
-        final uiTextAlign = layer.alignment;
-        final uiFontWeight = fontWeight;
-        final uiFontFamily = fontFamily;
-        final uiFontStyle =
-            layer.italic ? FontStyle.italic : FontStyle.normal;
-        final alpha = (layer.opacity.clamp(0.05, 1.0) * 255).round();
-
-        final measureBuilder = ui.ParagraphBuilder(
-          ui.ParagraphStyle(
-            fontSize: canvasFontSize,
-            fontWeight: uiFontWeight,
-            fontStyle: uiFontStyle,
-            fontFamily: uiFontFamily,
-            textAlign: uiTextAlign,
-          ),
-        )..pushStyle(ui.TextStyle(
-            color: ui.Color(0xFFFFFFFF),
-            fontSize: canvasFontSize,
-            fontWeight: uiFontWeight,
-            fontStyle: uiFontStyle,
-            fontFamily: uiFontFamily,
-          ))
-          ..addText(text);
-
-        final measureParagraph = measureBuilder.build();
-        measureParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
-
-        final textWidth = measureParagraph.width;
-        final textHeight = measureParagraph.height;
-
-        double textX = layer.normalizedOffset.dx * state.canvasWidth - textWidth / 2;
-        double textY = layer.normalizedOffset.dy * state.canvasHeight - textHeight / 2;
-
-        textX = textX.clamp(10.0, (state.canvasWidth - textWidth - 10).clamp(10.0, state.canvasWidth.toDouble()));
-        textY = textY.clamp(10.0, (state.canvasHeight - textHeight - 10).clamp(10.0, state.canvasHeight.toDouble()));
-
-        final mainColor = ui.Color.fromARGB(
-          alpha,
-          (layer.color.r * 255).round().clamp(0, 255),
-          (layer.color.g * 255).round().clamp(0, 255),
-          (layer.color.b * 255).round().clamp(0, 255),
-        );
-
-        final shadowOffsets = [
-          const Offset(1, 1),
-          const Offset(-1, -1),
-          const Offset(1, -1),
-          const Offset(-1, 1),
-        ];
-
+      Uint8List? textOverlayPngBytes;
+      final activeTextLayers = allTextLayers
+          .where((l) => !l.isEmpty && l.text.trim().isNotEmpty)
+          .toList();
+      if (activeTextLayers.isNotEmpty) {
         final pictureRecorder = ui.PictureRecorder();
         final drawCanvas = Canvas(pictureRecorder);
 
-        if (layer.rotation != 0.0) {
-          final center = Offset(state.canvasWidth / 2, state.canvasHeight / 2);
-          drawCanvas.translate(center.dx, center.dy);
-          drawCanvas.rotate(layer.rotation);
-          drawCanvas.translate(-center.dx, -center.dy);
-        }
+        for (final layer in activeTextLayers) {
+          final text = layer.text.trim();
+          final effectiveFontSize = layer.fontSize * layer.scale;
+          final canvasFontSize = effectiveFontSize * (canvasWidth / 360.0);
+          final fontFamily =
+              layer.fontFamily == 'Roboto' ? null : layer.fontFamily;
+          final FontWeight fontWeight = layer.bold
+              ? (layer.fontFamily == 'Impact' ||
+                      layer.fontFamily == 'sans-serif'
+                  ? FontWeight.w900
+                  : FontWeight.bold)
+              : FontWeight.w400;
 
-        for (final offset in shadowOffsets) {
-          final shadowBuilder = ui.ParagraphBuilder(
+          final uiTextAlign = layer.alignment;
+          final uiFontWeight = fontWeight;
+          final uiFontFamily = fontFamily;
+          final uiFontStyle =
+              layer.italic ? FontStyle.italic : FontStyle.normal;
+          final alpha = (layer.opacity.clamp(0.05, 1.0) * 255).round();
+
+          final measureBuilder = ui.ParagraphBuilder(
             ui.ParagraphStyle(
               fontSize: canvasFontSize,
               fontWeight: uiFontWeight,
@@ -727,8 +617,9 @@ class CollageNotifier extends Notifier<CollageState> {
               fontFamily: uiFontFamily,
               textAlign: uiTextAlign,
             ),
-          )..pushStyle(ui.TextStyle(
-              color: ui.Color(0xCC000000),
+          )
+            ..pushStyle(ui.TextStyle(
+              color: const ui.Color(0xFFFFFFFF),
               fontSize: canvasFontSize,
               fontWeight: uiFontWeight,
               fontStyle: uiFontStyle,
@@ -736,94 +627,134 @@ class CollageNotifier extends Notifier<CollageState> {
             ))
             ..addText(text);
 
-          final shadowParagraph = shadowBuilder.build();
-          shadowParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
-          drawCanvas.drawParagraph(shadowParagraph, Offset(textX + offset.dx * 2, textY + offset.dy * 2));
+          final measureParagraph = measureBuilder.build();
+          measureParagraph
+              .layout(ui.ParagraphConstraints(width: canvasWidth.toDouble()));
+
+          final textWidth = measureParagraph.width;
+          final textHeight = measureParagraph.height;
+
+          double textX =
+              layer.normalizedOffset.dx * canvasWidth - textWidth / 2;
+          double textY =
+              layer.normalizedOffset.dy * canvasHeight - textHeight / 2;
+
+          textX = textX.clamp(
+              10.0,
+              (canvasWidth - textWidth - 10)
+                  .clamp(10.0, canvasWidth.toDouble()));
+          textY = textY.clamp(
+              10.0,
+              (canvasHeight - textHeight - 10)
+                  .clamp(10.0, canvasHeight.toDouble()));
+
+          final mainColor = ui.Color.fromARGB(
+            alpha,
+            (layer.color.r * 255).round().clamp(0, 255),
+            (layer.color.g * 255).round().clamp(0, 255),
+            (layer.color.b * 255).round().clamp(0, 255),
+          );
+
+          drawCanvas.save();
+          if (layer.rotation != 0.0) {
+            final center = Offset(canvasWidth / 2, canvasHeight / 2);
+            drawCanvas.translate(center.dx, center.dy);
+            drawCanvas.rotate(layer.rotation);
+            drawCanvas.translate(-center.dx, -center.dy);
+          }
+
+          final shadowOffsets = const [
+            Offset(1, 1),
+            Offset(-1, -1),
+            Offset(1, -1),
+            Offset(-1, 1),
+          ];
+
+          for (final offset in shadowOffsets) {
+            final shadowBuilder = ui.ParagraphBuilder(
+              ui.ParagraphStyle(
+                fontSize: canvasFontSize,
+                fontWeight: uiFontWeight,
+                fontStyle: uiFontStyle,
+                fontFamily: uiFontFamily,
+                textAlign: uiTextAlign,
+              ),
+            )
+              ..pushStyle(ui.TextStyle(
+                color: const ui.Color(0xCC000000),
+                fontSize: canvasFontSize,
+                fontWeight: uiFontWeight,
+                fontStyle: uiFontStyle,
+                fontFamily: uiFontFamily,
+              ))
+              ..addText(text);
+
+            final shadowParagraph = shadowBuilder.build();
+            shadowParagraph.layout(
+                ui.ParagraphConstraints(width: canvasWidth.toDouble()));
+            drawCanvas.drawParagraph(shadowParagraph,
+                Offset(textX + offset.dx * 2, textY + offset.dy * 2));
+          }
+
+          final mainBuilder = ui.ParagraphBuilder(
+            ui.ParagraphStyle(
+              fontSize: canvasFontSize,
+              fontWeight: uiFontWeight,
+              fontFamily: uiFontFamily,
+              textAlign: uiTextAlign,
+            ),
+          )
+            ..pushStyle(ui.TextStyle(
+              color: mainColor,
+              fontSize: canvasFontSize,
+              fontWeight: uiFontWeight,
+              fontFamily: uiFontFamily,
+            ))
+            ..addText(text);
+
+          final mainParagraph = mainBuilder.build();
+          mainParagraph
+              .layout(ui.ParagraphConstraints(width: canvasWidth.toDouble()));
+          drawCanvas.drawParagraph(mainParagraph, Offset(textX, textY));
+          drawCanvas.restore();
         }
-
-        final mainBuilder = ui.ParagraphBuilder(
-          ui.ParagraphStyle(
-            fontSize: canvasFontSize,
-            fontWeight: uiFontWeight,
-            fontFamily: uiFontFamily,
-            textAlign: uiTextAlign,
-          ),
-        )..pushStyle(ui.TextStyle(
-            color: mainColor,
-            fontSize: canvasFontSize,
-            fontWeight: uiFontWeight,
-            fontFamily: uiFontFamily,
-          ))
-          ..addText(text);
-
-        final mainParagraph = mainBuilder.build();
-        mainParagraph.layout(ui.ParagraphConstraints(width: state.canvasWidth.toDouble()));
-        drawCanvas.drawParagraph(mainParagraph, Offset(textX, textY));
 
         final picture = pictureRecorder.endRecording();
-        final textImage = await picture.toImage(state.canvasWidth, state.canvasHeight);
-
-        final byteData = await textImage.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData != null) {
-          final textBytes = byteData.buffer.asUint8List();
-          final decodedText = img.decodeImage(textBytes);
-          if (decodedText != null) {
-            img.compositeImage(canvas, decodedText);
-          }
-        }
-
+        final textImage =
+            await picture.toImage(canvasWidth, canvasHeight);
+        final byteData =
+            await textImage.toByteData(format: ui.ImageByteFormat.png);
         textImage.dispose();
+        if (byteData != null) {
+          textOverlayPngBytes = byteData.buffer.asUint8List();
+        }
       }
 
-      final watermarked = WatermarkHelper.applyToImage(canvas, ref.read(appSettingsProvider));
-      final encoded = img.encodeJpg(watermarked, quality: 95);
+      final iconBytes = await WatermarkHelper.loadIconBytes();
+      final appSettings = ref.read(appSettingsProvider);
+
+      final params = _CollageExportParams(
+        canvasWidth: canvasWidth,
+        canvasHeight: canvasHeight,
+        gapPx: gapPx,
+        radiusPx: radiusPx,
+        bgR: bgR,
+        bgG: bgG,
+        bgB: bgB,
+        slots: slots,
+        textOverlayPngBytes: textOverlayPngBytes,
+        watermarkIconBytes: iconBytes.isNotEmpty ? iconBytes : null,
+        appSettings: appSettings,
+      );
+
+      final encoded = Platform.environment.containsKey('FLUTTER_TEST')
+          ? _renderCollageWorker(params)
+          : await compute(_renderCollageWorker, params);
       state = state.copyWith(isExporting: false, exportProgress: 1.0);
-      return Uint8List.fromList(encoded);
+      return encoded;
     } catch (e) {
       state = state.copyWith(isExporting: false, exportProgress: 0.0);
       rethrow;
-    }
-  }
-
-  void _applyRoundedCorners(img.Image image, int radius, int bgR, int bgG, int bgB) {
-    final w = image.width;
-    final h = image.height;
-    final r = radius.clamp(0, w ~/ 2).clamp(0, h ~/ 2);
-    if (r <= 0) return;
-
-    for (int y = 0; y < h; y++) {
-      for (int x = 0; x < w; x++) {
-        double dist = -1.0;
-
-        if (x < r && y < r) {
-          final dx = r - x - 1;
-          final dy = r - y - 1;
-          dist = math.sqrt(dx * dx + dy * dy) - r;
-        } else if (x >= w - r && y < r) {
-          final dx = x - (w - r);
-          final dy = r - y - 1;
-          dist = math.sqrt(dx * dx + dy * dy) - r;
-        } else if (x < r && y >= h - r) {
-          final dx = r - x - 1;
-          final dy = y - (h - r);
-          dist = math.sqrt(dx * dx + dy * dy) - r;
-        } else if (x >= w - r && y >= h - r) {
-          final dx = x - (w - r);
-          final dy = y - (h - r);
-          dist = math.sqrt(dx * dx + dy * dy) - r;
-        }
-
-        if (dist >= 0.5) {
-          image.setPixel(x, y, img.ColorRgb8(bgR, bgG, bgB));
-        } else if (dist > -0.5) {
-          final t = (dist + 0.5).clamp(0.0, 1.0);
-          final p = image.getPixel(x, y);
-          final blendedR = (p.r * (1.0 - t) + bgR * t).round().clamp(0, 255);
-          final blendedG = (p.g * (1.0 - t) + bgG * t).round().clamp(0, 255);
-          final blendedB = (p.b * (1.0 - t) + bgB * t).round().clamp(0, 255);
-          image.setPixel(x, y, img.ColorRgb8(blendedR, blendedG, blendedB));
-        }
-      }
     }
   }
 
@@ -842,4 +773,219 @@ class CollageNotifier extends Notifier<CollageState> {
       canvasHeight: 1080,
     );
   }
+}
+
+class _CollageSlotData {
+  final Uint8List imageBytes;
+  final double left;
+  final double top;
+  final double width;
+  final double height;
+  final double rotation;
+  final int fitModeIndex;
+  final double offsetX;
+  final double offsetY;
+
+  const _CollageSlotData({
+    required this.imageBytes,
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.rotation,
+    required this.fitModeIndex,
+    required this.offsetX,
+    required this.offsetY,
+  });
+}
+
+class _CollageExportParams {
+  final int canvasWidth;
+  final int canvasHeight;
+  final int gapPx;
+  final int radiusPx;
+  final int bgR;
+  final int bgG;
+  final int bgB;
+  final List<_CollageSlotData> slots;
+  final Uint8List? textOverlayPngBytes;
+  final Uint8List? watermarkIconBytes;
+  final AppSettingsState appSettings;
+
+  const _CollageExportParams({
+    required this.canvasWidth,
+    required this.canvasHeight,
+    required this.gapPx,
+    required this.radiusPx,
+    required this.bgR,
+    required this.bgG,
+    required this.bgB,
+    required this.slots,
+    required this.textOverlayPngBytes,
+    required this.watermarkIconBytes,
+    required this.appSettings,
+  });
+}
+
+void _applyRoundedCornersToSlot(img.Image image, int radius, int bgR, int bgG, int bgB) {
+  final w = image.width;
+  final h = image.height;
+  final r = radius.clamp(0, w ~/ 2).clamp(0, h ~/ 2);
+  if (r <= 0) return;
+
+  void blendCornerPixel(int x, int y, double dist) {
+    if (dist >= 0.5) {
+      image.setPixel(x, y, img.ColorRgb8(bgR, bgG, bgB));
+    } else if (dist > -0.5) {
+      final t = (dist + 0.5).clamp(0.0, 1.0);
+      final p = image.getPixel(x, y);
+      final blendedR = (p.r * (1.0 - t) + bgR * t).round().clamp(0, 255);
+      final blendedG = (p.g * (1.0 - t) + bgG * t).round().clamp(0, 255);
+      final blendedB = (p.b * (1.0 - t) + bgB * t).round().clamp(0, 255);
+      image.setPixel(x, y, img.ColorRgb8(blendedR, blendedG, blendedB));
+    }
+  }
+
+  // Top-Left corner
+  for (int y = 0; y < r; y++) {
+    final dy = r - y - 1;
+    final dySq = dy * dy;
+    for (int x = 0; x < r; x++) {
+      final dx = r - x - 1;
+      final dist = math.sqrt(dx * dx + dySq) - r;
+      blendCornerPixel(x, y, dist);
+    }
+  }
+
+  // Top-Right corner
+  for (int y = 0; y < r; y++) {
+    final dy = r - y - 1;
+    final dySq = dy * dy;
+    for (int x = w - r; x < w; x++) {
+      final dx = x - (w - r);
+      final dist = math.sqrt(dx * dx + dySq) - r;
+      blendCornerPixel(x, y, dist);
+    }
+  }
+
+  // Bottom-Left corner
+  for (int y = h - r; y < h; y++) {
+    final dy = y - (h - r);
+    final dySq = dy * dy;
+    for (int x = 0; x < r; x++) {
+      final dx = r - x - 1;
+      final dist = math.sqrt(dx * dx + dySq) - r;
+      blendCornerPixel(x, y, dist);
+    }
+  }
+
+  // Bottom-Right corner
+  for (int y = h - r; y < h; y++) {
+    final dy = y - (h - r);
+    final dySq = dy * dy;
+    for (int x = w - r; x < w; x++) {
+      final dx = x - (w - r);
+      final dist = math.sqrt(dx * dx + dySq) - r;
+      blendCornerPixel(x, y, dist);
+    }
+  }
+}
+
+Uint8List? _renderCollageWorker(_CollageExportParams params) {
+  final canvasWidth = params.canvasWidth;
+  final canvasHeight = params.canvasHeight;
+  final gapPx = params.gapPx;
+  final radiusPx = params.radiusPx;
+  final bgR = params.bgR;
+  final bgG = params.bgG;
+  final bgB = params.bgB;
+
+  final canvas = img.Image(
+    width: canvasWidth,
+    height: canvasHeight,
+  );
+  img.fill(canvas, color: img.ColorRgb8(bgR, bgG, bgB));
+
+  for (final slot in params.slots) {
+    final x = (slot.left * canvasWidth + gapPx).toInt().clamp(0, canvasWidth - 1);
+    final y = (slot.top * canvasHeight + gapPx).toInt().clamp(0, canvasHeight - 1);
+    final w = math.max(1, math.min(canvasWidth - x, (slot.width * canvasWidth - gapPx * 2).toInt()));
+    final h = math.max(1, math.min(canvasHeight - y, (slot.height * canvasHeight - gapPx * 2).toInt()));
+
+    var decoded = img.decodeImage(slot.imageBytes);
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) continue;
+
+    if (slot.rotation != 0.0) {
+      decoded = img.copyRotate(decoded, angle: slot.rotation.toInt());
+    }
+
+    final fitMode = ImageFitMode.values[slot.fitModeIndex];
+    img.Image resized;
+    switch (fitMode) {
+      case ImageFitMode.cover:
+        final srcW = decoded.width;
+        final srcH = decoded.height;
+        final dstAspect = w / h;
+        final srcAspect = srcW / srcH;
+
+        int cropW, cropH, cropX, cropY;
+        if (srcAspect > dstAspect) {
+          cropH = srcH;
+          cropW = (srcH * dstAspect).toInt().clamp(1, srcW);
+          cropX = ((srcW - cropW) / 2).toInt() + (slot.offsetX * srcW * 0.1).toInt();
+          cropY = 0;
+        } else {
+          cropW = srcW;
+          cropH = (srcW / dstAspect).toInt().clamp(1, srcH);
+          cropX = 0;
+          cropY = ((srcH - cropH) / 2).toInt() + (slot.offsetY * srcH * 0.1).toInt();
+        }
+
+        cropX = cropX.clamp(0, math.max(0, srcW - cropW));
+        cropY = cropY.clamp(0, math.max(0, srcH - cropH));
+        cropW = cropW.clamp(1, math.max(1, srcW - cropX));
+        cropH = cropH.clamp(1, math.max(1, srcH - cropY));
+
+        final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
+        resized = img.copyResize(cropped, width: w, height: h);
+        break;
+      case ImageFitMode.contain:
+        resized = img.copyResize(decoded, width: w, height: h, maintainAspect: true);
+        break;
+      case ImageFitMode.fill:
+        resized = img.copyResize(decoded, width: w, height: h);
+        break;
+    }
+
+    final slotImage = img.Image(width: w, height: h);
+    img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
+
+    if (fitMode == ImageFitMode.contain) {
+      final offsetX = math.max(0, ((w - resized.width) / 2).toInt());
+      final offsetY = math.max(0, ((h - resized.height) / 2).toInt());
+      img.compositeImage(slotImage, resized, dstX: offsetX, dstY: offsetY);
+    } else {
+      img.compositeImage(slotImage, resized);
+    }
+
+    if (radiusPx > 0) {
+      _applyRoundedCornersToSlot(slotImage, radiusPx, bgR, bgG, bgB);
+    }
+
+    img.compositeImage(canvas, slotImage, dstX: x, dstY: y);
+  }
+
+  if (params.textOverlayPngBytes != null && params.textOverlayPngBytes!.isNotEmpty) {
+    final decodedText = img.decodeImage(params.textOverlayPngBytes!);
+    if (decodedText != null) {
+      img.compositeImage(canvas, decodedText);
+    }
+  }
+
+  if (params.watermarkIconBytes != null && params.watermarkIconBytes!.isNotEmpty) {
+    WatermarkHelper.setIconBytes(params.watermarkIconBytes!);
+  }
+
+  final watermarked = WatermarkHelper.applyToImage(canvas, params.appSettings);
+  return Uint8List.fromList(img.encodeJpg(watermarked, quality: 95));
 }

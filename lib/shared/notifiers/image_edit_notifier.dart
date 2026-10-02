@@ -309,9 +309,11 @@ List<int> _encodeImage(
     OutputImageFormat.png => img.PngEncoder(
         level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
       ).encode(image),
-    OutputImageFormat.webp => img.PngEncoder(
-        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
-      ).encode(image),
+    OutputImageFormat.webp => img.encodeWebP(
+        image,
+        lossless: clampedQuality >= 100,
+        quality: clampedQuality,
+      ),
   };
 }
 

@@ -258,19 +258,19 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
           return;
         }
 
-        final probe = await ImageIsolateService.probe(bytes);
-        final preview = await ImageIsolateService.thumbnail(bytes, maxSide: 320);
+        final res =
+            await ImageIsolateService.probeAndThumbnail(bytes, maxSide: 320);
 
         _updateItem(
           item.id,
           item.copyWith(
-            previewBytes: preview,
-            width: probe.isValid ? probe.width : null,
-            height: probe.isValid ? probe.height : null,
+            previewBytes: res.thumbnail,
+            width: res.isValid ? res.width : null,
+            height: res.isValid ? res.height : null,
             sizeBytes: bytes.length,
             isLoading: false,
-            clearError: probe.isValid,
-            errorMessage: probe.isValid
+            clearError: res.isValid,
+            errorMessage: res.isValid
                 ? null
                 : 'The image may be corrupted or unsupported.',
           ),
@@ -393,25 +393,71 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
       final pdf = pw.Document();
       var addedPages = 0;
 
-      for (var i = 0; i < total; i++) {
+      _emit(state.copyWith(
+        statusText: 'Adding image 1 of $total',
+        progress: 0.0,
+      ));
+
+      if (_cancelRequested) {
+        await session?.cancel();
+        state = state.copyWith(
+          isGenerating: false,
+          canCancel: false,
+          progress: 0,
+          statusText: 'Cancelled',
+        );
+        return null;
+      }
+
+      final preparedPages =
+          await ImageIsolateService.mapConcurrent<ImageToPdfItem, _PreparedPage?>(
+        items,
+        (item, index) async {
+          if (_cancelRequested) return null;
+          final source = await _readItemBytes(item);
+          if (source == null || source.isEmpty || _cancelRequested) return null;
+
+          final params = <String, Object?>{
+            'bytes': source,
+            'optimized': settings.quality == PdfQuality.optimized,
+            'quality': 90,
+          };
+          if (Platform.environment.containsKey('FLUTTER_TEST')) {
+            return _preparePageWorker(params);
+          }
+          return await compute(_preparePageWorker, params);
+        },
+        concurrency: ImageIsolateService.defaultConcurrency,
+        onProgress: (completed, totalCount) {
+          _emit(state.copyWith(
+            statusText: 'Adding image ${completed.clamp(1, totalCount)} of $totalCount',
+            progress: (completed / totalCount) * 0.7,
+          ));
+        },
+        isCancelled: () => _cancelRequested,
+      );
+
+      if (_cancelRequested) {
+        await session?.cancel();
+        state = state.copyWith(
+          isGenerating: false,
+          canCancel: false,
+          progress: 0,
+          statusText: 'Cancelled',
+        );
+        return null;
+      }
+
+      for (var i = 0; i < preparedPages.length; i++) {
         if (_cancelRequested) break;
+        final prepared = preparedPages[i];
+        if (prepared == null) continue;
 
         _emit(state.copyWith(
           statusText: 'Adding image ${i + 1} of $total',
-          progress: (i / total) * 0.9,
+          progress: 0.7 + (((i + 1) / preparedPages.length) * 0.2),
         ));
-
-        final item = items[i];
-        final source = await _readItemBytes(item);
-        if (source == null || source.isEmpty) continue;
-
-        // Decoding and re-encoding happens off the UI isolate.
-        final prepared = await compute(_preparePageWorker, <String, Object?>{
-          'bytes': source,
-          'optimized': settings.quality == PdfQuality.optimized,
-          'quality': 90,
-        });
-        if (prepared == null) continue;
+        if (_cancelRequested) break;
 
         final imageWidth = prepared.width;
         final imageHeight = prepared.height;
@@ -506,7 +552,6 @@ class ImageToPdfNotifier extends Notifier<ImageToPdfState> {
         );
 
         addedPages++;
-        _emit(state.copyWith(progress: ((i + 1) / total) * 0.9));
       }
 
       if (_cancelRequested) {
@@ -662,18 +707,34 @@ _PreparedPage? _preparePageWorker(Map<String, Object?> params) {
   final source = params['bytes'] as Uint8List;
   final optimized = params['optimized'] as bool? ?? true;
   final quality = (params['quality'] as num?)?.toInt() ?? 90;
+  final format = FileTypeDetector.imageFormatFromSignature(source);
 
-  final decoded = img.decodeImage(source);
+  // If not optimizing and already jpg or png, probe dimensions quickly without full re-encode
+  if (!optimized && (format == 'jpg' || format == 'png')) {
+    final info = img.decodeImage(source);
+    if (info == null) return null;
+    return _PreparedPage(
+      bytes: source,
+      width: info.width,
+      height: info.height,
+    );
+  }
+
+  var decoded = img.decodeImage(source);
   if (decoded == null) return null;
 
-  final format = FileTypeDetector.imageFormatFromSignature(source);
-  Uint8List output;
+  // Cap maximum dimension to 2400 for speed and memory efficiency when optimizing
+  if (optimized && (decoded.width > 2400 || decoded.height > 2400)) {
+    if (decoded.width >= decoded.height) {
+      decoded = img.copyResize(decoded, width: 2400);
+    } else {
+      decoded = img.copyResize(decoded, height: 2400);
+    }
+  }
 
+  Uint8List output;
   if (optimized) {
     output = Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
-  } else if (format == 'jpg' || format == 'png') {
-    // Already embeddable at full quality — never re-encode.
-    output = source;
   } else if (decoded.hasAlpha) {
     final flattened = img.Image(width: decoded.width, height: decoded.height);
     img.fill(flattened, color: img.ColorRgb8(255, 255, 255));

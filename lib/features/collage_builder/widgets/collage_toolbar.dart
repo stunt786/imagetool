@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as path;
@@ -8,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/output_saver.dart';
@@ -165,76 +167,87 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
   void _showGapSlider(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => Consumer(
-        builder: (context, ref, _) {
-          final currentGap = ref.watch(collageProvider.select((s) => s.gap));
-          final theme = Theme.of(context);
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Consumer(
+            builder: (context, ref, _) {
+              final currentGap = ref.watch(collageProvider.select((s) => s.gap));
+              final theme = Theme.of(context);
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Spacing / Gap',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Spacing / Gap',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${currentGap.toInt()} px',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final g in [0.0, 4.0, 8.0, 12.0, 16.0, 20.0])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(g == 0 ? 'None' : '${g.toInt()}px'),
+                                selected: currentGap.toInt() == g.toInt(),
+                                onSelected: (_) {
+                                  ref.read(collageProvider.notifier).setGap(g);
+                                },
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${currentGap.toInt()} px',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontSize: 13,
-                        ),
-                      ),
+                    const SizedBox(height: 8),
+                    Slider(
+                      value: currentGap,
+                      min: 0,
+                      max: 20,
+                      divisions: 20,
+                      onChanged: (value) {
+                        ref.read(collageProvider.notifier).setGap(value);
+                      },
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final g in [0.0, 4.0, 8.0, 12.0, 16.0, 20.0])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(g == 0 ? 'None' : '${g.toInt()}px'),
-                            selected: currentGap.toInt() == g.toInt(),
-                            onSelected: (_) {
-                              ref.read(collageProvider.notifier).setGap(g);
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Slider(
-                  value: currentGap,
-                  min: 0,
-                  max: 20,
-                  divisions: 20,
-                  onChanged: (value) {
-                    ref.read(collageProvider.notifier).setGap(value);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -242,77 +255,88 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
   void _showRadiusSlider(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => Consumer(
-        builder: (context, ref, _) {
-          final currentRadius =
-              ref.watch(collageProvider.select((s) => s.cornerRadius));
-          final theme = Theme.of(context);
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Consumer(
+            builder: (context, ref, _) {
+              final currentRadius =
+                  ref.watch(collageProvider.select((s) => s.cornerRadius));
+              final theme = Theme.of(context);
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  0,
+                  20,
+                  24 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Corner Radius',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Corner Radius',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${currentRadius.toInt()} px',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final r in [0.0, 8.0, 16.0, 24.0, 36.0, 50.0])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(r == 0 ? 'Square' : '${r.toInt()}px'),
+                                selected: currentRadius.toInt() == r.toInt(),
+                                onSelected: (_) {
+                                  ref.read(collageProvider.notifier).setCornerRadius(r);
+                                },
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${currentRadius.toInt()} px',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontSize: 13,
-                        ),
-                      ),
+                    const SizedBox(height: 8),
+                    Slider(
+                      value: currentRadius,
+                      min: 0,
+                      max: 50,
+                      divisions: 50,
+                      onChanged: (value) {
+                        ref.read(collageProvider.notifier).setCornerRadius(value);
+                      },
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final r in [0.0, 8.0, 16.0, 24.0, 36.0, 50.0])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(r == 0 ? 'Square' : '${r.toInt()}px'),
-                            selected: currentRadius.toInt() == r.toInt(),
-                            onSelected: (_) {
-                              ref.read(collageProvider.notifier).setCornerRadius(r);
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Slider(
-                  value: currentRadius,
-                  min: 0,
-                  max: 50,
-                  divisions: 50,
-                  onChanged: (value) {
-                    ref.read(collageProvider.notifier).setCornerRadius(value);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -481,6 +505,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         );
         ref.read(collageProvider.notifier).reset();
         InterstitialTracker.instance.trackAction();
+        AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (e) {
       if (context.mounted) {
@@ -557,9 +582,12 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         }
       }
 
-      _cleanupOldTempCollages(tempDir, fileName);
+      unawaited(_cleanupOldTempCollages(tempDir, fileName));
 
       InterstitialTracker.instance.trackAction();
+      if (context.mounted) {
+        AppReviewService.instance.notifyOperationCompleted(context);
+      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -575,9 +603,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
     }
   }
 
-  void _cleanupOldTempCollages(Directory tempDir, String currentFileName) {
+  Future<void> _cleanupOldTempCollages(Directory tempDir, String currentFileName) async {
     try {
-      final list = tempDir.listSync();
+      final list = await tempDir.list().toList();
       final now = DateTime.now();
       for (final entity in list) {
         if (entity is File &&
@@ -585,8 +613,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
             path.basename(entity.path).endsWith('.jpg') &&
             path.basename(entity.path) != currentFileName) {
           try {
-            if (now.difference(entity.lastModifiedSync()).inMinutes > 15) {
-              entity.deleteSync();
+            final stat = await entity.stat();
+            if (now.difference(stat.modified).inMinutes > 15) {
+              await entity.delete();
             }
           } catch (_) {}
         }

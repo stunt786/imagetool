@@ -225,23 +225,27 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       state = state.copyWith(progress: 0.3);
 
       final appSettings = ref.read(appSettingsProvider);
-      if (WatermarkHelper.cachedIconBytes == null) {
+      final watermarkEnabled = appSettings.enableGlobalWatermark &&
+          await AppSettingsState.loadEnableGlobalWatermark();
+
+      if (watermarkEnabled && WatermarkHelper.cachedIconBytes == null) {
         await WatermarkHelper.loadIconBytes();
       }
 
-      final resultBytes = await compute(
-        PdfService.isolateMergeWorker,
-        {
-          'filePaths': filePaths,
-          'applyWatermark': appSettings.enableGlobalWatermark,
-          'watermarkText': appSettings.watermarkText,
-          'watermarkPosition': appSettings.watermarkPosition,
-          'watermarkOpacity': appSettings.watermarkOpacity,
-          'watermarkColor': appSettings.watermarkColor,
-          'useWatermarkLogo': appSettings.useWatermarkLogo,
-          'iconBytes': WatermarkHelper.cachedIconBytes,
-        },
-      );
+      final mergeParams = <String, dynamic>{
+        'filePaths': filePaths,
+        'applyWatermark': watermarkEnabled,
+        'watermarkText': appSettings.watermarkText,
+        'watermarkPosition': appSettings.watermarkPosition,
+        'watermarkOpacity': appSettings.watermarkOpacity,
+        'watermarkColor': appSettings.watermarkColor,
+        'useWatermarkLogo': appSettings.useWatermarkLogo,
+        'iconBytes': watermarkEnabled ? WatermarkHelper.cachedIconBytes : null,
+      };
+
+      final resultBytes = Platform.environment.containsKey('FLUTTER_TEST')
+          ? await PdfService.isolateMergeWorker(mergeParams)
+          : await compute(PdfService.isolateMergeWorker, mergeParams);
 
       state = state.copyWith(progress: 0.8);
 

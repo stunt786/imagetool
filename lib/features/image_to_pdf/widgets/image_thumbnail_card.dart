@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/services/pdf_service.dart';
+
 class ImageThumbnailCard extends StatelessWidget {
   const ImageThumbnailCard({
     super.key,
@@ -143,7 +145,7 @@ class ImageThumbnailCard extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        '${(imageSize / 1024).toStringAsFixed(1)} KB',
+                        PdfService.formatFileSize(imageSize),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),

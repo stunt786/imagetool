@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
@@ -138,8 +139,9 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        ref.read(formatConverterProvider.notifier).clearAll();
+        ref.read(formatConverterProvider.notifier).resetStatusForReconversion();
         InterstitialTracker.instance.trackAction();
+        AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (e) {
       if (mounted) {

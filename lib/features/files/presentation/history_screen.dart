@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -134,6 +135,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       SnackBar(
         content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -171,9 +173,38 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   String? _thumbnailFor(OperationFolder operation) {
-    if (operation.thumbnailPath != null) return operation.thumbnailPath;
+    if (operation.thumbnailPath != null &&
+        File(operation.thumbnailPath!).existsSync() &&
+        File(operation.thumbnailPath!).lengthSync() > 0) {
+      return operation.thumbnailPath;
+    }
     final files = _filesOf(operation.id);
-    return files.isEmpty ? null : files.first.path;
+    for (final f in files) {
+      final file = File(f.path);
+      if (file.existsSync() && file.lengthSync() > 0) {
+        return f.path;
+      }
+    }
+    try {
+      final dir = Directory(operation.directoryPath);
+      if (dir.existsSync()) {
+        final entries = dir.listSync().whereType<File>().toList();
+        for (final file in entries) {
+          final p = file.path.toLowerCase();
+          if (p.endsWith('.jpg') ||
+              p.endsWith('.jpeg') ||
+              p.endsWith('.png') ||
+              p.endsWith('.webp') ||
+              p.endsWith('.pdf')) {
+            if (file.lengthSync() > 0) return file.path;
+          }
+        }
+        if (entries.isNotEmpty && entries.first.lengthSync() > 0) {
+          return entries.first.path;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -391,7 +422,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                 // Thumbnail matching history.jpg
                                 FileThumbnail(
                                   path: _thumbnailFor(op) ?? '',
-                                  isPdf: op.kind == OperationKind.imageToPdf ||
+                                  isPdf: (_thumbnailFor(op) ?? '')
+                                          .toLowerCase()
+                                          .endsWith('.pdf') ||
+                                      op.kind == OperationKind.imageToPdf ||
                                       op.kind == OperationKind.pdfMerge ||
                                       op.kind == OperationKind.pdfSplit ||
                                       op.kind == OperationKind.pdfCompress,

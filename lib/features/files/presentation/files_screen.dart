@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -145,6 +146,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       SnackBar(
         content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -456,9 +458,38 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   String? _thumbnailFor(OperationFolder operation) {
-    if (operation.thumbnailPath != null) return operation.thumbnailPath;
+    if (operation.thumbnailPath != null &&
+        File(operation.thumbnailPath!).existsSync() &&
+        File(operation.thumbnailPath!).lengthSync() > 0) {
+      return operation.thumbnailPath;
+    }
     final files = _filesOf(operation.id);
-    return files.isEmpty ? null : files.first.path;
+    for (final f in files) {
+      final file = File(f.path);
+      if (file.existsSync() && file.lengthSync() > 0) {
+        return f.path;
+      }
+    }
+    try {
+      final dir = Directory(operation.directoryPath);
+      if (dir.existsSync()) {
+        final entries = dir.listSync().whereType<File>().toList();
+        for (final file in entries) {
+          final p = file.path.toLowerCase();
+          if (p.endsWith('.jpg') ||
+              p.endsWith('.jpeg') ||
+              p.endsWith('.png') ||
+              p.endsWith('.webp') ||
+              p.endsWith('.pdf')) {
+            if (file.lengthSync() > 0) return file.path;
+          }
+        }
+        if (entries.isNotEmpty && entries.first.lengthSync() > 0) {
+          return entries.first.path;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Widget _buildEmptyState(ThemeData theme) {
@@ -524,11 +555,15 @@ class _OperationRow extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onDelete;
 
-  static bool looksLikePdf(OperationFolder operation) =>
-      operation.kind == OperationKind.imageToPdf ||
-      operation.kind == OperationKind.pdfMerge ||
-      operation.kind == OperationKind.pdfSplit ||
-      operation.kind == OperationKind.pdfCompress;
+  static bool looksLikePdf(OperationFolder operation, [String? path]) {
+    if (path != null && path.isNotEmpty) {
+      return path.toLowerCase().endsWith('.pdf');
+    }
+    return operation.kind == OperationKind.imageToPdf ||
+        operation.kind == OperationKind.pdfMerge ||
+        operation.kind == OperationKind.pdfSplit ||
+        operation.kind == OperationKind.pdfCompress;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -547,7 +582,7 @@ class _OperationRow extends StatelessWidget {
           children: [
             FileThumbnail(
               path: thumbnailPath ?? '',
-              isPdf: looksLikePdf(operation),
+              isPdf: looksLikePdf(operation, thumbnailPath),
               size: 56,
             ),
             const SizedBox(width: 14),
@@ -702,7 +737,7 @@ class _OperationCard extends StatelessWidget {
                       padding: const EdgeInsets.all(3),
                       child: FileThumbnail(
                         path: thumbnailPath ?? '',
-                        isPdf: _OperationRow.looksLikePdf(operation),
+                        isPdf: _OperationRow.looksLikePdf(operation, thumbnailPath),
                         size: 180,
                         borderRadius: 10,
                       ),

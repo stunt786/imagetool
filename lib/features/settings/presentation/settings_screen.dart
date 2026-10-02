@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 
@@ -431,6 +432,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // ── Feedback & Support ───────────────────────────────────
+                  _buildSection(
+                    context,
+                    title: 'Spread the Word',
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.star_rate_rounded, color: Colors.amber),
+                        title: const Text('Rate the App'),
+                        subtitle: const Text('Review and rate on Google Play Store'),
+                        trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+                        onTap: () => AppReviewService.instance.openPlayStore(),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.share_rounded),
+                        title: const Text('Share the App'),
+                        subtitle: const Text('Share download link with friends & family'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => AppReviewService.instance.shareApp(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),

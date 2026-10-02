@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -40,26 +41,21 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final state = ref.read(pdfConvertProvider);
-    if (state.errorMessage != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.errorMessage!),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-          ref.read(pdfConvertProvider.notifier).clearError();
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    ref.listen<PdfConvertState>(pdfConvertProvider, (previous, next) {
+      final msg = next.errorMessage;
+      if (msg != null && msg.isNotEmpty && (previous?.errorMessage != msg)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        ref.read(pdfConvertProvider.notifier).clearError();
+      }
+    });
+
     final state = ref.watch(pdfConvertProvider);
     final notifier = ref.read(pdfConvertProvider.notifier);
 
@@ -99,6 +95,8 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
               state.outputPaths.isEmpty &&
               state.publicExportPaths.isEmpty)
             _buildBottomBar(context, state, notifier),
+          if (state.outputPaths.isNotEmpty)
+            _buildResultsBottomBar(context, state, notifier),
         ],
       ),
     );
@@ -164,7 +162,12 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
     final theme = Theme.of(context);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        32 + MediaQuery.paddingOf(context).bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -331,18 +334,6 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
             ),
             const SizedBox(height: 20),
 
-            if (state.publicExportPaths.isEmpty) ...[
-              FilledButton.icon(
-                onPressed: () => notifier.exportFiles(),
-                icon: const Icon(Icons.save_alt),
-                label: const Text('Export to Device'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
             // Output files list
             Text(
               'Output Files',
@@ -397,35 +388,6 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                 ),
               );
             }),
-
-            if (state.publicExportPaths.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        notifier.clear();
-                      },
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('Done'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        await Share.shareXFiles(
-                          state.outputPaths.map((p) => XFile(p)).toList(),
-                        );
-                      },
-                      icon: const Icon(Icons.share_rounded),
-                      label: const Text('Share All'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ],
         ],
       ),
@@ -499,6 +461,9 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
                               thumbnailPath: isImage ? firstPath : null,
                             ),
                           );
+                      if (context.mounted) {
+                        AppReviewService.instance.notifyOperationCompleted(context);
+                      }
                     }
                   }
                 : null,
@@ -517,6 +482,84 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildResultsBottomBar(
+    BuildContext context,
+    PdfConvertState state,
+    PdfConvertNotifier notifier,
+  ) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.12),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: state.publicExportPaths.isEmpty
+            ? SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => notifier.exportFiles(),
+                  icon: const Icon(Icons.save_alt),
+                  label: const Text('Export to Device'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        notifier.clear();
+                      },
+                      icon: const Icon(Icons.check_rounded),
+                      label: const Text('Done'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        await Share.shareXFiles(
+                          state.outputPaths.map((p) => XFile(p)).toList(),
+                        );
+                      },
+                      icon: const Icon(Icons.share_rounded),
+                      label: const Text('Share All'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
