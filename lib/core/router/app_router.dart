@@ -72,6 +72,52 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/tools',
                 builder: (context, state) => const HomeScreen(),
               ),
+              GoRoute(
+                path: '/settings',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: SettingsScreen()),
+              ),
+              GoRoute(
+                path: '/images/resizer',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: ImageResizeScreen()),
+              ),
+              GoRoute(
+                path: '/images/collage',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: CollageBuilderScreen()),
+              ),
+              GoRoute(
+                path: '/images/convert',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: FormatConverterScreen()),
+              ),
+              GoRoute(
+                path: '/images/to-pdf',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: ImageToPdfScreen()),
+              ),
+              GoRoute(
+                path: '/history',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: HistoryScreen()),
+              ),
+              // In-app PDF viewer. The file is passed through `extra` so any screen can
+              // deep-link into it without a second lookup.
+              GoRoute(
+                path: '/pdf/viewer',
+                pageBuilder: (context, state) {
+                  final extra = state.extra;
+                  final args = extra is Map ? extra : const <String, dynamic>{};
+                  return _MaterialPage(
+                    child: PdfViewerScreen(
+                      filePath: args['path'] as String? ?? '',
+                      title: args['title'] as String?,
+                      initialPage: (args['page'] as num?)?.toInt() ?? 1,
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           StatefulShellBranch(
@@ -146,63 +192,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
-      ),
-
-      // Settings route (opened from top-left button on Home)
-      GoRoute(
-        path: '/settings',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: SettingsScreen()),
-      ),
-
-      // Tool routes (full-screen pages)
-      GoRoute(
-        path: '/images/resizer',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: ImageResizeScreen()),
-      ),
-      GoRoute(
-        path: '/images/collage',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: CollageBuilderScreen()),
-      ),
-      GoRoute(
-        path: '/images/convert',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: FormatConverterScreen()),
-      ),
-      GoRoute(
-        path: '/images/to-pdf',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: ImageToPdfScreen()),
-      ),
-      GoRoute(
-        path: '/history',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: HistoryScreen()),
-      ),
-      // In-app PDF viewer. The file is passed through `extra` so any screen can
-      // deep-link into it without a second lookup.
-      GoRoute(
-        path: '/pdf/viewer',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) {
-          final extra = state.extra;
-          final args = extra is Map ? extra : const <String, dynamic>{};
-          return _MaterialPage(
-            child: PdfViewerScreen(
-              filePath: args['path'] as String? ?? '',
-              title: args['title'] as String?,
-              initialPage: (args['page'] as num?)?.toInt() ?? 1,
-            ),
-          );
-        },
       ),
 
       // TODO: Re-enable premium route in upcoming version with premium features

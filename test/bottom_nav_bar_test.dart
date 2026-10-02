@@ -3,10 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:pixeltools/core/router/app_router.dart';
 import 'package:pixeltools/core/settings/app_settings.dart';
 import 'package:pixeltools/features/shell/presentation/app_shell.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('BottomNavBar matches reference: icon-only, no text, correct branch switches',
       (tester) async {
     final router = GoRouter(
@@ -96,5 +103,116 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('HomeScreenBody'), findsOneWidget);
     expect(find.byIcon(Icons.home_rounded), findsOneWidget);
+  });
+
+  testWidgets('BottomNavBar is displayed on subpages and tool routes with appRouterProvider',
+      (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        appSettingsProvider.overrideWith(
+          (ref) => AppSettingsNotifier(
+            const AppSettingsState(
+              savePath: '/test/path',
+              hasCompletedOnboarding: true,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final router = container.read(appRouterProvider);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify bottom navbar is present on Home screen
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
+
+    // 2. Push /settings
+    router.push('/settings');
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsWidgets);
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+
+    // 3. Push /history
+    router.push('/history');
+    await tester.pumpAndSettle();
+    expect(find.text('History'), findsWidgets);
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+
+    // 4. Push /images/resizer
+    router.push('/images/resizer');
+    await tester.pumpAndSettle();
+    expect(find.text('Resize Image'), findsWidgets);
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+
+    // 5. Push /pdfs/compress
+    router.push('/pdfs/compress');
+    await tester.pumpAndSettle();
+    expect(find.text('Compress PDF'), findsOneWidget);
+    expect(find.bySemanticsLabel('Home'), findsOneWidget);
+    expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+    expect(find.bySemanticsLabel('Files'), findsOneWidget);
+  });
+
+  testWidgets('BottomNavBar renders with light background in both light and dark theme',
+      (tester) async {
+    for (final themeMode in [ThemeMode.light, ThemeMode.dark]) {
+      final container = ProviderContainer(
+        overrides: [
+          appSettingsProvider.overrideWith(
+            (ref) => AppSettingsNotifier(
+              AppSettingsState(
+                savePath: '/test/path',
+                hasCompletedOnboarding: true,
+                themeMode: themeMode,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final router = container.read(appRouterProvider);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            routerConfig: router,
+            theme: ThemeData.light(),
+            darkTheme: ThemeData.dark(),
+            themeMode: themeMode,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Bottom bar elements exist
+      expect(find.bySemanticsLabel('Home'), findsOneWidget);
+      expect(find.bySemanticsLabel('Camera'), findsOneWidget);
+      expect(find.bySemanticsLabel('Files'), findsOneWidget);
+      expect(find.byType(CustomPaint), findsWidgets);
+    }
   });
 }

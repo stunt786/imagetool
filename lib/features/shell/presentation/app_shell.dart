@@ -20,34 +20,32 @@ class AppShell extends StatelessWidget {
     final isMainScreen = currentPath == '/tools' ||
         currentPath == '/camera' ||
         currentPath == '/pdfs';
-    final isCameraScreen = currentPath == '/camera';
+    final isCameraFlow = currentPath.startsWith('/camera');
 
     return Scaffold(
-      extendBody: true,
-      extendBodyBehindAppBar: true,
+      extendBody: isMainScreen,
+      extendBodyBehindAppBar: isMainScreen,
       // Branch screens stay mounted in the shell's IndexedStack, so this is
       // the only place they can observe which branch is active.
       body: ShellIndexScope(
         index: navigationShell.currentIndex,
         child: navigationShell,
       ),
-      bottomNavigationBar: isMainScreen
-          ? SafeArea(
-              top: false,
-              bottom: false,
-              minimum: EdgeInsets.zero,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!isCameraScreen) ...[
-                    const BannerAdWidget(),
-                    const SizedBox(height: 6),
-                  ],
-                  _BottomNavBar(navigationShell: navigationShell),
-                ],
-              ),
-            )
-          : null,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        bottom: false,
+        minimum: EdgeInsets.zero,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isCameraFlow) ...[
+              const BannerAdWidget(),
+              const SizedBox(height: 6),
+            ],
+            _BottomNavBar(navigationShell: navigationShell),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -209,19 +207,17 @@ class _CameraCenterButton extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: isDark
-                ? const [Color(0xFF1E2D4E), Color(0xFF15223A)]
+                ? const [Color(0xFFFFFFFF), Color(0xFFEDF2F7)]
                 : const [Colors.white, Color(0xFFF1F5F9)],
           );
 
     final borderColor = selected
-        ? Colors.white.withValues(alpha: 0.65)
-        : (isDark
-            ? const Color(0xFF3B82F6).withValues(alpha: 0.45)
-            : const Color(0xFF1A73E8).withValues(alpha: 0.35));
+        ? Colors.white.withValues(alpha: 0.80)
+        : const Color(0xFF1A73E8).withValues(alpha: 0.35);
 
     final iconColor = selected
         ? Colors.white
-        : (isDark ? const Color(0xFF60A5FA) : const Color(0xFF1A73E8));
+        : const Color(0xFF1A73E8);
 
     return Semantics(
       button: true,
@@ -247,12 +243,12 @@ class _CameraCenterButton extends StatelessWidget {
               boxShadow: [
                 BoxShadow(
                   color: selected
-                      ? const Color(0xFF2563EB).withValues(alpha: 0.5)
+                      ? const Color(0xFF2563EB).withValues(alpha: 0.45)
                       : (isDark
-                          ? Colors.black.withValues(alpha: 0.45)
-                          : Colors.black.withValues(alpha: 0.12)),
-                  blurRadius: selected ? 14 : 9,
-                  offset: const Offset(0, 4),
+                          ? Colors.black.withValues(alpha: 0.20)
+                          : Colors.black.withValues(alpha: 0.10)),
+                  blurRadius: selected ? 14 : 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
@@ -368,13 +364,12 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    final activeColor = isDark ? const Color(0xFF60A5FA) : scheme.primary;
+    const activeColor = Color(0xFF1A73E8);
     final inactiveColor = isDark
-        ? const Color(0xFF8E9BAE)
-        : scheme.onSurfaceVariant.withValues(alpha: 0.75);
+        ? const Color(0xFF5A6679)
+        : const Color(0xFF64748B);
 
     return Semantics(
       button: true,
@@ -392,9 +387,7 @@ class _NavItem extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               color: selected
-                  ? (isDark
-                      ? const Color(0xFF2563EB).withValues(alpha: 0.22)
-                      : scheme.primary.withValues(alpha: 0.12))
+                  ? const Color(0xFF1A73E8).withValues(alpha: 0.12)
                   : Colors.transparent,
             ),
             child: AnimatedScale(
@@ -450,24 +443,24 @@ class _NotchedBarPainter extends CustomPainter {
     // 1. Soft elevation shadow
     canvas.drawShadow(
       path,
-      isDark ? Colors.black.withValues(alpha: 0.65) : const Color(0x240F172A),
-      8.0,
+      isDark ? Colors.black.withValues(alpha: 0.35) : const Color(0x280F172A),
+      10.0,
       false,
     );
 
-    // 2. Bar background fill (differentiated from app background, matching app tones)
+    // 2. Bar background fill (clean light surface that matches both dark & light themes)
     final fillPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(0, topOffset),
         Offset(0, size.height),
         isDark
             ? const [
-                Color(0xFF182645),
-                Color(0xFF121B30),
+                Color(0xFFF3F6FA),
+                Color(0xFFE6EDF5),
               ]
             : const [
                 Colors.white,
-                Color(0xFFFAFBFF),
+                Color(0xFFF5F8FC),
               ],
       );
     canvas.drawPath(path, fillPaint);
@@ -477,8 +470,8 @@ class _NotchedBarPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2
       ..color = isDark
-          ? Colors.white.withValues(alpha: 0.14)
-          : scheme.outlineVariant.withValues(alpha: 0.65);
+          ? const Color(0xFFCBD5E1).withValues(alpha: 0.75)
+          : scheme.outlineVariant.withValues(alpha: 0.70);
     canvas.drawPath(path, borderPaint);
   }
 
