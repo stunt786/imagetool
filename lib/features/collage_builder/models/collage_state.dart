@@ -307,6 +307,8 @@ class CollageState {
     this.captionFontFamily = 'Roboto',
     this.isExporting = false,
     this.exportProgress = 0.0,
+    this.previewWidth,
+    this.previewHeight,
   });
 
   final List<CollageImageSlot> images;
@@ -326,6 +328,8 @@ class CollageState {
   final String captionFontFamily;
   final bool isExporting;
   final double exportProgress;
+  final double? previewWidth;
+  final double? previewHeight;
 
   int get imageCount => images.where((s) => s.hasImage).length;
 
@@ -348,6 +352,8 @@ class CollageState {
     String? captionFontFamily,
     bool? isExporting,
     double? exportProgress,
+    double? previewWidth,
+    double? previewHeight,
   }) {
     return CollageState(
       images: images ?? this.images,
@@ -367,6 +373,8 @@ class CollageState {
       captionFontFamily: captionFontFamily ?? this.captionFontFamily,
       isExporting: isExporting ?? this.isExporting,
       exportProgress: exportProgress ?? this.exportProgress,
+      previewWidth: previewWidth ?? this.previewWidth,
+      previewHeight: previewHeight ?? this.previewHeight,
     );
   }
 }

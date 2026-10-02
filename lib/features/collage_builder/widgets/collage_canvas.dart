@@ -56,6 +56,13 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
           width = height / aspectRatio;
         }
 
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              (state.previewWidth != width || state.previewHeight != height)) {
+            ref.read(collageProvider.notifier).setPreviewSize(width, height);
+          }
+        });
+
         return Center(
           child: RepaintBoundary(
             child: Listener(
@@ -151,9 +158,9 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       child: RepaintBoundary(
         child: GestureDetector(
           onTap: () => _handleSlotTap(context, index),
-          onScaleStart: (details) => _handleScaleStart(index, details),
-          onScaleUpdate: (details) => _handleScaleUpdate(index, details),
-          onScaleEnd: (details) => _handleScaleEnd(index),
+          onScaleStart: (details) => _handleScaleStart(index, details, width, height),
+          onScaleUpdate: (details) => _handleScaleUpdate(index, details, width, height),
+          onScaleEnd: (details) => _handleScaleEnd(index, width, height),
           onLongPressStart: (details) => _handleLongPressStart(index, details),
           onLongPressEnd: (details) => _handleLongPressEnd(index),
           behavior: HitTestBehavior.translucent,
@@ -208,21 +215,13 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     final isPinching = _pinchSlotIndex == index;
     final isPanning = _panSlotIndex == index;
     final scale = isPinching ? _currentScale : slot.scale;
-    final pixelOffsetX = isPanning ? _panPixelDelta.dx : slot.offsetX * width;
-    final pixelOffsetY = isPanning ? _panPixelDelta.dy : slot.offsetY * height;
+    final pixelOffsetX = isPanning ? (_panPixelStart.dx + _panPixelDelta.dx) : slot.offsetX * width;
+    final pixelOffsetY = isPanning ? (_panPixelStart.dy + _panPixelDelta.dy) : slot.offsetY * height;
 
     final maxOffsetX = scale > 1.0 ? (width * (scale - 1.0)) / 2 : 0.0;
     final maxOffsetY = scale > 1.0 ? (height * (scale - 1.0)) / 2 : 0.0;
     final clampedOffsetX = pixelOffsetX.clamp(-maxOffsetX, maxOffsetX);
     final clampedOffsetY = pixelOffsetY.clamp(-maxOffsetY, maxOffsetY);
-
-    // Decode the preview at the size it is actually drawn: a 12 MP photo
-    // otherwise costs a full-resolution texture that has to be resampled on
-    // every gesture frame.
-    final devicePixelRatio =
-        MediaQuery.devicePixelRatioOf(context).clamp(1.0, 3.0);
-    final cacheWidth = (width * devicePixelRatio).round().clamp(64, 2048);
-    final cacheHeight = (height * devicePixelRatio).round().clamp(64, 2048);
 
     return Stack(
       children: [
@@ -232,20 +231,20 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
               transform: Matrix4.identity()
                 ..translateByVector3(
                     vec.Vector3(clampedOffsetX, clampedOffsetY, 0))
-                ..scaleByDouble(scale, scale, 1.0, 1.0)
-                ..rotateZ(slot.rotation * (math.pi / 180.0)),
+                ..scaleByDouble(scale, scale, 1.0, 1.0),
               alignment: Alignment.center,
-              child: Image.memory(
-                slot.imageBytes!,
-                fit: slot.fitMode == ImageFitMode.cover
-                    ? BoxFit.cover
-                    : slot.fitMode == ImageFitMode.contain
-                        ? BoxFit.contain
-                        : BoxFit.fill,
-                cacheWidth: cacheWidth,
-                cacheHeight: cacheHeight,
-                gaplessPlayback: true,
-                filterQuality: FilterQuality.low,
+              child: RotatedBox(
+                quarterTurns: ((slot.rotation / 90).round() % 4 + 4) % 4,
+                child: Image.memory(
+                  slot.imageBytes!,
+                  fit: slot.fitMode == ImageFitMode.cover
+                      ? BoxFit.cover
+                      : slot.fitMode == ImageFitMode.contain
+                          ? BoxFit.contain
+                          : BoxFit.fill,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.medium,
+                ),
               ),
             ),
           ),
@@ -360,7 +359,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     );
   }
 
-  void _handleScaleStart(int index, ScaleStartDetails details) {
+  void _handleScaleStart(int index, ScaleStartDetails details, double slotWidth, double slotHeight) {
     final state = ref.read(collageProvider);
     if (!state.images[index].hasImage) return;
 
@@ -371,15 +370,15 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     } else if (state.images[index].scale > 1.0) {
       _panSlotIndex = index;
       _panPixelStart = Offset(
-        state.images[index].offsetX * (context.size?.width ?? 1),
-        state.images[index].offsetY * (context.size?.height ?? 1),
+        state.images[index].offsetX * slotWidth,
+        state.images[index].offsetY * slotHeight,
       );
       _panPixelDelta = Offset.zero;
       _isPanning = false;
     }
   }
 
-  void _handleScaleUpdate(int index, ScaleUpdateDetails details) {
+  void _handleScaleUpdate(int index, ScaleUpdateDetails details, double slotWidth, double slotHeight) {
     final state = ref.read(collageProvider);
     final slot = state.images[index];
     if (!slot.hasImage) return;
@@ -394,8 +393,6 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
       }
 
       if (_isPanning) {
-        final slotWidth = context.size?.width ?? 1;
-        final slotHeight = context.size?.height ?? 1;
         final scale = slot.scale;
         final maxOffsetX = (slotWidth * (scale - 1.0)) / 2;
         final maxOffsetY = (slotHeight * (scale - 1.0)) / 2;
@@ -410,18 +407,15 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     }
   }
 
-  void _handleScaleEnd(int index) {
+  void _handleScaleEnd(int index, double slotWidth, double slotHeight) {
     if (_pinchSlotIndex == index) {
       _pinchSlotIndex = null;
       _currentScale = 1.0;
       _initialScale = 1.0;
     } else if (_panSlotIndex == index) {
       if (_isPanning) {
-        final slotWidth = context.size?.width ?? 1;
-        final slotHeight = context.size?.height ?? 1;
-
-        final finalOffsetX = (_panPixelStart.dx + _panPixelDelta.dx) / slotWidth;
-        final finalOffsetY = (_panPixelStart.dy + _panPixelDelta.dy) / slotHeight;
+        final finalOffsetX = (_panPixelStart.dx + _panPixelDelta.dx) / (slotWidth > 0 ? slotWidth : 1);
+        final finalOffsetY = (_panPixelStart.dy + _panPixelDelta.dy) / (slotHeight > 0 ? slotHeight : 1);
 
         ref.read(collageProvider.notifier).setOffset(index, finalOffsetX, finalOffsetY);
       }

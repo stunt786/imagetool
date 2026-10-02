@@ -89,12 +89,14 @@ class PdfService {
     required String inputPath,
     required String outputPath,
     required double quality,
+    PdfCompressionPreset? preset,
     void Function(double progress)? onProgress,
   }) {
     return PdfCompressionEngine.compressFileInIsolate(
       inputPath: inputPath,
       outputPath: outputPath,
       qualityFactor: quality,
+      preset: preset,
       onProgress: onProgress,
     );
   }
@@ -105,6 +107,7 @@ class PdfService {
   Future<String> compressPdf({
     required String inputPath,
     required double quality,
+    PdfCompressionPreset? preset,
     String? outputBaseName,
     void Function(double progress)? onProgress,
     bool watermark = false,
@@ -122,7 +125,7 @@ class PdfService {
     await PdfCompressionEngine.compressFile(
       inputPath: inputPath,
       outputPath: outputPath,
-      preset: PdfCompressionPreset.forQualityFactor(quality),
+      preset: preset ?? PdfCompressionPreset.forQualityFactor(quality),
       onProgress: onProgress,
     );
 

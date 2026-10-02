@@ -43,7 +43,8 @@ dependencies {
     // SAF tree access (Settings → save folder, one-off exports).
     implementation("androidx.documentfile:documentfile:1.0.0")
 
-    // ML Kit multi-language OCR dependencies to support non-Latin scripts
+    // ML Kit multi-language OCR dependencies (bundled for offline reliability)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")

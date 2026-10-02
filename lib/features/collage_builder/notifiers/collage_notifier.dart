@@ -375,9 +375,20 @@ class CollageNotifier extends Notifier<CollageState> {
     state = state.copyWith(images: newImages);
   }
 
+  void setPreviewSize(double width, double height) {
+    if (state.previewWidth == width && state.previewHeight == height) return;
+    state = state.copyWith(previewWidth: width, previewHeight: height);
+  }
+
   void setScale(int slotIndex, double scale) {
+    if (slotIndex < 0 || slotIndex >= state.images.length) return;
     final newImages = List<CollageImageSlot>.from(state.images);
-    newImages[slotIndex] = newImages[slotIndex].copyWith(scale: scale);
+    final clampedScale = scale.clamp(1.0, 5.0);
+    newImages[slotIndex] = newImages[slotIndex].copyWith(
+      scale: clampedScale,
+      offsetX: clampedScale <= 1.0 ? 0.0 : newImages[slotIndex].offsetX,
+      offsetY: clampedScale <= 1.0 ? 0.0 : newImages[slotIndex].offsetY,
+    );
     state = state.copyWith(images: newImages);
   }
 
@@ -537,8 +548,10 @@ class CollageNotifier extends Notifier<CollageState> {
     try {
       final canvasWidth = state.canvasWidth;
       final canvasHeight = state.canvasHeight;
-      // Logical preview reference scale (canvas is nominally previewed at 360 logical px)
-      final scaleFactor = canvasWidth / 360.0;
+      final previewWidth = (state.previewWidth != null && state.previewWidth! > 0)
+          ? state.previewWidth!
+          : 360.0;
+      final scaleFactor = canvasWidth / previewWidth;
       final gapPx = (state.gap * scaleFactor).round();
       final radiusPx = (state.cornerRadius * scaleFactor).round();
 
@@ -564,6 +577,7 @@ class CollageNotifier extends Notifier<CollageState> {
           fitModeIndex: slot.fitMode.index,
           offsetX: slot.offsetX,
           offsetY: slot.offsetY,
+          scale: slot.scale,
         ));
       }
 
@@ -592,7 +606,7 @@ class CollageNotifier extends Notifier<CollageState> {
         for (final layer in activeTextLayers) {
           final text = layer.text.trim();
           final effectiveFontSize = layer.fontSize * layer.scale;
-          final canvasFontSize = effectiveFontSize * (canvasWidth / 360.0);
+          final canvasFontSize = effectiveFontSize * scaleFactor;
           final fontFamily =
               layer.fontFamily == 'Roboto' ? null : layer.fontFamily;
           final FontWeight fontWeight = layer.bold
@@ -655,12 +669,14 @@ class CollageNotifier extends Notifier<CollageState> {
             (layer.color.b * 255).round().clamp(0, 255),
           );
 
+          final textCenterX = textX + textWidth / 2;
+          final textCenterY = textY + textHeight / 2;
+
           drawCanvas.save();
           if (layer.rotation != 0.0) {
-            final center = Offset(canvasWidth / 2, canvasHeight / 2);
-            drawCanvas.translate(center.dx, center.dy);
+            drawCanvas.translate(textCenterX, textCenterY);
             drawCanvas.rotate(layer.rotation);
-            drawCanvas.translate(-center.dx, -center.dy);
+            drawCanvas.translate(-textCenterX, -textCenterY);
           }
 
           final shadowOffsets = const [
@@ -725,6 +741,7 @@ class CollageNotifier extends Notifier<CollageState> {
         final byteData =
             await textImage.toByteData(format: ui.ImageByteFormat.png);
         textImage.dispose();
+        picture.dispose();
         if (byteData != null) {
           textOverlayPngBytes = byteData.buffer.asUint8List();
         }
@@ -771,6 +788,8 @@ class CollageNotifier extends Notifier<CollageState> {
       backgroundColor: const Color(0xFFE8EAF6),
       canvasWidth: 1080,
       canvasHeight: 1080,
+      previewWidth: state.previewWidth,
+      previewHeight: state.previewHeight,
     );
   }
 }
@@ -785,6 +804,7 @@ class _CollageSlotData {
   final int fitModeIndex;
   final double offsetX;
   final double offsetY;
+  final double scale;
 
   const _CollageSlotData({
     required this.imageBytes,
@@ -796,6 +816,7 @@ class _CollageSlotData {
     required this.fitModeIndex,
     required this.offsetX,
     required this.offsetY,
+    required this.scale,
   });
 }
 
@@ -915,58 +936,86 @@ Uint8List? _renderCollageWorker(_CollageExportParams params) {
     var decoded = img.decodeImage(slot.imageBytes);
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) continue;
 
+    decoded = img.bakeOrientation(decoded);
+
     if (slot.rotation != 0.0) {
       decoded = img.copyRotate(decoded, angle: slot.rotation.toInt());
     }
 
     final fitMode = ImageFitMode.values[slot.fitModeIndex];
     img.Image resized;
+
+    final srcW = decoded.width.toDouble();
+    final srcH = decoded.height.toDouble();
+    final scale = slot.scale.clamp(1.0, 5.0);
+
+    final maxOffsetX = scale > 1.0 ? (w * (scale - 1.0)) / 2 : 0.0;
+    final maxOffsetY = scale > 1.0 ? (h * (scale - 1.0)) / 2 : 0.0;
+    final clampedOffsetX = (slot.offsetX * w).clamp(-maxOffsetX, maxOffsetX);
+    final clampedOffsetY = (slot.offsetY * h).clamp(-maxOffsetY, maxOffsetY);
+
     switch (fitMode) {
       case ImageFitMode.cover:
-        final srcW = decoded.width;
-        final srcH = decoded.height;
-        final dstAspect = w / h;
-        final srcAspect = srcW / srcH;
+        final s0 = math.max(w / srcW, h / srcH);
+        final sTotal = s0 * scale;
 
-        int cropW, cropH, cropX, cropY;
-        if (srcAspect > dstAspect) {
-          cropH = srcH;
-          cropW = (srcH * dstAspect).toInt().clamp(1, srcW);
-          cropX = ((srcW - cropW) / 2).toInt() + (slot.offsetX * srcW * 0.1).toInt();
-          cropY = 0;
-        } else {
-          cropW = srcW;
-          cropH = (srcW / dstAspect).toInt().clamp(1, srcH);
-          cropX = 0;
-          cropY = ((srcH - cropH) / 2).toInt() + (slot.offsetY * srcH * 0.1).toInt();
-        }
+        final cropW = (w / sTotal).clamp(1.0, srcW);
+        final cropH = (h / sTotal).clamp(1.0, srcH);
 
-        cropX = cropX.clamp(0, math.max(0, srcW - cropW));
-        cropY = cropY.clamp(0, math.max(0, srcH - cropH));
-        cropW = cropW.clamp(1, math.max(1, srcW - cropX));
-        cropH = cropH.clamp(1, math.max(1, srcH - cropY));
+        final cropX = ((srcW - cropW) / 2.0 - clampedOffsetX / sTotal)
+            .clamp(0.0, srcW - cropW);
+        final cropY = ((srcH - cropH) / 2.0 - clampedOffsetY / sTotal)
+            .clamp(0.0, srcH - cropH);
 
-        final cropped = img.copyCrop(decoded, x: cropX, y: cropY, width: cropW, height: cropH);
+        final cropped = img.copyCrop(
+          decoded,
+          x: cropX.round(),
+          y: cropY.round(),
+          width: cropW.round().clamp(1, decoded.width),
+          height: cropH.round().clamp(1, decoded.height),
+        );
         resized = img.copyResize(cropped, width: w, height: h);
         break;
+
       case ImageFitMode.contain:
-        resized = img.copyResize(decoded, width: w, height: h, maintainAspect: true);
+        final s0 = math.min(w / srcW, h / srcH);
+        final sTotal = s0 * scale;
+
+        final scaledW = math.max(1, (srcW * sTotal).round());
+        final scaledH = math.max(1, (srcH * sTotal).round());
+
+        final tempResized = img.copyResize(decoded, width: scaledW, height: scaledH);
+
+        final slotImage = img.Image(width: w, height: h);
+        img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
+
+        final dstX = ((w - scaledW) / 2.0 + clampedOffsetX).round();
+        final dstY = ((h - scaledH) / 2.0 + clampedOffsetY).round();
+
+        img.compositeImage(slotImage, tempResized, dstX: dstX, dstY: dstY);
+        resized = slotImage;
         break;
+
       case ImageFitMode.fill:
-        resized = img.copyResize(decoded, width: w, height: h);
+        final scaledW = math.max(1, (w * scale).round());
+        final scaledH = math.max(1, (h * scale).round());
+
+        final tempResized = img.copyResize(decoded, width: scaledW, height: scaledH);
+
+        final slotImage = img.Image(width: w, height: h);
+        img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
+
+        final dstX = ((w - scaledW) / 2.0 + clampedOffsetX).round();
+        final dstY = ((h - scaledH) / 2.0 + clampedOffsetY).round();
+
+        img.compositeImage(slotImage, tempResized, dstX: dstX, dstY: dstY);
+        resized = slotImage;
         break;
     }
 
     final slotImage = img.Image(width: w, height: h);
     img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
-
-    if (fitMode == ImageFitMode.contain) {
-      final offsetX = math.max(0, ((w - resized.width) / 2).toInt());
-      final offsetY = math.max(0, ((h - resized.height) / 2).toInt());
-      img.compositeImage(slotImage, resized, dstX: offsetX, dstY: offsetY);
-    } else {
-      img.compositeImage(slotImage, resized);
-    }
+    img.compositeImage(slotImage, resized);
 
     if (radiusPx > 0) {
       _applyRoundedCornersToSlot(slotImage, radiusPx, bgR, bgG, bgB);

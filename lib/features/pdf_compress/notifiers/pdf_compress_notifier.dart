@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/pdf_compression_engine.dart';
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/operation_store_provider.dart';
@@ -97,9 +98,51 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     }
   }
 
-  /// Sets the compression level.
+  /// Sets the compression level and synchronizes advanced quality settings.
   void setCompressionLevel(CompressionLevel level) {
-    state = state.copyWith(compressionLevel: level);
+    final preset = PdfCompressionPreset.forQualityFactor(level.qualityFactor);
+    state = state.copyWith(
+      compressionLevel: level,
+      colorImageQuality: preset.colorImageQuality,
+      greyImageQuality: preset.greyImageQuality,
+      monoImageQuality: preset.monoImageQuality,
+    );
+  }
+
+  void setColorImageQuality(int quality) {
+    state = state.copyWith(colorImageQuality: quality.clamp(1, 100));
+  }
+
+  void setGreyImageQuality(int quality) {
+    state = state.copyWith(greyImageQuality: quality.clamp(1, 100));
+  }
+
+  void setMonoImageQuality(int quality) {
+    state = state.copyWith(monoImageQuality: quality.clamp(1, 100));
+  }
+
+  void setCompressStreams(bool value) {
+    state = state.copyWith(compressStreams: value);
+  }
+
+  void setUnembedSimpleFonts(bool value) {
+    state = state.copyWith(unembedSimpleFonts: value);
+  }
+
+  void setUnembedComplexFonts(bool value) {
+    state = state.copyWith(unembedComplexFonts: value);
+  }
+
+  void setUnembedUnusualFonts(bool value) {
+    state = state.copyWith(unembedUnusualFonts: value);
+  }
+
+  void setFlattenLayers(bool value) {
+    state = state.copyWith(flattenLayers: value);
+  }
+
+  void toggleAdvancedExpanded() {
+    state = state.copyWith(isAdvancedExpanded: !state.isAdvancedExpanded);
   }
 
   /// Compresses the selected PDF file and returns the path to the result.
@@ -146,11 +189,28 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
     String? note;
 
     try {
-      // 1) Real compression, off the UI thread.
+      // 1) Real compression with custom advanced parameters, off the UI thread.
+      final basePreset = PdfCompressionPreset.forQualityFactor(quality);
+      final preset = PdfCompressionPreset(
+        jpegQuality: state.colorImageQuality,
+        colorImageQuality: state.colorImageQuality,
+        greyImageQuality: state.greyImageQuality,
+        monoImageQuality: state.monoImageQuality,
+        maxImageLongSide: basePreset.maxImageLongSide,
+        maxDecodePixels: basePreset.maxDecodePixels,
+        jpegSkipBytesPerPixel: basePreset.jpegSkipBytesPerPixel,
+        deflateStreams: state.compressStreams,
+        unembedSimpleFonts: state.unembedSimpleFonts,
+        unembedComplexFonts: state.unembedComplexFonts,
+        unembedUnusualFonts: state.unembedUnusualFonts,
+        flatten: state.flattenLayers,
+      );
+
       final outcome = await PdfService.compressPdfFile(
         inputPath: inputPath,
         outputPath: workingPath,
         quality: quality,
+        preset: preset,
         onProgress: (progress) {
           if (state.selectedFilePath == inputPath) {
             state = state.copyWith(progress: 0.05 + progress * 0.8);

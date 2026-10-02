@@ -41,6 +41,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
+import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
 // ══════════════════════════════ Public models ═══════════════════════════════
 
@@ -54,9 +55,27 @@ class PdfCompressionPreset {
     this.minImageBytes = 4096,
     this.deflateStreams = true,
     this.timeBudget = const Duration(minutes: 3),
-  });
+    int? colorImageQuality,
+    int? greyImageQuality,
+    int? monoImageQuality,
+    this.unembedSimpleFonts = false,
+    this.unembedComplexFonts = false,
+    this.unembedUnusualFonts = false,
+    this.flatten = false,
+  })  : colorImageQuality = colorImageQuality ?? jpegQuality,
+        greyImageQuality = greyImageQuality ?? jpegQuality,
+        monoImageQuality = monoImageQuality ?? jpegQuality;
 
-  /// JPEG quality (1-100) used when re-encoding images.
+  /// Quality (1-100) used when re-encoding full-colour images.
+  final int colorImageQuality;
+
+  /// Quality (1-100) used when re-encoding grayscale images.
+  final int greyImageQuality;
+
+  /// Quality (1-100) used when downsampling/re-encoding mono (1-bit) images.
+  final int monoImageQuality;
+
+  /// JPEG quality (1-100) used when re-encoding images (legacy fallback).
   final int jpegQuality;
 
   /// Images longer than this on their longest side are downsampled.
@@ -79,40 +98,134 @@ class PdfCompressionPreset {
   /// Upper bound for the (CPU bound) image re-encoding phase.
   final Duration timeBudget;
 
+  /// Whether to unembed standard/simple 1-byte fonts (Type 1, TrueType).
+  final bool unembedSimpleFonts;
+
+  /// Whether to unembed composite/CID fonts (Type 0).
+  final bool unembedComplexFonts;
+
+  /// Whether to unembed Type 3 or uncommon fonts.
+  final bool unembedUnusualFonts;
+
+  /// Whether to flatten layers (OCGs) and annotations.
+  final bool flatten;
+
   /// Maps the feature's `qualityFactor` (0.15 … 0.8, higher = better quality)
   /// onto concrete compression settings.
-  static PdfCompressionPreset forQualityFactor(double qualityFactor) {
+  static PdfCompressionPreset forQualityFactor(
+    double qualityFactor, {
+    int? colorImageQuality,
+    int? greyImageQuality,
+    int? monoImageQuality,
+    bool? deflateStreams,
+    bool unembedSimpleFonts = false,
+    bool unembedComplexFonts = false,
+    bool unembedUnusualFonts = false,
+    bool flatten = false,
+  }) {
     if (qualityFactor >= 0.7) {
-      return const PdfCompressionPreset(
-        jpegQuality: 82,
+      return PdfCompressionPreset(
+        jpegQuality: colorImageQuality ?? 82,
+        colorImageQuality: colorImageQuality ?? 82,
+        greyImageQuality: greyImageQuality ?? 75,
+        monoImageQuality: monoImageQuality ?? 80,
         maxImageLongSide: 2600,
         maxDecodePixels: 32 * 1000 * 1000,
         jpegSkipBytesPerPixel: 0.60,
+        deflateStreams: deflateStreams ?? true,
+        unembedSimpleFonts: unembedSimpleFonts,
+        unembedComplexFonts: unembedComplexFonts,
+        unembedUnusualFonts: unembedUnusualFonts,
+        flatten: flatten,
       );
     }
     if (qualityFactor >= 0.4) {
-      return const PdfCompressionPreset(
-        jpegQuality: 70,
+      return PdfCompressionPreset(
+        jpegQuality: colorImageQuality ?? 70,
+        colorImageQuality: colorImageQuality ?? 70,
+        greyImageQuality: greyImageQuality ?? 60,
+        monoImageQuality: monoImageQuality ?? 60,
         maxImageLongSide: 2000,
         maxDecodePixels: 28 * 1000 * 1000,
         jpegSkipBytesPerPixel: 0.45,
+        deflateStreams: deflateStreams ?? true,
+        unembedSimpleFonts: unembedSimpleFonts,
+        unembedComplexFonts: unembedComplexFonts,
+        unembedUnusualFonts: unembedUnusualFonts,
+        flatten: flatten,
       );
     }
     if (qualityFactor >= 0.25) {
-      return const PdfCompressionPreset(
-        jpegQuality: 58,
+      return PdfCompressionPreset(
+        jpegQuality: colorImageQuality ?? 58,
+        colorImageQuality: colorImageQuality ?? 58,
+        greyImageQuality: greyImageQuality ?? 48,
+        monoImageQuality: monoImageQuality ?? 45,
         maxImageLongSide: 1500,
         maxDecodePixels: 24 * 1000 * 1000,
         jpegSkipBytesPerPixel: 0.35,
+        deflateStreams: deflateStreams ?? true,
+        unembedSimpleFonts: unembedSimpleFonts,
+        unembedComplexFonts: unembedComplexFonts,
+        unembedUnusualFonts: unembedUnusualFonts,
+        flatten: flatten,
       );
     }
-    return const PdfCompressionPreset(
-      jpegQuality: 45,
+    return PdfCompressionPreset(
+      jpegQuality: colorImageQuality ?? 45,
+      colorImageQuality: colorImageQuality ?? 45,
+      greyImageQuality: greyImageQuality ?? 35,
+      monoImageQuality: monoImageQuality ?? 30,
       maxImageLongSide: 1100,
       maxDecodePixels: 20 * 1000 * 1000,
       jpegSkipBytesPerPixel: 0.28,
+      deflateStreams: deflateStreams ?? true,
+      unembedSimpleFonts: unembedSimpleFonts,
+      unembedComplexFonts: unembedComplexFonts,
+      unembedUnusualFonts: unembedUnusualFonts,
+      flatten: flatten,
     );
   }
+
+  Map<String, Object?> toMap() => <String, Object?>{
+        'jpegQuality': jpegQuality,
+        'colorImageQuality': colorImageQuality,
+        'greyImageQuality': greyImageQuality,
+        'monoImageQuality': monoImageQuality,
+        'maxImageLongSide': maxImageLongSide,
+        'maxDecodePixels': maxDecodePixels,
+        'jpegSkipBytesPerPixel': jpegSkipBytesPerPixel,
+        'minImageBytes': minImageBytes,
+        'deflateStreams': deflateStreams,
+        'timeBudgetMs': timeBudget.inMilliseconds,
+        'unembedSimpleFonts': unembedSimpleFonts,
+        'unembedComplexFonts': unembedComplexFonts,
+        'unembedUnusualFonts': unembedUnusualFonts,
+        'flatten': flatten,
+      };
+
+  static PdfCompressionPreset fromMap(Map<String, Object?> map) =>
+      PdfCompressionPreset(
+        jpegQuality: (map['jpegQuality'] as num?)?.toInt() ?? 70,
+        colorImageQuality: (map['colorImageQuality'] as num?)?.toInt(),
+        greyImageQuality: (map['greyImageQuality'] as num?)?.toInt(),
+        monoImageQuality: (map['monoImageQuality'] as num?)?.toInt(),
+        maxImageLongSide: (map['maxImageLongSide'] as num?)?.toInt() ?? 2000,
+        maxDecodePixels:
+            (map['maxDecodePixels'] as num?)?.toInt() ?? (28 * 1000 * 1000),
+        jpegSkipBytesPerPixel:
+            (map['jpegSkipBytesPerPixel'] as num?)?.toDouble() ?? 0.45,
+        minImageBytes: (map['minImageBytes'] as num?)?.toInt() ?? 4096,
+        deflateStreams: map['deflateStreams'] as bool? ?? true,
+        timeBudget: Duration(
+          milliseconds:
+              (map['timeBudgetMs'] as num?)?.toInt() ?? 180000,
+        ),
+        unembedSimpleFonts: map['unembedSimpleFonts'] as bool? ?? false,
+        unembedComplexFonts: map['unembedComplexFonts'] as bool? ?? false,
+        unembedUnusualFonts: map['unembedUnusualFonts'] as bool? ?? false,
+        flatten: map['flatten'] as bool? ?? false,
+      );
 }
 
 /// Result of a compression run.
@@ -127,6 +240,8 @@ class PdfCompressionOutcome {
     this.imagesSkipped = 0,
     this.imagesUnsupported = 0,
     this.streamsDeflated = 0,
+    this.fontsUnembedded = 0,
+    this.layersFlattened = false,
     this.note,
   });
 
@@ -146,6 +261,12 @@ class PdfCompressionOutcome {
   final int imagesUnsupported;
 
   final int streamsDeflated;
+
+  /// Total font programs unembedded from the document.
+  final int fontsUnembedded;
+
+  /// Whether layers (Optional Content Groups) or annotations were flattened.
+  final bool layersFlattened;
 
   /// Optional human readable explanation of what happened, e.g. why no
   /// reduction was possible.
@@ -167,6 +288,8 @@ class PdfCompressionOutcome {
         'imagesSkipped': imagesSkipped,
         'imagesUnsupported': imagesUnsupported,
         'streamsDeflated': streamsDeflated,
+        'fontsUnembedded': fontsUnembedded,
+        'layersFlattened': layersFlattened,
         'note': note,
       };
 
@@ -182,6 +305,8 @@ class PdfCompressionOutcome {
         imagesUnsupported:
             (map['imagesUnsupported'] as num?)?.toInt() ?? 0,
         streamsDeflated: (map['streamsDeflated'] as num?)?.toInt() ?? 0,
+        fontsUnembedded: (map['fontsUnembedded'] as num?)?.toInt() ?? 0,
+        layersFlattened: map['layersFlattened'] as bool? ?? false,
         note: map['note'] as String?,
       );
 }
@@ -203,6 +328,7 @@ class PdfCompressionEngine {
     required String inputPath,
     required String outputPath,
     required double qualityFactor,
+    PdfCompressionPreset? preset,
     void Function(double progress)? onProgress,
     Duration timeout = const Duration(minutes: 10),
   }) async {
@@ -267,6 +393,7 @@ class PdfCompressionEngine {
             'inputPath': inputPath,
             'outputPath': outputPath,
             'qualityFactor': qualityFactor,
+            if (preset != null) 'preset': preset.toMap(),
           },
         ],
         onError: errorPort.sendPort,
@@ -319,10 +446,32 @@ class PdfCompressionEngine {
     onProgress?.call(0.02);
     final input = await inputFile.readAsBytes();
 
-    final rewriter = _PdfRewriter(input, preset);
+    var effectiveInput = input;
+    if (preset.flatten) {
+      try {
+        final syncDoc = syncfusion.PdfDocument(inputBytes: input);
+        try {
+          syncDoc.form.flattenAllFields();
+          for (var i = 0; i < syncDoc.pages.count; i++) {
+            syncDoc.pages[i].annotations.flattenAllAnnotations();
+          }
+          final flattened = await syncDoc.save();
+          if (flattened.isNotEmpty) {
+            effectiveInput = Uint8List.fromList(flattened);
+          }
+        } finally {
+          syncDoc.dispose();
+        }
+      } catch (_) {
+        // Flattening is best-effort.
+      }
+    }
+
+    final rewriter = _PdfRewriter(effectiveInput, preset);
     final rewritten = await rewriter.run(outputPath, onProgress: onProgress);
 
-    if (!rewritten.improved) {
+    final improved = rewritten.improved || (rewritten.outputBytes < inputSize);
+    if (!improved) {
       // Discard the (larger) rewrite and hand back a verbatim copy.
       await _copyFile(inputPath, outputPath);
       return PdfCompressionOutcome(
@@ -335,6 +484,8 @@ class PdfCompressionEngine {
         imagesSkipped: rewritten.imagesSkipped,
         imagesUnsupported: rewritten.imagesUnsupported,
         streamsDeflated: rewritten.streamsDeflated,
+        fontsUnembedded: rewritten.fontsUnembedded,
+        layersFlattened: rewritten.layersFlattened,
         note: rewritten.note ??
             'This PDF is already highly optimised; no smaller output was possible.',
       );
@@ -359,6 +510,8 @@ class PdfCompressionEngine {
       imagesSkipped: rewritten.imagesSkipped,
       imagesUnsupported: rewritten.imagesUnsupported,
       streamsDeflated: rewritten.streamsDeflated,
+      fontsUnembedded: rewritten.fontsUnembedded,
+      layersFlattened: rewritten.layersFlattened,
       note: rewritten.note,
     );
   }
@@ -405,12 +558,16 @@ Future<void> _pdfCompressionIsolateEntry(List<Object?> args) async {
   final sendPort = args[0] as SendPort;
   final params = (args[1] as Map).cast<String, Object?>();
   try {
+    final presetMap = params['preset'] as Map?;
+    final preset = presetMap != null
+        ? PdfCompressionPreset.fromMap(presetMap.cast<String, Object?>())
+        : PdfCompressionPreset.forQualityFactor(
+            (params['qualityFactor'] as num).toDouble(),
+          );
     final outcome = await PdfCompressionEngine.compressFile(
       inputPath: params['inputPath'] as String,
       outputPath: params['outputPath'] as String,
-      preset: PdfCompressionPreset.forQualityFactor(
-        (params['qualityFactor'] as num).toDouble(),
-      ),
+      preset: preset,
       onProgress: (progress) =>
           sendPort.send(<String, Object?>{'type': 'progress', 'value': progress}),
     );
@@ -533,6 +690,8 @@ class _DocObject {
   /// Present when the object was unpacked from an object stream: the exact
   /// bytes of the object body.
   final Uint8List? rawBytes;
+
+  bool get isStream => raw?.isStream ?? false;
 }
 
 class _DecodedImageResult {
@@ -585,6 +744,8 @@ class _RewriteStats {
     required this.imagesSkipped,
     required this.imagesUnsupported,
     required this.streamsDeflated,
+    this.fontsUnembedded = 0,
+    this.layersFlattened = false,
     this.note,
   });
 
@@ -596,6 +757,8 @@ class _RewriteStats {
   final int imagesSkipped;
   final int imagesUnsupported;
   final int streamsDeflated;
+  final int fontsUnembedded;
+  final bool layersFlattened;
   final String? note;
 }
 
@@ -1008,6 +1171,9 @@ class _PdfRewriter {
   final Map<int, _DocObject> _objects = <int, _DocObject>{};
   final List<_DocObject> _ordered = <_DocObject>[];
   final Map<int, _ModifiedStream> _modifications = <int, _ModifiedStream>{};
+  final Map<int, Map<String, Object?>> _modifiedNonStreamDicts =
+      <int, Map<String, Object?>>{};
+  final Set<int> _omittedObjects = <int>{};
 
   Map<String, Object?> _trailer = <String, Object?>{};
   _PdfRef? _rootRef;
@@ -1020,6 +1186,8 @@ class _PdfRewriter {
   int _imagesSkipped = 0;
   int _imagesUnsupported = 0;
   int _streamsDeflated = 0;
+  int _fontsUnembedded = 0;
+  bool _layersFlattened = false;
   String? _note;
 
   Future<_RewriteStats> run(
@@ -1046,6 +1214,10 @@ class _PdfRewriter {
     }
 
     _countPages();
+
+    // Process font unembedding and flattening prior to task execution
+    _processFontUnembedding();
+    _processFlatten();
 
     final tasks = _collectTasks();
     final partialPath = '$outputPath.part';
@@ -1124,6 +1296,8 @@ class _PdfRewriter {
       imagesSkipped: _imagesSkipped,
       imagesUnsupported: _imagesUnsupported,
       streamsDeflated: _streamsDeflated,
+      fontsUnembedded: _fontsUnembedded,
+      layersFlattened: _layersFlattened,
       note: _buildNote(),
     );
   }
@@ -1137,11 +1311,25 @@ class _PdfRewriter {
         imagesSkipped: 0,
         imagesUnsupported: 0,
         streamsDeflated: 0,
+        fontsUnembedded: 0,
+        layersFlattened: false,
         note: note,
       );
 
   String? _buildNote() {
     if (_note != null) return _note;
+    final notes = <String>[];
+    if (_fontsUnembedded > 0) {
+      notes.add(
+        '$_fontsUnembedded font program${_fontsUnembedded == 1 ? '' : 's'} unembedded',
+      );
+    }
+    if (_layersFlattened) {
+      notes.add('layers and annotations flattened');
+    }
+    if (notes.isNotEmpty) {
+      return notes.join('; ');
+    }
     if (_imagesUnsupported > 0 && _imagesRecompressed == 0) {
       return 'Some images use a format or colour space that cannot be safely '
           'recompressed (JPEG 2000, JBIG2, CCITT or a device colour space); '
@@ -1562,11 +1750,124 @@ class _PdfRewriter {
     return result;
   }
 
+  // ─── Font Unembedding & Flattening ──────────────────────────────────────
+
+  void _processFontUnembedding() {
+    if (!preset.unembedSimpleFonts &&
+        !preset.unembedComplexFonts &&
+        !preset.unembedUnusualFonts) {
+      return;
+    }
+
+    for (final object in _ordered) {
+      final type = object.dict['Type'];
+      final isFont = (type is _PdfName && type.name == 'Font') ||
+          object.dict.containsKey('BaseFont');
+      if (!isFont) continue;
+
+      final subtype = _resolve(object.dict['Subtype']);
+      final subtypeName = subtype is _PdfName ? subtype.name : '';
+
+      if (preset.unembedSimpleFonts &&
+          (subtypeName == 'Type1' ||
+              subtypeName == 'MMType1' ||
+              subtypeName == 'TrueType')) {
+        _unembedDescriptor(object.dict['FontDescriptor']);
+      } else if (preset.unembedComplexFonts && subtypeName == 'Type0') {
+        final descendants = _resolve(object.dict['DescendantFonts']);
+        if (descendants is List) {
+          for (final desc in descendants) {
+            final descRef = desc is _PdfRef ? desc : null;
+            final descObj = descRef != null ? _objects[descRef.number] : null;
+            if (descObj != null) {
+              _unembedDescriptor(descObj.dict['FontDescriptor']);
+            }
+          }
+        }
+      } else if (preset.unembedUnusualFonts && subtypeName == 'Type3') {
+        _unembedDescriptor(object.dict['FontDescriptor']);
+        final charProcs = _resolve(object.dict['CharProcs']);
+        if (charProcs is Map) {
+          for (final entry in charProcs.values) {
+            if (entry is _PdfRef) {
+              _omittedObjects.add(entry.number);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  void _unembedDescriptor(Object? descriptorRef) {
+    if (descriptorRef is! _PdfRef) return;
+    final descObj = _objects[descriptorRef.number];
+    if (descObj == null) return;
+
+    var modified = false;
+    final newDict = Map<String, Object?>.from(descObj.dict);
+
+    for (final key in const ['FontFile', 'FontFile2', 'FontFile3']) {
+      if (newDict.containsKey(key)) {
+        final fileVal = newDict[key];
+        if (fileVal is _PdfRef) {
+          _omittedObjects.add(fileVal.number);
+        }
+        newDict.remove(key);
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      _modifiedNonStreamDicts[descriptorRef.number] = newDict;
+      _fontsUnembedded++;
+    }
+  }
+
+  void _processFlatten() {
+    if (!preset.flatten) return;
+
+    if (_rootRef != null) {
+      final rootObj = _objects[_rootRef!.number];
+      if (rootObj != null && rootObj.dict.containsKey('OCProperties')) {
+        final newCatalog = Map<String, Object?>.from(rootObj.dict);
+        newCatalog.remove('OCProperties');
+        _modifiedNonStreamDicts[_rootRef!.number] = newCatalog;
+        _layersFlattened = true;
+      }
+    }
+
+    for (final object in _ordered) {
+      if (object.dict.containsKey('OC')) {
+        final newDict = Map<String, Object?>.from(object.dict);
+        newDict.remove('OC');
+        if (object.isStream) {
+          final mod = _modifications[object.number];
+          if (mod != null) {
+            final modDict = Map<String, Object?>.from(mod.dict);
+            modDict.remove('OC');
+            _modifications[object.number] = _ModifiedStream(modDict, mod.data);
+          } else if (object.raw?.dataStart != null) {
+            final source = Uint8List.sublistView(
+              input,
+              object.raw!.dataStart!,
+              object.raw!.dataEnd!,
+            );
+            _modifications[object.number] = _ModifiedStream(newDict, source);
+          }
+        } else {
+          _modifiedNonStreamDicts[object.number] = newDict;
+        }
+        _layersFlattened = true;
+      }
+    }
+  }
+
   // ─── Stream tasks ──────────────────────────────────────────────────────
 
   List<_StreamTask> _collectTasks() {
     final tasks = <_StreamTask>[];
     for (final object in _ordered) {
+      if (_omittedObjects.contains(object.number)) continue;
       final raw = object.raw;
       if (raw == null || !raw.isStream) continue;
       final type = object.dict['Type'];
@@ -1738,6 +2039,88 @@ class _PdfRewriter {
       return false;
     }
 
+    final bits = _firstInt(object.dict['BitsPerComponent']) ?? 8;
+    final colorSpace = _resolveColorSpace(object.dict['ColorSpace']);
+
+    final isMono = bits == 1 || (image.numChannels == 1 && _isBilevel(image));
+    final isGrey = !isMono &&
+        (colorSpace?.kind == _ColorSpaceKind.gray ||
+            image.numChannels == 1 ||
+            _isGrayscale(image));
+
+    // Handle 1-bit Mono images with FlateDecode rather than lossy JPEG
+    if (isMono) {
+      final maxMonoSide = (preset.maxImageLongSide *
+              (preset.monoImageQuality / 100).clamp(0.3, 1.0))
+          .round();
+      final monoLongSide = math.max(image.width, image.height);
+      if (monoLongSide > maxMonoSide) {
+        try {
+          if (image.width >= image.height) {
+            image = img.copyResize(
+              image,
+              width: maxMonoSide,
+              interpolation: img.Interpolation.average,
+            );
+          } else {
+            image = img.copyResize(
+              image,
+              height: maxMonoSide,
+              interpolation: img.Interpolation.average,
+            );
+          }
+        } catch (_) {
+          _imagesSkipped++;
+          return false;
+        }
+      }
+
+      if (image.width <= 0 || image.height <= 0) {
+        _imagesSkipped++;
+        return false;
+      }
+
+      final stride = (image.width + 7) ~/ 8;
+      final packed = Uint8List(stride * image.height);
+      for (var y = 0; y < image.height; y++) {
+        final rowOffset = y * stride;
+        for (var x = 0; x < image.width; x++) {
+          final p = image.getPixel(x, y);
+          final isWhite = p.luminanceNormalized >= 0.5;
+          if (isWhite) {
+            packed[rowOffset + (x >> 3)] |= (1 << (7 - (x & 7)));
+          }
+        }
+      }
+
+      Uint8List compressed;
+      try {
+        compressed = ZLibEncoder().encodeBytes(packed, level: 9);
+      } catch (_) {
+        _imagesSkipped++;
+        return false;
+      }
+
+      if (compressed.length + 32 >= source.length) {
+        _imagesSkipped++;
+        return false;
+      }
+
+      final dict = Map<String, Object?>.from(object.dict);
+      dict['Width'] = image.width;
+      dict['Height'] = image.height;
+      dict['BitsPerComponent'] = 1;
+      dict['ColorSpace'] = const _PdfName('DeviceGray');
+      dict['Filter'] = const _PdfName('FlateDecode');
+      dict.remove('DecodeParms');
+      dict.remove('Decode');
+      dict['Length'] = compressed.length;
+
+      _modifications[object.number] = _ModifiedStream(dict, compressed);
+      _imagesRecompressed++;
+      return true;
+    }
+
     // The JPEG encoder always emits three-component YCbCr data, so the output
     // colour space must be DeviceRGB regardless of the source encoding.
     if (image.numChannels != 3) {
@@ -1776,9 +2159,11 @@ class _PdfRewriter {
       return false;
     }
 
+    final quality = isGrey ? preset.greyImageQuality : preset.colorImageQuality;
+
     Uint8List encoded;
     try {
-      encoded = img.encodeJpg(image, quality: preset.jpegQuality);
+      encoded = img.encodeJpg(image, quality: quality);
     } catch (_) {
       _imagesSkipped++;
       return false;
@@ -1802,6 +2187,31 @@ class _PdfRewriter {
 
     _modifications[object.number] = _ModifiedStream(dict, encoded);
     _imagesRecompressed++;
+    return true;
+  }
+
+  bool _isBilevel(img.Image image) {
+    final stepX = math.max(1, image.width ~/ 16);
+    final stepY = math.max(1, image.height ~/ 16);
+    for (var y = 0; y < image.height; y += stepY) {
+      for (var x = 0; x < image.width; x += stepX) {
+        final lum = image.getPixel(x, y).luminanceNormalized;
+        if (lum > 0.05 && lum < 0.95) return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isGrayscale(img.Image image) {
+    if (image.numChannels == 1) return true;
+    final stepX = math.max(1, image.width ~/ 16);
+    final stepY = math.max(1, image.height ~/ 16);
+    for (var y = 0; y < image.height; y += stepY) {
+      for (var x = 0; x < image.width; x += stepX) {
+        final p = image.getPixel(x, y);
+        if ((p.r - p.g).abs() > 4 || (p.g - p.b).abs() > 4) return false;
+      }
+    }
     return true;
   }
 
@@ -2410,6 +2820,7 @@ class _PdfRewriter {
 
   bool _shouldEmit(_DocObject object) {
     if (object.number <= 0) return false;
+    if (_omittedObjects.contains(object.number)) return false;
     final type = object.dict['Type'];
     if (type is _PdfName) {
       if (type.name == 'ObjStm' || type.name == 'XRef') return false;
@@ -2419,6 +2830,8 @@ class _PdfRewriter {
   }
 
   void _writeObject(_FileWriter writer, _DocObject object) {
+    if (_omittedObjects.contains(object.number)) return;
+
     final modification = _modifications[object.number];
     if (modification != null) {
       final header = StringBuffer()
@@ -2428,6 +2841,16 @@ class _PdfRewriter {
       writer.writeAscii(header.toString());
       writer.writeBytes(modification.data);
       writer.writeAscii('\nendstream\nendobj\n');
+      return;
+    }
+
+    final nonStreamMod = _modifiedNonStreamDicts[object.number];
+    if (nonStreamMod != null) {
+      final header = StringBuffer()
+        ..write('${object.number} ${object.generation} obj\n');
+      _writeValue(header, nonStreamMod);
+      header.write('\nendobj\n');
+      writer.writeAscii(header.toString());
       return;
     }
 

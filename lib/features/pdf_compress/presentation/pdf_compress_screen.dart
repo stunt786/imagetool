@@ -9,6 +9,7 @@ import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/pdf_compress_state.dart';
 import '../notifiers/pdf_compress_notifier.dart';
+import '../widgets/compression_settings_panel.dart';
 
 class PdfCompressScreen extends ConsumerStatefulWidget {
   const PdfCompressScreen({super.key});
@@ -173,9 +174,27 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _CompressionLevelCards(
-                selected: state.compressionLevel,
+              CompressionSettingsPanel(
+                level: state.compressionLevel,
                 onLevelChanged: notifier.setCompressionLevel,
+                colorQuality: state.colorImageQuality,
+                onColorQualityChanged: notifier.setColorImageQuality,
+                greyQuality: state.greyImageQuality,
+                onGreyQualityChanged: notifier.setGreyImageQuality,
+                monoQuality: state.monoImageQuality,
+                onMonoQualityChanged: notifier.setMonoImageQuality,
+                compressStreams: state.compressStreams,
+                onCompressStreamsChanged: notifier.setCompressStreams,
+                unembedSimpleFonts: state.unembedSimpleFonts,
+                onUnembedSimpleFontsChanged: notifier.setUnembedSimpleFonts,
+                unembedComplexFonts: state.unembedComplexFonts,
+                onUnembedComplexFontsChanged: notifier.setUnembedComplexFonts,
+                unembedUnusualFonts: state.unembedUnusualFonts,
+                onUnembedUnusualFontsChanged: notifier.setUnembedUnusualFonts,
+                flattenLayers: state.flattenLayers,
+                onFlattenLayersChanged: notifier.setFlattenLayers,
+                isAdvancedExpanded: state.isAdvancedExpanded,
+                onToggleAdvanced: notifier.toggleAdvancedExpanded,
               ),
               const SizedBox(height: 20),
               Container(
@@ -500,146 +519,3 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
   }
 }
 
-class _CompressionLevelCards extends StatelessWidget {
-  const _CompressionLevelCards({
-    required this.selected,
-    required this.onLevelChanged,
-  });
-
-  final CompressionLevel selected;
-  final ValueChanged<CompressionLevel> onLevelChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Flexible(
-              child: Text(
-                'Compression Level',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.4,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: scheme.primaryContainer,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                selected.label,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onPrimaryContainer,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 3.0,
-          ),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: CompressionLevel.values.length,
-          itemBuilder: (context, index) {
-            final level = CompressionLevel.values[index];
-            final isSelected = level == selected;
-            return GestureDetector(
-              onTap: () => onLevelChanged(level),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? scheme.primaryContainer
-                      : scheme.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected
-                        ? scheme.primary.withValues(alpha: 0.5)
-                        : scheme.outlineVariant.withValues(alpha: 0.6),
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: scheme.primary.withValues(alpha: 0.12),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                      : [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? scheme.primary.withValues(alpha: 0.15)
-                              : scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          isSelected
-                              ? Icons.check_circle_rounded
-                              : Icons.compress_rounded,
-                          size: 16,
-                          color: isSelected
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          level.label,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                      ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle,
-                          size: 16,
-                          color: scheme.primary,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
