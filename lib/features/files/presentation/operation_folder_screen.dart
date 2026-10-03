@@ -679,14 +679,23 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
   Widget _buildSelectionBottomBar(List<AppFileItem> files) {
     final selectedCount = _selected.length;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     return SafeArea(
       top: false,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        decoration: const BoxDecoration(
-          color: Color(0xFF181B20),
-          border: Border(top: BorderSide(color: Colors.white12)),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF181B20) : scheme.surfaceContainerHighest,
+          border: Border(
+            top: BorderSide(
+              color: isDark
+                  ? Colors.white12
+                  : scheme.outlineVariant.withValues(alpha: 0.3),
+            ),
+          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1057,12 +1066,16 @@ class _SelectionBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final enabled = onTap != null;
     final color = !enabled
-        ? Colors.white24
+        ? (isDark ? Colors.white24 : scheme.onSurface.withValues(alpha: 0.38))
         : isDestructive
-            ? const Color(0xFFFF5252)
-            : Colors.white;
+            ? (isDark ? const Color(0xFFFF5252) : scheme.error)
+            : (isDark ? Colors.white : scheme.onSurface);
 
     return Expanded(
       child: InkWell(

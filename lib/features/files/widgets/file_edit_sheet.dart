@@ -930,7 +930,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                         Text(
                           '${_formatSize(widget.item.sizeBytes)} · ${_formatDate(widget.item.createdAt)}',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white60,
+                            color: isDark ? Colors.white60 : scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -938,7 +938,10 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                   ),
                   IconButton(
                     tooltip: 'Close',
-                    icon: const Icon(Icons.close_rounded),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: isDark ? Colors.white70 : scheme.onSurfaceVariant,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -1071,7 +1074,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                 color: isDark
                     ? const Color(0xFF14161C)
                     : scheme.surfaceContainerHighest,
-                border: const Border(top: BorderSide(color: Colors.white10)),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? Colors.white10
+                        : scheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1232,7 +1241,12 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                       ),
                     ),
                   const SizedBox(height: 14),
-                  const Divider(height: 1, color: Colors.white12),
+                  Divider(
+                    height: 1,
+                    color: isDark
+                        ? Colors.white12
+                        : scheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
                   const SizedBox(height: 10),
                   // File operations row
                   Row(
@@ -1342,7 +1356,14 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive ? const Color(0xFFFF5252) : Colors.white;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final color = isDestructive
+        ? (isDark ? const Color(0xFFFF5252) : scheme.error)
+        : (isDark ? Colors.white : scheme.onSurface);
+
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -1355,7 +1376,11 @@ class _ActionButton extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(fontSize: 11, color: color),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
             ),
           ],
         ),

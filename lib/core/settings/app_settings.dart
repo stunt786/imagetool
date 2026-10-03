@@ -328,8 +328,8 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
   }
 
   Future<void> setCompletedOnboarding(bool value) async {
-    await AppSettingsState.persistCompletedOnboarding(value);
     state = state.copyWith(hasCompletedOnboarding: value);
+    await AppSettingsState.persistCompletedOnboarding(value);
   }
 
   Future<void> setEnableGlobalWatermark(bool value) async {

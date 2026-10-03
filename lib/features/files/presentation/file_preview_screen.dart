@@ -73,15 +73,21 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final total = _items.length;
     final isPdf = _currentItem.fileName.toLowerCase().endsWith('.pdf');
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: isDark ? Colors.black : scheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: isDark ? Colors.black : scheme.surface,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
+          icon: Icon(
+            Icons.close_rounded,
+            color: isDark ? Colors.white : scheme.onSurface,
+          ),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
@@ -89,8 +95,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
           children: [
             Text(
               _currentItem.fileName,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isDark ? Colors.white : scheme.onSurface,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
               ),
@@ -109,7 +115,9 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
                   Text(
                     _currentItem.timeAgo,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : scheme.onSurfaceVariant,
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
@@ -121,7 +129,10 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_outlined, color: Colors.white),
+            icon: Icon(
+              Icons.edit_outlined,
+              color: isDark ? Colors.white : scheme.onSurface,
+            ),
             tooltip: 'Rename',
             onPressed: _renameCurrentFile,
           ),
@@ -130,13 +141,15 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : scheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '${_currentIndex + 1} of $total',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: isDark ? Colors.white : scheme.onSurface,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -156,6 +169,10 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
   }
 
   Widget _buildBottomBar(bool isPdf) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final actions = <_ActionSpec>[
       _ActionSpec(
         icon: isPdf ? Icons.file_upload_outlined : Icons.save_alt_rounded,
@@ -187,7 +204,7 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       _ActionSpec(
         icon: Icons.delete_outline_rounded,
         label: 'Delete',
-        color: Colors.redAccent,
+        color: isDark ? Colors.redAccent : scheme.error,
         onTap: _deleteFile,
       ),
     ];
@@ -199,9 +216,15 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         top: 10,
         bottom: MediaQuery.of(context).padding.bottom + 10,
       ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1A1A) : scheme.surfaceContainerHighest,
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? const Color(0xFF2A2A2A)
+                : scheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -766,7 +789,11 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clr = color ?? Colors.white;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final clr = color ?? (isDark ? Colors.white : scheme.onSurface);
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
@@ -783,7 +810,7 @@ class _ActionButton extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  color: clr.withValues(alpha: 0.8),
+                  color: clr.withValues(alpha: isDark ? 0.8 : 0.9),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),

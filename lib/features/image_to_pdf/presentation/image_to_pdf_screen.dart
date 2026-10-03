@@ -374,8 +374,10 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             ),
           );
       notifier.clearAll();
-      _showPDFSavedDialog(context, pdfPath);
-      AppReviewService.instance.notifyOperationCompleted(context);
+      await _showPDFSavedDialog(context, pdfPath);
+      if (context.mounted) {
+        await AppReviewService.instance.notifyOperationCompleted(context);
+      }
     } else {
       final state = ref.read(imageToPdfProvider);
       if (!context.mounted) return;
@@ -390,7 +392,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     }
   }
 
-  void _showPDFSavedDialog(BuildContext context, String pdfPath) {
+  Future<void> _showPDFSavedDialog(BuildContext context, String pdfPath) async {
     final fileName = pdfPath.split('/').last;
     int fileSize = 0;
     try {
@@ -402,12 +404,15 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     final sizeStr =
         fileSize > 0 ? '${PdfService.formatFileSize(fileSize)} · ' : '';
 
-    showDialog(
+    await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
         Future.delayed(const Duration(milliseconds: 2500), () {
-          if (dialogCtx.mounted && Navigator.of(dialogCtx).canPop()) {
-            Navigator.of(dialogCtx).pop();
+          if (dialogCtx.mounted) {
+            final route = ModalRoute.of(dialogCtx);
+            if (route != null && route.isCurrent) {
+              Navigator.of(dialogCtx).pop();
+            }
           }
         });
         return AlertDialog(
@@ -460,12 +465,18 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              if (dialogCtx.mounted && Navigator.of(dialogCtx).canPop()) {
+                Navigator.of(dialogCtx).pop();
+              }
+            },
             child: const Text('Close'),
           ),
           FilledButton.icon(
             onPressed: () async {
-              Navigator.of(context).pop();
+              if (dialogCtx.mounted && Navigator.of(dialogCtx).canPop()) {
+                Navigator.of(dialogCtx).pop();
+              }
               await Share.shareXFiles([XFile(pdfPath)]);
             },
             icon: const Icon(Icons.share, size: 18),

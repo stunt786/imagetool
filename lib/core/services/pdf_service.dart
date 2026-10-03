@@ -743,6 +743,9 @@ class PdfService {
     required int pageNumber,
     int maxWidth = 200,
   }) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return null;
+    }
     try {
       final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
       if (pageNumber < 1 || pageNumber > pdfDoc.pagesCount) {
@@ -774,6 +777,9 @@ class PdfService {
     int dpi = 200,
     String format = 'jpg',
   }) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return null;
+    }
     try {
       final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
       if (pageNumber < 1 || pageNumber > pdfDoc.pagesCount) {

@@ -86,11 +86,7 @@ class _FeatureHighlightOverlayState
   }
 
   void _finishTour() {
-    _fadeController.reverse().then((_) {
-      if (mounted) {
-        ref.read(appSettingsProvider.notifier).setCompletedOnboarding(true);
-      }
-    });
+    ref.read(appSettingsProvider.notifier).setCompletedOnboarding(true);
   }
 
   void _nextStep(int totalSteps) {
@@ -254,174 +250,184 @@ class _FeatureHighlightOverlayState
     required int totalSteps,
   }) {
     final showCardAbove = step.arrowAbove ||
-        (targetRect.bottom + 220 > screenSize.height && targetRect.top > 250);
+        (targetRect.bottom + 260 > screenSize.height && targetRect.top > 260);
 
     final cardWidth = math.min(340.0, screenSize.width - 32);
     final targetCenterX = targetRect.center.dx;
     final cardLeft = (targetCenterX - cardWidth / 2)
         .clamp(16.0, screenSize.width - cardWidth - 16.0);
 
-    final cardTop = showCardAbove
-        ? math.max(48.0, targetRect.top - 200)
-        : math.min(screenSize.height - 240, targetRect.bottom + 16);
+    const arrowWidth = 22.0;
+    final arrowLeftInCard = (targetCenterX - cardLeft - arrowWidth / 2)
+        .clamp(24.0, cardWidth - arrowWidth - 24.0);
 
-    return Positioned(
-      left: cardLeft,
-      top: cardTop,
-      width: cardWidth,
+    final cardContent = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2230),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFF38BDF8).withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+            blurRadius: 18,
+          ),
+        ],
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (!showCardAbove)
-            // Arrow pointing UP to target above card
-            Padding(
-              padding: EdgeInsets.only(
-                left: (targetCenterX - cardLeft - 10).clamp(16.0, cardWidth - 36),
-              ),
-              child: const Align(
-                alignment: Alignment.centerLeft,
-                child: _PointingArrow(pointingUp: true),
-              ),
-            ),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E2230),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                BoxShadow(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                  blurRadius: 18,
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'STEP ${currentStepIndex + 1} OF $totalSteps',
-                        style: const TextStyle(
-                          color: Color(0xFF38BDF8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _finishTour,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: Colors.white60,
-                      ),
-                      child: const Text('Skip Tour',
-                          style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.25),
-                      ),
-                      child: Icon(step.icon,
-                          color: const Color(0xFF818CF8), size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        step.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  step.description,
+                child: Text(
+                  'STEP ${currentStepIndex + 1} OF $totalSteps',
                   style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 13,
-                    height: 1.45,
+                    color: Color(0xFF38BDF8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
                   ),
                 ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _nextStep(totalSteps),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1A73E8),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 4,
-                    ),
-                    icon: Icon(
-                      currentStepIndex == totalSteps - 1
-                          ? Icons.check_rounded
-                          : Icons.arrow_forward_rounded,
-                      size: 16,
-                    ),
-                    label: Text(
-                      currentStepIndex == totalSteps - 1
-                          ? 'Got it!'
-                          : 'Next',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+              ),
+              TextButton(
+                onPressed: _finishTour,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: Colors.white60,
+                ),
+                child: const Text('Skip Tour',
+                    style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+                ),
+                child: Icon(step.icon,
+                    color: const Color(0xFF818CF8), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  step.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            step.description,
+            style: const TextStyle(
+              color: Color(0xFFCBD5E1),
+              fontSize: 13,
+              height: 1.42,
             ),
           ),
-          if (showCardAbove)
-            // Arrow pointing DOWN to target below card
-            Padding(
-              padding: EdgeInsets.only(
-                left: (targetCenterX - cardLeft - 10).clamp(16.0, cardWidth - 36),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: () => _nextStep(totalSteps),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A73E8),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 4,
               ),
-              child: const Align(
-                alignment: Alignment.centerLeft,
-                child: _PointingArrow(pointingUp: false),
+              icon: Icon(
+                currentStepIndex == totalSteps - 1
+                    ? Icons.check_rounded
+                    : Icons.arrow_forward_rounded,
+                size: 16,
+              ),
+              label: Text(
+                currentStepIndex == totalSteps - 1
+                    ? 'Got it!'
+                    : 'Next',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
+          ),
         ],
       ),
     );
+
+    if (showCardAbove) {
+      return Positioned(
+        left: cardLeft,
+        bottom: math.max(16.0, (screenSize.height - targetRect.top) + 12.0),
+        width: cardWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            cardContent,
+            Transform.translate(
+              offset: const Offset(0, -1),
+              child: Padding(
+                padding: EdgeInsets.only(left: arrowLeftInCard),
+                child: const _PointingArrow(pointingUp: false),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Positioned(
+        left: cardLeft,
+        top: targetRect.bottom + 12.0,
+        width: cardWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Transform.translate(
+              offset: const Offset(0, 1),
+              child: Padding(
+                padding: EdgeInsets.only(left: arrowLeftInCard),
+                child: const _PointingArrow(pointingUp: true),
+              ),
+            ),
+            cardContent,
+          ],
+        ),
+      );
+    }
   }
 }
 
@@ -433,11 +439,11 @@ class _PointingArrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(20, 10),
+      size: const Size(22, 12),
       painter: _ArrowPainter(
         pointingUp: pointingUp,
         color: const Color(0xFF1E2230),
-        borderColor: const Color(0xFF38BDF8).withValues(alpha: 0.5),
+        borderColor: const Color(0xFF38BDF8).withValues(alpha: 0.8),
       ),
     );
   }
@@ -456,28 +462,41 @@ class _ArrowPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = Path();
+    final fillPath = Path();
+    final strokePath = Path();
+
     if (pointingUp) {
-      path.moveTo(0, size.height);
-      path.lineTo(size.width / 2, 0);
-      path.lineTo(size.width, size.height);
+      fillPath.moveTo(0, size.height);
+      fillPath.lineTo(size.width / 2, 0);
+      fillPath.lineTo(size.width, size.height);
+      fillPath.close();
+
+      strokePath.moveTo(0, size.height);
+      strokePath.lineTo(size.width / 2, 0);
+      strokePath.lineTo(size.width, size.height);
     } else {
-      path.moveTo(0, 0);
-      path.lineTo(size.width / 2, size.height);
-      path.lineTo(size.width, 0);
+      fillPath.moveTo(0, 0);
+      fillPath.lineTo(size.width / 2, size.height);
+      fillPath.lineTo(size.width, 0);
+      fillPath.close();
+
+      strokePath.moveTo(0, 0);
+      strokePath.lineTo(size.width / 2, size.height);
+      strokePath.lineTo(size.width, 0);
     }
-    path.close();
 
     final fillPaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
-    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(fillPath, fillPaint);
 
     final borderPaint = Paint()
       ..color = borderColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawPath(path, borderPaint);
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(strokePath, borderPaint);
   }
 
   @override

@@ -102,6 +102,12 @@ class AppReviewService {
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!context.mounted) return;
 
+    final navigator = Navigator.maybeOf(context);
+    if (navigator == null || !navigator.mounted) return;
+
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isActive) return;
+
     await prefs.setInt(_keyLastPrompt, now.millisecondsSinceEpoch);
     if (!context.mounted) return;
     await showRatingDialog(context);
@@ -110,6 +116,11 @@ class AppReviewService {
   /// Shows the "Rate this app" dialog.
   Future<void> showRatingDialog(BuildContext context) async {
     if (!context.mounted) return;
+    final navigator = Navigator.maybeOf(context);
+    if (navigator == null || !navigator.mounted) return;
+
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isActive) return;
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -119,6 +130,7 @@ class AppReviewService {
       barrierDismissible: true,
       builder: (dialogContext) {
         return AlertDialog(
+          scrollable: true,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -163,11 +175,15 @@ class AppReviewService {
               ),
             ],
           ),
-          actionsAlignment: MainAxisAlignment.spaceEvenly,
+          actionsAlignment: MainAxisAlignment.center,
+          actionsOverflowButtonSpacing: 8.0,
+          actionsOverflowDirection: VerticalDirection.down,
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
+                  Navigator.of(dialogContext).pop();
+                }
               },
               child: Text(
                 'Remind Later',
@@ -176,7 +192,9 @@ class AppReviewService {
             ),
             FilledButton.icon(
               onPressed: () async {
-                Navigator.of(dialogContext).pop();
+                if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
+                  Navigator.of(dialogContext).pop();
+                }
                 await markAsRated();
                 await openPlayStore();
               },

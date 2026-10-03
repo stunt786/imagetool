@@ -62,6 +62,46 @@ void main() {
 
     expect(find.text('Skip Tour'), findsOneWidget);
     expect(find.text('STEP 1 OF 3'), findsOneWidget);
+
+    // Tap Next to navigate to Step 2 (Smart Document Scanner)
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STEP 2 OF 3'), findsOneWidget);
+    expect(find.text('Smart Document Scanner'), findsOneWidget);
+
+    // Verify card bottom is above the Camera button (never covers the menu)
+    final cardFinderStep2 = find.text('Smart Document Scanner');
+    final cardBottomStep2 = tester.getBottomLeft(cardFinderStep2).dy;
+    final cameraTop = tester.getTopLeft(find.bySemanticsLabel('Camera')).dy;
+    expect(
+      cardBottomStep2,
+      lessThan(cameraTop),
+      reason: 'Tooltip message must be positioned above the camera button, not covering it',
+    );
+
+    // Tap Next to navigate to Step 3 (Files & PDF Hub)
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STEP 3 OF 3'), findsOneWidget);
+    expect(find.text('Files & PDF Hub'), findsOneWidget);
+
+    // Verify card bottom is above the Files button (never covers the menu)
+    final cardFinderStep3 = find.text('Files & PDF Hub');
+    final cardBottomStep3 = tester.getBottomLeft(cardFinderStep3).dy;
+    final filesTop = tester.getTopLeft(find.bySemanticsLabel('Files')).dy;
+    expect(
+      cardBottomStep3,
+      lessThan(filesTop),
+      reason: 'Tooltip message must be positioned above the files button, not covering it',
+    );
+
+    // Tap Got it! to finish tour
+    await tester.tap(find.text('Got it!'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STEP 3 OF 3'), findsNothing);
   });
 }
 

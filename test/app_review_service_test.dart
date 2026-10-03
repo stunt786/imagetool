@@ -159,5 +159,120 @@ void main() {
 
       expect(await service.hasRated(), isTrue);
     });
+
+    testWidgets('Rating dialog does not throw or overflow on narrow screen or large text scale', (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(320, 568),
+              textScaler: TextScaler.linear(1.3),
+            ),
+            child: Builder(
+              builder: (context) {
+                return Scaffold(
+                  body: ElevatedButton(
+                    onPressed: () => AppReviewService.instance.showRatingDialog(context),
+                    child: const Text('Show Dialog'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show Dialog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enjoying PixelTools?'), findsOneWidget);
+      expect(find.text('Rate Now'), findsOneWidget);
+      expect(find.text('Remind Later'), findsOneWidget);
+
+      await tester.tap(find.text('Remind Later'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Rating dialog does not overflow in landscape orientation', (tester) async {
+      tester.view.physicalSize = const Size(640, 320);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(640, 320),
+            ),
+            child: Builder(
+              builder: (context) {
+                return Scaffold(
+                  body: ElevatedButton(
+                    onPressed: () => AppReviewService.instance.showRatingDialog(context),
+                    child: const Text('Show Dialog'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show Dialog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enjoying PixelTools?'), findsOneWidget);
+      expect(find.text('Rate Now'), findsOneWidget);
+
+      await tester.tap(find.text('Remind Later'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Rating dialog does not overflow with 2.0x accessibility text scale', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 640),
+              textScaler: TextScaler.linear(2.0),
+            ),
+            child: Builder(
+              builder: (context) {
+                return Scaffold(
+                  body: ElevatedButton(
+                    onPressed: () => AppReviewService.instance.showRatingDialog(context),
+                    child: const Text('Show Dialog'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show Dialog'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Enjoying PixelTools?'), findsOneWidget);
+      expect(find.text('Rate Now'), findsOneWidget);
+
+      await tester.tap(find.text('Remind Later'));
+      await tester.pumpAndSettle();
+    });
   });
 }
+
