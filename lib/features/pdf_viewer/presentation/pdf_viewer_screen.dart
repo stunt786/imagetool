@@ -281,7 +281,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not share this PDF.')),
+        const SnackBar(content: Text('Could not share this PDF.'), duration: Duration(seconds: 2)),
       );
     }
   }
@@ -402,6 +402,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         SnackBar(
           content: Text('Page $pageNum saved to Gallery'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
           action: SnackBarAction(
             label: 'Share',
             onPressed: () {
@@ -419,6 +420,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         SnackBar(
           content: Text('Could not save page image: $e'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -480,6 +482,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         SnackBar(
           content: Text('$saved page image(s) saved to Gallery'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
           action: savedFiles.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
@@ -495,6 +498,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         SnackBar(
           content: Text('Could not save pages: $e'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
         ),
       );
     }

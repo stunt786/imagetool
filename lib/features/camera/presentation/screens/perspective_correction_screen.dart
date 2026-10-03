@@ -297,6 +297,7 @@ class _PerspectiveCorrectionScreenState
             const SnackBar(
               content: Text('Correction failed'),
               behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
             ),
           );
         }
@@ -308,6 +309,7 @@ class _PerspectiveCorrectionScreenState
           SnackBar(
             content: Text('Error: $e'),
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
         );
       }

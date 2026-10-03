@@ -49,6 +49,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
           SnackBar(
             content: Text(next.errorMessage!),
             backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 2),
           ),
         );
         ref.read(pdfCompressProvider.notifier).clearError();

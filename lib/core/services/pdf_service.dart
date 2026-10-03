@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
+import '../utils/file_type_detector.dart';
 import 'pdf_compression_engine.dart';
 import 'pdf_ocr_service.dart';
 
@@ -465,6 +466,110 @@ class PdfService {
 
     final bytes = await doc.save();
     doc.dispose();
+    final outFile = File(outPath);
+    await outFile.writeAsBytes(bytes, flush: true);
+    return outPath;
+  }
+
+  /// Creates a single unified multi-page PDF from a mixed list of image and PDF file paths.
+  /// For PDFs, all pages are preserved and merged in order.
+  /// For images, each image is added as a full-page entry with matching aspect ratio/dimensions.
+  Future<String> createPdfFromMixedItems({
+    required List<String> paths,
+    String? outputBaseName,
+    void Function(double progress)? onProgress,
+  }) async {
+    final validPaths = paths.where((p) => p.isNotEmpty && File(p).existsSync()).toList();
+    if (validPaths.isEmpty) {
+      throw ArgumentError('At least one readable file is required');
+    }
+
+    final saveDir = await getSaveDir();
+    final base = outputBaseName ??
+        (validPaths.isNotEmpty
+            ? path.basenameWithoutExtension(validPaths.first)
+            : 'document');
+    final outName = _generateFileName(base, 'pdf');
+    final outPath = path.join(saveDir.path, outName);
+
+    final mergedDoc = syncfusion.PdfDocument();
+    mergedDoc.pageSettings.margins.all = 0;
+
+    syncfusion.PdfSection? currentSection;
+    ui.Size? currentSectionSize;
+    syncfusion.PdfPageRotateAngle? currentSectionRotation;
+
+    for (int i = 0; i < validPaths.length; i++) {
+      final filePath = validPaths[i];
+      final file = File(filePath);
+      final isPdf = filePath.toLowerCase().endsWith('.pdf') ||
+          FileTypeDetector.detect(path: filePath, name: path.basename(filePath)).isPdf;
+
+      if (isPdf) {
+        final inputBytes = await file.readAsBytes();
+        final doc = syncfusion.PdfDocument(inputBytes: inputBytes);
+        for (int j = 0; j < doc.pages.count; j++) {
+          final page = doc.pages[j];
+          final pageSize = page.size;
+
+          if (currentSection == null ||
+              currentSectionSize != pageSize ||
+              currentSectionRotation != page.rotation) {
+            final newSection = mergedDoc.sections!.add();
+            newSection.pageSettings.size = pageSize;
+            newSection.pageSettings.rotate = page.rotation;
+            newSection.pageSettings.orientation = (pageSize.width > pageSize.height)
+                ? syncfusion.PdfPageOrientation.landscape
+                : syncfusion.PdfPageOrientation.portrait;
+            newSection.pageSettings.margins.all = 0;
+            currentSection = newSection;
+            currentSectionSize = pageSize;
+            currentSectionRotation = page.rotation;
+          }
+
+          final newPage = currentSection.pages.add();
+          newPage.rotation = page.rotation;
+          final template = page.createTemplate();
+          newPage.graphics.drawPdfTemplate(
+            template,
+            ui.Offset.zero,
+            pageSize,
+          );
+        }
+        doc.dispose();
+      } else {
+        // Image item
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        syncfusion.PdfBitmap image;
+        try {
+          image = syncfusion.PdfBitmap(bytes);
+        } catch (_) {
+          final decoded = img.decodeImage(bytes);
+          if (decoded == null) continue;
+          final pngBytes = Uint8List.fromList(img.encodePng(decoded));
+          image = syncfusion.PdfBitmap(pngBytes);
+        }
+
+        final section = mergedDoc.sections!.add();
+        section.pageSettings.size =
+            ui.Size(image.width.toDouble(), image.height.toDouble());
+        section.pageSettings.margins.all = 0;
+        final page = section.pages.add();
+        page.graphics.drawImage(
+          image,
+          ui.Rect.fromLTWH(0, 0, page.size.width, page.size.height),
+        );
+        // Reset section cache since image section changed dimensions
+        currentSection = null;
+        currentSectionSize = null;
+        currentSectionRotation = null;
+      }
+      onProgress?.call((i + 1) / validPaths.length);
+    }
+
+    final bytes = await mergedDoc.save();
+    mergedDoc.dispose();
     final outFile = File(outPath);
     await outFile.writeAsBytes(bytes, flush: true);
     return outPath;

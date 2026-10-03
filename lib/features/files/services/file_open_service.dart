@@ -87,7 +87,7 @@ abstract final class FileOpenService {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

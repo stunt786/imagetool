@@ -49,7 +49,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
           SnackBar(
             content: Text(msg),
             backgroundColor: Theme.of(context).colorScheme.error,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
         ref.read(pdfConvertProvider.notifier).clearError();

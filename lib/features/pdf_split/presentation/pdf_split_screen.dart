@@ -49,6 +49,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             SnackBar(
               content: Text(state.errorMessage!),
               backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 2),
             ),
           );
           ref.read(pdfSplitProvider.notifier).clearError();

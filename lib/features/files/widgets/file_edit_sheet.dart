@@ -262,7 +262,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Resize failed: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     } finally {
@@ -401,7 +401,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Conversion failed: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     } finally {
@@ -457,7 +457,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Could not convert to PDF: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     } finally {

@@ -113,95 +113,141 @@ class AppReviewService {
     await showRatingDialog(context);
   }
 
-  /// Shows the "Rate this app" dialog.
+  /// Shows the "Rate this app" dialog with interactive stars.
   Future<void> showRatingDialog(BuildContext context) async {
     if (!context.mounted) return;
     final navigator = Navigator.maybeOf(context);
     if (navigator == null || !navigator.mounted) return;
 
-    final route = ModalRoute.of(context);
-    if (route != null && !route.isActive) return;
-
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    int selectedStars = 5;
 
     await showDialog<void>(
       context: context,
+      useRootNavigator: true,
       barrierDismissible: true,
       builder: (dialogContext) {
-        return AlertDialog(
-          scrollable: true,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          icon: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.star_rounded,
-              color: scheme.onPrimaryContainer,
-              size: 32,
-            ),
-          ),
-          title: Text(
-            'Enjoying ${AppStrings.appName}?',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'If you enjoy using ${AppStrings.appName}, please take a moment to rate us on Google Play. Your feedback helps us keep improving!',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final ratingLabels = [
+              'Needs improvement',
+              'Could be better',
+              'Good',
+              'Very good!',
+              'Loved it!',
+            ];
+            final currentLabel = ratingLabels[(selectedStars - 1).clamp(0, 4)];
+
+            return AlertDialog(
+              scrollable: true,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              icon: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.star_rounded,
+                  color: scheme.onPrimaryContainer,
+                  size: 32,
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  5,
-                  (index) => const Icon(
-                    Icons.star_rounded,
-                    color: Colors.amber,
-                    size: 28,
+              title: Text(
+                'Enjoying ${AppStrings.appName}?',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'If you enjoy using ${AppStrings.appName}, please take a moment to rate us on Google Play. Your feedback helps us keep improving!',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starValue = index + 1;
+                      final isSelected = starValue <= selectedStars;
+                      return IconButton(
+                        iconSize: 34,
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(
+                          isSelected
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          color: isSelected ? Colors.amber : scheme.outlineVariant,
+                        ),
+                        onPressed: () {
+                          setDialogState(() {
+                            selectedStars = starValue;
+                          });
+                        },
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 6),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 150),
+                    child: Text(
+                      currentLabel,
+                      key: ValueKey(selectedStars),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.center,
+              actionsOverflowButtonSpacing: 8.0,
+              actionsOverflowDirection: VerticalDirection.down,
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                  },
+                  child: Text(
+                    'Remind Later',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
                 ),
-              ),
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actionsOverflowButtonSpacing: 8.0,
-          actionsOverflowDirection: VerticalDirection.down,
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
-                  Navigator.of(dialogContext).pop();
-                }
-              },
-              child: Text(
-                'Remind Later',
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-            ),
-            FilledButton.icon(
-              onPressed: () async {
-                if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
-                  Navigator.of(dialogContext).pop();
-                }
-                await markAsRated();
-                await openPlayStore();
-              },
-              icon: const Icon(Icons.thumb_up_alt_rounded, size: 16),
-              label: const Text('Rate Now'),
-            ),
-          ],
+                FilledButton.icon(
+                  onPressed: () async {
+                    if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
+                      Navigator.of(dialogContext).pop();
+                    }
+                    await markAsRated();
+                    final launched = await openPlayStore();
+                    if (!launched && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Thank you for your rating and feedback!'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.thumb_up_alt_rounded, size: 16),
+                  label: const Text('Rate Now'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

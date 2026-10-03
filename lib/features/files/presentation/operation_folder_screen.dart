@@ -120,7 +120,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         SnackBar(
           content: Text('Renamed to "$name"'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -165,29 +165,28 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         ),
       );
 
-      final imagePaths = items
-          .where((item) => item.isImage || !item.isPdf)
+      final validPaths = items
           .map((item) => item.path)
           .where((p) => p.isNotEmpty && File(p).existsSync())
           .toList();
 
-      if (imagePaths.isEmpty) {
+      if (validPaths.isEmpty) {
         messenger.hideCurrentSnackBar();
         if (mounted) {
           messenger.showSnackBar(
             const SnackBar(
-              content: Text('No readable images selected.'),
+              content: Text('No readable files selected.'),
               behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 3),
+              duration: Duration(seconds: 2),
             ),
           );
         }
         return;
       }
 
-      final outPath = await PdfService.instance.createPdfFromImages(
-        imagePaths: imagePaths,
-        outputBaseName: 'images_document',
+      final outPath = await PdfService.instance.createPdfFromMixedItems(
+        paths: validPaths,
+        outputBaseName: 'document',
       );
 
       final saved = await saveToolOutputs(
@@ -210,7 +209,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           SnackBar(
             content: const Text('PDF created successfully'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
             action: saved.isNotEmpty
                 ? SnackBarAction(
                     label: 'Share',
@@ -229,7 +228,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           SnackBar(
             content: Text('Could not create PDF: $e'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -709,7 +708,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
             ),
             _SelectionBarItem(
               icon: Icons.download_outlined,
-              label: 'Save to Gallery',
+              label: 'Save',
               onTap: _busy
                   ? null
                   : () => _run((items) => FileActions.save(context, items), files),

@@ -146,7 +146,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       SnackBar(
         content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -222,6 +222,19 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                           )),
                 ),
                 SelectionAction(
+                  icon: Icons.picture_as_pdf_outlined,
+                  label: 'Save as PDF',
+                  onTap: _busy
+                      ? null
+                      : () => _run((items) => FileActions.saveAsPdf(
+                            context,
+                            _filesForOperations(items),
+                            defaultName: items.length == 1
+                                ? items.first.displayName
+                                : 'PixelTools_Export',
+                          )),
+                ),
+                SelectionAction(
                   icon: Icons.download_outlined,
                   label: 'Save',
                   onTap: _busy
@@ -229,6 +242,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                       : () => _run((items) => FileActions.save(
                             context,
                             _filesForOperations(items),
+                            defaultPdfName: items.length == 1
+                                ? items.first.displayName
+                                : 'PixelTools_Export',
                           )),
                 ),
                 if (_selected.length == 1)

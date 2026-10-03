@@ -1682,7 +1682,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   void _showSnack(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   Future<bool?> _showSaveDialog({required bool canReplace}) {

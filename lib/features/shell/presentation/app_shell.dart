@@ -69,8 +69,8 @@ class AppShell extends StatelessWidget {
         final scaffold = _buildScaffold(
           context,
           isMainScreen: isMainScreen,
-          cameraKey: keys.cameraKey,
-          filesKey: keys.filesKey,
+          cameraKey: (hasCompletedOnboarding || !(ModalRoute.of(context)?.isCurrent ?? true)) ? null : keys.cameraKey,
+          filesKey: (hasCompletedOnboarding || !(ModalRoute.of(context)?.isCurrent ?? true)) ? null : keys.filesKey,
           onCameraTap: () {
             ref.read(cameraLaunchTriggerProvider.notifier).state++;
             navigationShell.goBranch(1, initialLocation: true);
@@ -116,6 +116,19 @@ class _BottomNavBar extends StatelessWidget {
     final currentIndex = navigationShell.currentIndex;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final width = math.max(0.0, screenWidth - 32.0);
+    final cx = width / 2;
+
+    // Compute notch clearance boundary
+    final sy = _topOffset + _shoulderRadius;
+    final dy = sy - _circleCenterY;
+    final hyp = (_buttonRadius + _gap) + _shoulderRadius;
+    final bx = math.sqrt(math.max(0.0, hyp * hyp - dy * dy));
+
+    final leftWingWidth = cx - bx;
+    final rightWingWidth = width - (cx + bx);
+
     return Padding(
       padding: EdgeInsets.fromLTRB(
         16,
@@ -125,106 +138,90 @@ class _BottomNavBar extends StatelessWidget {
       ),
       child: SizedBox(
         height: _barHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final cx = width / 2;
-
-            // Compute notch clearance boundary
-            final sy = _topOffset + _shoulderRadius;
-            final dy = sy - _circleCenterY;
-            final hyp = (_buttonRadius + _gap) + _shoulderRadius;
-            final bx = math.sqrt(math.max(0.0, hyp * hyp - dy * dy));
-
-            final leftWingWidth = cx - bx;
-            final rightWingWidth = width - (cx + bx);
-
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 1. Notched scooped background bar
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _NotchedBarPainter(
-                      isDark: isDark,
-                      scheme: scheme,
-                      topOffset: _topOffset,
-                      circleCenterY: _circleCenterY,
-                      buttonRadius: _buttonRadius,
-                      gap: _gap,
-                      shoulderRadius: _shoulderRadius,
-                      cornerRadius: _cornerRadius,
-                    ),
-                  ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 1. Notched scooped background bar
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _NotchedBarPainter(
+                  isDark: isDark,
+                  scheme: scheme,
+                  topOffset: _topOffset,
+                  circleCenterY: _circleCenterY,
+                  buttonRadius: _buttonRadius,
+                  gap: _gap,
+                  shoulderRadius: _shoulderRadius,
+                  cornerRadius: _cornerRadius,
                 ),
+              ),
+            ),
 
-                // 2. Home icon in left wing
-                Positioned(
-                  left: 0,
-                  top: _topOffset,
-                  width: leftWingWidth,
-                  height: _barHeight - _topOffset,
-                  child: Center(
-                    child: _NavItem(
-                      label: 'Home',
-                      icon: Icons.home_outlined,
-                      selectedIcon: Icons.home_rounded,
-                      selected: currentIndex == 0,
-                      onTap: () {
-                        navigationShell.goBranch(
-                          0,
-                          initialLocation: currentIndex == 0,
-                        );
-                      },
-                    ),
-                  ),
+            // 2. Home icon in left wing
+            Positioned(
+              left: 0,
+              top: _topOffset,
+              width: leftWingWidth,
+              height: _barHeight - _topOffset,
+              child: Center(
+                child: _NavItem(
+                  label: 'Home',
+                  icon: Icons.home_outlined,
+                  selectedIcon: Icons.home_rounded,
+                  selected: currentIndex == 0,
+                  onTap: () {
+                    navigationShell.goBranch(
+                      0,
+                      initialLocation: currentIndex == 0,
+                    );
+                  },
                 ),
+              ),
+            ),
 
-                // 3. Center Camera floating circular button
-                Positioned(
-                  left: cx - _buttonRadius,
-                  top: _circleCenterY - _buttonRadius,
-                  child: _CameraCenterButton(
-                    key: cameraKey,
-                    selected: currentIndex == 1,
-                    diameter: _buttonRadius * 2,
-                    onTap: () {
-                      if (onCameraTap != null) {
-                        onCameraTap!();
-                      } else {
-                        navigationShell.goBranch(1, initialLocation: true);
-                      }
-                    },
-                  ),
-                ),
+            // 3. Center Camera floating circular button
+            Positioned(
+              left: cx - _buttonRadius,
+              top: _circleCenterY - _buttonRadius,
+              child: _CameraCenterButton(
+                key: cameraKey,
+                selected: currentIndex == 1,
+                diameter: _buttonRadius * 2,
+                onTap: () {
+                  if (onCameraTap != null) {
+                    onCameraTap!();
+                  } else {
+                    navigationShell.goBranch(1, initialLocation: true);
+                  }
+                },
+              ),
+            ),
 
-                // 4. Files icon in right wing
-                Positioned(
-                  left: cx + bx,
-                  top: _topOffset,
-                  width: rightWingWidth,
-                  height: _barHeight - _topOffset,
-                  child: Center(
-                    child: _NavItem(
-                      key: filesKey,
-                      label: 'Files',
-                      icon: Icons.snippet_folder_outlined,
-                      selectedIcon: Icons.folder_rounded,
-                      selected: currentIndex == 2,
-                      onTap: () {
-                        if (navigationShell.route.branches.length > 2) {
-                          navigationShell.goBranch(
-                            2,
-                            initialLocation: currentIndex == 2,
-                          );
-                        }
-                      },
-                    ),
-                  ),
+            // 4. Files icon in right wing
+            Positioned(
+              left: cx + bx,
+              top: _topOffset,
+              width: rightWingWidth,
+              height: _barHeight - _topOffset,
+              child: Center(
+                child: _NavItem(
+                  key: filesKey,
+                  label: 'Files',
+                  icon: Icons.folder_outlined,
+                  selectedIcon: Icons.folder_rounded,
+                  selected: currentIndex == 2,
+                  onTap: () {
+                    if (navigationShell.route.branches.length > 2) {
+                      navigationShell.goBranch(
+                        2,
+                        initialLocation: currentIndex == 2,
+                      );
+                    }
+                  },
                 ),
-              ],
-            );
-          },
+              ),
+            ),
+          ],
         ),
       ),
     );

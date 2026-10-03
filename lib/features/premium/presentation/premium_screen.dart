@@ -290,7 +290,7 @@ class _PricingButton extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label plan selected. Coming soon.')),
+          SnackBar(content: Text('$label plan selected. Coming soon.'), duration: const Duration(seconds: 2)),
         );
       },
       child: Container(

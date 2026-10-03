@@ -369,7 +369,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Scan saved in Files for later export.'),
-        duration: Duration(seconds: 3),
+        duration: Duration(seconds: 2),
       ),
     );
     context.go('/pdfs');
@@ -471,7 +471,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         SnackBar(
           content: const Text('PDF saved to Documents & Files'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           action: localPath != null
               ? SnackBarAction(
                   label: 'Share',
@@ -519,7 +519,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         SnackBar(
           content: Text('${results.length} scan image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           action: results.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
@@ -548,6 +548,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Theme.of(context).colorScheme.error,
+        duration: const Duration(seconds: 2),
       ),
     );
   }

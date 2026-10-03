@@ -14,8 +14,8 @@ Uint8List _paperWithBlob() {
     }
   }
   // Dark "object" sitting in the middle of the page.
-  for (var y = 45; y <= 75; y++) {
-    for (var x = 45; x <= 75; x++) {
+  for (var y = 54; y <= 66; y++) {
+    for (var x = 54; x <= 66; x++) {
       image.setPixelRgba(x, y, 25, 25, 25, 255);
     }
   }
@@ -111,7 +111,9 @@ void main() {
 
       final result = await MagicRemoveService.inpaintObject(
         imageBytes: bytes,
-        points: const [Offset(50, 60), Offset(70, 60)],
+        // The stroke starts and ends on the paper so the mask boundary
+        // samples the background around the object.
+        points: const [Offset(40, 60), Offset(80, 60)],
         brushRadius: 6,
         imageWidth: 120,
         imageHeight: 120,

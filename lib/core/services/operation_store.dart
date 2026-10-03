@@ -418,9 +418,11 @@ class OperationStore extends ChangeNotifier {
     await targetDir.create(recursive: true);
 
     var moved = 0;
+    final affectedOpIds = <String>{targetOperationId};
     for (final id in fileIds) {
       final item = fileById(id);
       if (item == null || item.operationId == targetOperationId) continue;
+      affectedOpIds.add(item.operationId);
       try {
         final src = File(item.path);
         final dest = await resolveOutputPath(targetDir, item.fileName);
@@ -459,6 +461,22 @@ class OperationStore extends ChangeNotifier {
         moved++;
       } catch (_) {}
     }
+
+    // Refresh operation metadata (item counts and thumbnails) for all affected folders
+    for (final opId in affectedOpIds) {
+      final op = operationById(opId);
+      if (op != null) {
+        final opFiles = filesFor(opId).toList();
+        _replaceOperation(op.copyWith(
+          itemCount: opFiles.length,
+          modifiedAt: DateTime.now(),
+          thumbnailPath: opFiles.isNotEmpty
+              ? (opFiles.first.thumbnailPath ?? opFiles.first.path)
+              : null,
+        ));
+      }
+    }
+
     _sortAndTrim();
     await _persist();
     notifyListeners();

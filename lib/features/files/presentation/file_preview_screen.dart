@@ -430,7 +430,7 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
           SnackBar(
             content: Text('$saved page image(s) saved to Gallery'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
             action: savedFiles.isNotEmpty
                 ? SnackBarAction(
                     label: 'Share',
@@ -513,7 +513,7 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
         backgroundColor: Colors.grey[900],
       ),
     );

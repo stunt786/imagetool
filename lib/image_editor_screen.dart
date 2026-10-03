@@ -297,14 +297,14 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
         final savedName =
             savedOutputs.isNotEmpty ? widget.fileName : 'image';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Saved: $savedName")),
+          SnackBar(content: Text("Saved: $savedName"), duration: const Duration(seconds: 2)),
         );
         Navigator.pop(context);
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Save failed: $error")),
+          SnackBar(content: Text("Save failed: $error"), duration: const Duration(seconds: 2)),
         );
       }
     } finally {

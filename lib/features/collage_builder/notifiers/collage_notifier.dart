@@ -95,7 +95,7 @@ class CollageNotifier extends Notifier<CollageState> {
           content: Text(
             '$unsupportedCount unsupported file(s) skipped. Only JPG, PNG, WebP, GIF, BMP are supported.',
           ),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -111,7 +111,7 @@ class CollageNotifier extends Notifier<CollageState> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Only $maxNew image(s) added (9 max). $overflow photo(s) skipped.'),
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
       }

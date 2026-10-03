@@ -65,53 +65,53 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/settings',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: SettingsScreen()),
+                    _MaterialPage(key: state.pageKey, child: const SettingsScreen()),
               ),
               GoRoute(
                 path: '/images/resizer',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: ImageResizeScreen()),
+                    _MaterialPage(key: state.pageKey, child: const ImageResizeScreen()),
               ),
               GoRoute(
                 path: '/images/collage',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: CollageBuilderScreen()),
+                    _MaterialPage(key: state.pageKey, child: const CollageBuilderScreen()),
               ),
               GoRoute(
                 path: '/images/convert',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: FormatConverterScreen()),
+                    _MaterialPage(key: state.pageKey, child: const FormatConverterScreen()),
               ),
               GoRoute(
                 path: '/images/to-pdf',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: ImageToPdfScreen()),
+                    _MaterialPage(key: state.pageKey, child: const ImageToPdfScreen()),
               ),
               // PDF tools located in Branch 0 for seamless push/swap-back to HomeScreen
               GoRoute(
                 path: '/pdfs/compress',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: PdfCompressScreen()),
+                    _MaterialPage(key: state.pageKey, child: const PdfCompressScreen()),
               ),
               GoRoute(
                 path: '/pdfs/merge',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: PdfMergeScreen()),
+                    _MaterialPage(key: state.pageKey, child: const PdfMergeScreen()),
               ),
               GoRoute(
                 path: '/pdfs/split',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: PdfSplitScreen()),
+                    _MaterialPage(key: state.pageKey, child: const PdfSplitScreen()),
               ),
               GoRoute(
                 path: '/pdfs/convert',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: PdfConvertScreen()),
+                    _MaterialPage(key: state.pageKey, child: const PdfConvertScreen()),
               ),
               GoRoute(
                 path: '/history',
                 pageBuilder: (context, state) =>
-                    const _MaterialPage(child: HistoryScreen()),
+                    _MaterialPage(key: state.pageKey, child: const HistoryScreen()),
               ),
               // In-app PDF viewer. The file is passed through `extra` so any screen can
               // deep-link into it without a second lookup.
@@ -121,6 +121,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   final extra = state.extra;
                   final args = extra is Map ? extra : const <String, dynamic>{};
                   return _MaterialPage(
+                    key: state.pageKey,
                     child: PdfViewerScreen(
                       filePath: args['path'] as String? ?? '',
                       title: args['title'] as String?,
@@ -140,26 +141,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'review',
                     pageBuilder: (context, state) =>
-                        const _MaterialPage(child: DocumentReviewScreen()),
+                        _MaterialPage(key: state.pageKey, child: const DocumentReviewScreen()),
                   ),
                   GoRoute(
                     path: 'filter',
                     pageBuilder: (context, state) =>
-                        const _MaterialPage(child: DocumentFilterScreen()),
+                        _MaterialPage(key: state.pageKey, child: const DocumentFilterScreen()),
                   ),
                   GoRoute(
                     path: 'crop',
-                    pageBuilder: (context, state) => const _MaterialPage(
-                        child: PerspectiveCorrectionScreen()),
+                    pageBuilder: (context, state) => _MaterialPage(
+                        key: state.pageKey,
+                        child: const PerspectiveCorrectionScreen()),
                   ),
                   GoRoute(
                     path: 'perspective',
-                    pageBuilder: (context, state) => const _MaterialPage(
-                        child: PerspectiveCorrectionScreen()),
+                    pageBuilder: (context, state) => _MaterialPage(
+                        key: state.pageKey,
+                        child: const PerspectiveCorrectionScreen()),
                   ),
                   GoRoute(
                     path: 'magic-remove',
                     pageBuilder: (context, state) => _MaterialPage(
+                      key: state.pageKey,
                       child: MagicRemoveScreen(
                         imageBytes: (state.extra is Uint8List
                                 ? state.extra as Uint8List
@@ -234,7 +238,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 });
 
 class _MaterialPage extends Page<void> {
-  const _MaterialPage({required this.child});
+  const _MaterialPage({required this.child, super.key});
 
   final Widget child;
 

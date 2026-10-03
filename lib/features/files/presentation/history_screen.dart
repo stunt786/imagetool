@@ -135,7 +135,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       SnackBar(
         content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

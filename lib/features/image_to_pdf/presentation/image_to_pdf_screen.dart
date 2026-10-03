@@ -386,6 +386,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
           SnackBar(
             content: Text(state.errorMessage!),
             backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 2),
           ),
         );
       }

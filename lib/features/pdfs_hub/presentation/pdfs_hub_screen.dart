@@ -404,7 +404,7 @@ class _PdfHistoryRow extends StatelessWidget {
           IconButton(
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Opening ${item.fileName} soon.')),
+                SnackBar(content: Text('Opening ${item.fileName} soon.'), duration: const Duration(seconds: 2)),
               );
             },
             icon: Icon(Icons.open_in_new_rounded, color: scheme.primary),

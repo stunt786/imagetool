@@ -49,6 +49,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Maximum limit of 25 images reached for conversion.'),
+          duration: Duration(seconds: 2),
         ),
       );
       return;
@@ -135,6 +136,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             content: Text(
                 'Saved ${saved.length} file${saved.length > 1 ? 's' : ''} to $destLabel'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
         );
         ref.read(formatConverterProvider.notifier).resetStatusForReconversion();
@@ -146,6 +148,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
           SnackBar(
             content: Text('Error saving files: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
           ),
         );
       }

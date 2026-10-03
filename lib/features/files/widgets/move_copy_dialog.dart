@@ -175,7 +175,7 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
           SnackBar(
             content: Text('$count file(s) copied.'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
         Navigator.pop(context, true);
@@ -187,7 +187,7 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
           SnackBar(
             content: Text('$count file(s) moved.'),
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
         Navigator.pop(context, true);

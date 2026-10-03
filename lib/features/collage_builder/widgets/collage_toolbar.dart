@@ -526,7 +526,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 2)),
         );
       }
     }
@@ -544,7 +544,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       if (bytes == null || bytes.isEmpty) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to generate collage image.')),
+            const SnackBar(content: Text('Failed to generate collage image.'), duration: Duration(seconds: 2)),
           );
         }
         return;
@@ -594,7 +594,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
           await Process.run('xdg-open', [tempFile.path]);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Opened collage: ${tempFile.path}')),
+              SnackBar(content: Text('Opened collage: ${tempFile.path}'), duration: const Duration(seconds: 2)),
             );
           }
         } else {
@@ -610,7 +610,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing: $e')),
+          SnackBar(content: Text('Error sharing: $e'), duration: const Duration(seconds: 2)),
         );
       }
     } finally {

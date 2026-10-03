@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../camera/presentation/camera_screen.dart';
@@ -482,9 +483,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   const _HomeHeroBanner(),
                                   const SizedBox(height: 18),
                                   _ToolsGrid(
-                                    key: ref
-                                        .watch(featureHighlightKeysProvider)
-                                        .toolsKey,
+                                    key: (!ref.watch(appSettingsProvider.select(
+                                                (s) => s.hasCompletedOnboarding)) &&
+                                            (ModalRoute.of(context)?.isCurrent ?? true))
+                                        ? ref
+                                            .watch(featureHighlightKeysProvider)
+                                            .toolsKey
+                                        : null,
                                     tools: _allTools,
                                   ),
                                   const SizedBox(height: 22),
@@ -666,11 +671,9 @@ class _HomeHeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 340;
+    final isCompact = MediaQuery.sizeOf(context).width < 380;
 
-        return Container(
+    return Container(
           width: double.infinity,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
@@ -810,8 +813,6 @@ class _HomeHeroBanner extends StatelessWidget {
             ),
           ),
         );
-      },
-    );
   }
 }
 

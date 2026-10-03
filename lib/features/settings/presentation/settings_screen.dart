@@ -445,7 +445,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         title: const Text('Rate the App'),
                         subtitle: const Text('Review and rate on Google Play Store'),
                         trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-                        onTap: () => AppReviewService.instance.openPlayStore(),
+                        onTap: () => AppReviewService.instance.showRatingDialog(context),
                       ),
                       const Divider(height: 1),
                       ListTile(
@@ -546,7 +546,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref.read(appSettingsProvider.notifier).setSavePath(result);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Save location updated')),
+          const SnackBar(content: Text('Save location updated'), duration: Duration(seconds: 2)),
         );
       }
       if (mounted) setState(() {});
@@ -596,7 +596,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         await PublicStorage.setSaveTree(uri: picked.uri, label: picked.label);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Save location updated')),
+            const SnackBar(content: Text('Save location updated'), duration: Duration(seconds: 2)),
           );
         }
       }
@@ -604,7 +604,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await PublicStorage.clearSaveTree();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Save location reset to default')),
+          const SnackBar(content: Text('Save location reset to default'), duration: Duration(seconds: 2)),
         );
       }
     }

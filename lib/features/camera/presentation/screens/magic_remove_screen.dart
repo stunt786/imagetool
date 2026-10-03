@@ -147,7 +147,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Auto-detect failed: $error')),
+          SnackBar(content: Text('Auto-detect failed: $error'), duration: const Duration(seconds: 2)),
         );
       }
     } finally {
@@ -211,6 +211,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
             content: Text('Error: $error'),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
         );
       }
