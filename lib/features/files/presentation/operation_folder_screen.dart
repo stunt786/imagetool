@@ -202,10 +202,10 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
-      messenger.hideCurrentSnackBar();
+      messenger.clearSnackBars();
 
       if (mounted) {
-        messenger.showSnackBar(
+        final controller = messenger.showSnackBar(
           SnackBar(
             content: const Text('PDF created successfully'),
             behavior: SnackBarBehavior.floating,
@@ -213,24 +213,35 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
             action: saved.isNotEmpty
                 ? SnackBarAction(
                     label: 'Share',
-                    onPressed: () =>
-                        Share.shareXFiles([XFile(saved.first.localPath)]),
+                    onPressed: () {
+                      Share.shareXFiles([XFile(saved.first.localPath)]);
+                    },
                   )
                 : null,
           ),
         );
+        Future.delayed(const Duration(seconds: 2), () {
+          try {
+            controller.close();
+          } catch (_) {}
+        });
         _clearSelection();
       }
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      messenger.clearSnackBars();
       if (mounted) {
-        messenger.showSnackBar(
+        final errController = messenger.showSnackBar(
           SnackBar(
             content: Text('Could not create PDF: $e'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
           ),
         );
+        Future.delayed(const Duration(seconds: 2), () {
+          try {
+            errController.close();
+          } catch (_) {}
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);

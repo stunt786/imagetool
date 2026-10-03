@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/services/app_review_service.dart';
+import '../../../core/services/app_update_service.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 
@@ -458,25 +460,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // ── About ────────────────────────────────────────────────
+                  // ── App & Updates ────────────────────────────────────────
                   _buildSection(
                     context,
-                    title: 'About',
+                    title: 'App & Updates',
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.privacy_tip_outlined),
-                        title: const Text('Privacy'),
-                        subtitle: const Text('All processing stays on-device.'),
+                        leading: const Icon(Icons.system_update_rounded),
+                        title: const Text('Check for Updates'),
+                        subtitle: const Text('Check and download available updates'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _checkForUpdates(context),
                       ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.privacy_tip_outlined),
+                        title: const Text('Privacy Policy'),
+                        subtitle: const Text('100% offline & on-device processing'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/settings/privacy'),
+                      ),
+                      const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.info_outline),
-                        title: const Text('App'),
-                        subtitle: const Text(AppStrings.appName),
+                        title: const Text('About & Developer Info'),
+                        subtitle: const Text('${AppStrings.appName} by bnbKio'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/settings/about'),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.tag_outlined),
-                        title: const Text('Version'),
-                        subtitle: const Text('1.0.0'),
+                      const Divider(height: 1),
+                      const ListTile(
+                        leading: Icon(Icons.tag_outlined),
+                        title: Text('Version'),
+                        subtitle: Text(AppUpdateService.currentAppVersion),
                       ),
                     ],
                   ),
@@ -515,6 +531,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            SizedBox(width: 14),
+            Text('Checking for updates...'),
+          ],
+        ),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    final info = await AppUpdateService.instance.checkForUpdate(force: true);
+    if (!context.mounted) return;
+
+    if (info.hasUpdate) {
+      await AppUpdateService.instance.showUpdateDialog(context, info);
+    } else {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Colors.green),
+              SizedBox(width: 10),
+              Text('Latest Version'),
+            ],
+          ),
+          content: Text(
+            'You are using the latest version of ${AppStrings.appName} (v${AppUpdateService.currentAppVersion}).',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   /// Resolves the destination shown under Save Location: the SAF folder the

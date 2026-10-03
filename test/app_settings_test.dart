@@ -66,7 +66,7 @@ void main() {
       expect(settings.useWatermarkLogo, isTrue);
       expect(settings.useImageVerticalSidebar, isTrue);
       expect(settings.watermarkText, 'PixelTools');
-      expect(settings.watermarkColorHex, 0xFFFFFFFF);
+      expect(settings.watermarkColorHex, 0xFF2196F3);
       expect(settings.watermarkOpacity, 0.7);
       expect(settings.watermarkPositionIndex, 4);
     });
@@ -141,7 +141,7 @@ void main() {
       expect(loaded.watermarkText, 'PixelTools');
       expect(loaded.watermarkOpacity, 0.7);
       expect(loaded.watermarkPositionIndex, 4);
-      expect(loaded.watermarkColorHex, 0xFFFFFFFF);
+      expect(loaded.watermarkColorHex, 0xFF2196F3);
     });
 
     test('reads every stored key and clamps an out-of-range theme index',

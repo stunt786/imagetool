@@ -28,6 +28,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(pdfSplitProvider.notifier).clear();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);

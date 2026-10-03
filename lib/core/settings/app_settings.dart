@@ -19,7 +19,7 @@ class AppSettingsState {
     this.useWatermarkLogo = true,
     this.useImageVerticalSidebar = true,
     this.watermarkText = 'PixelTools',
-    this.watermarkColorHex = 0xFFFFFFFF,
+    this.watermarkColorHex = 0xFF2196F3,
     this.watermarkOpacity = 0.7,
     this.watermarkPositionIndex = 4,
   });
@@ -139,7 +139,7 @@ class AppSettingsState {
         ? 'PixelTools'
         : storedWatermark;
     final watermarkColorHex =
-        prefs.getInt(_watermarkColorHexKey) ?? 0xFFFFFFFF;
+        prefs.getInt(_watermarkColorHexKey) ?? 0xFF2196F3;
     final watermarkOpacity = prefs.getDouble(_watermarkOpacityKey) ?? 0.7;
     final watermarkPositionIndex =
         prefs.getInt(_watermarkPositionIndexKey) ?? 4;
@@ -257,7 +257,7 @@ class AppSettingsState {
 
   static Future<int> loadWatermarkColorHex() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_watermarkColorHexKey) ?? 0xFFFFFFFF;
+    return prefs.getInt(_watermarkColorHexKey) ?? 0xFF2196F3;
   }
 
   static Future<void> persistWatermarkColorHex(int value) async {

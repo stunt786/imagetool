@@ -519,13 +519,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       if (!mounted) return;
 
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).clearSnackBars();
 
       final msg = (newSize >= widget.item.sizeBytes)
           ? 'Already compressed at highest level'
           : 'PDF compressed (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})';
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      final controller = ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
           behavior: SnackBarBehavior.floating,
@@ -539,6 +539,11 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
               : null,
         ),
       );
+      Future.delayed(const Duration(seconds: 2), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -752,11 +757,11 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         } catch (_) {}
       }
 
-      messenger.hideCurrentSnackBar();
+      messenger.clearSnackBars();
       if (!mounted) return;
       Navigator.pop(context);
 
-      messenger.showSnackBar(
+      final controller = messenger.showSnackBar(
         SnackBar(
           content: Text('$savedCount page image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
@@ -769,6 +774,11 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
               : null,
         ),
       );
+      Future.delayed(const Duration(seconds: 2), () {
+        try {
+          controller.close();
+        } catch (_) {}
+      });
     } catch (e) {
       messenger.hideCurrentSnackBar();
       if (!mounted) return;

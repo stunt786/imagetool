@@ -119,7 +119,7 @@ abstract final class FileActions {
       if (!context.mounted) return;
       _message(
         context,
-        result == null ? 'Export cancelled.' : 'Exported 1 PDF file.',
+        result == null ? 'Export cancelled.' : 'Exported 1 PDF file(s).',
       );
       return;
     }
@@ -188,7 +188,7 @@ abstract final class FileActions {
         outputBaseName: cleanDefault,
       );
 
-      messenger.hideCurrentSnackBar();
+      messenger.clearSnackBars();
       final result = await PrivateToPublicPdfManager().exportSingleFile(
         sandboxPath: outPath,
         suggestedName: '$cleanDefault.pdf',
@@ -201,7 +201,7 @@ abstract final class FileActions {
         _message(context, 'Export cancelled.');
       }
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      messenger.clearSnackBars();
       if (context.mounted) {
         _message(context, 'Could not create PDF: $e');
       }
@@ -372,15 +372,26 @@ abstract final class FileActions {
     );
   }
 
-  static void _message(BuildContext context, String text) {
+  static void _message(
+    BuildContext context,
+    String text, {
+    Duration duration = const Duration(seconds: 2),
+  }) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    final controller = messenger.showSnackBar(
       SnackBar(
         content: Text(text),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: duration,
       ),
     );
+    Future.delayed(duration, () {
+      try {
+        controller.close();
+      } catch (_) {}
+    });
   }
 }
 

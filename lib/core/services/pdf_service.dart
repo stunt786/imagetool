@@ -122,7 +122,7 @@ class PdfService {
     bool watermark = false,
     Uint8List? watermarkIconBytes,
     String watermarkText = 'PixelTools',
-    int watermarkColorHex = 0xFFFFFFFF,
+    int watermarkColorHex = 0xFF2196F3,
     double watermarkOpacity = 0.7,
     int watermarkPositionIndex = 4,
     bool useWatermarkLogo = true,
@@ -350,7 +350,7 @@ class PdfService {
     bool watermark = false,
     Uint8List? watermarkIconBytes,
     String watermarkText = 'PixelTools',
-    int watermarkColorHex = 0xFFFFFFFF,
+    int watermarkColorHex = 0xFF2196F3,
     double watermarkOpacity = 0.7,
     int watermarkPositionIndex = 4,
     bool useWatermarkLogo = true,
@@ -455,14 +455,26 @@ class PdfService {
         final pngBytes = Uint8List.fromList(img.encodePng(decoded));
         image = syncfusion.PdfBitmap(pngBytes);
       }
+      final isLandscape = image.width > image.height;
+      final a4Size = isLandscape
+          ? ui.Size(syncfusion.PdfPageSize.a4.height, syncfusion.PdfPageSize.a4.width)
+          : syncfusion.PdfPageSize.a4;
+      final scale = math.min(
+        a4Size.width / image.width,
+        a4Size.height / image.height,
+      );
+      final drawWidth = image.width * scale;
+      final drawHeight = image.height * scale;
+      final dx = (a4Size.width - drawWidth) / 2.0;
+      final dy = (a4Size.height - drawHeight) / 2.0;
+
       final section = doc.sections!.add();
-      section.pageSettings.size =
-          ui.Size(image.width.toDouble(), image.height.toDouble());
+      section.pageSettings.size = a4Size;
       section.pageSettings.margins.all = 0;
       final page = section.pages.add();
       page.graphics.drawImage(
         image,
-        ui.Rect.fromLTWH(0, 0, page.size.width, page.size.height),
+        ui.Rect.fromLTWH(dx, dy, drawWidth, drawHeight),
       );
       onProgress?.call((i + 1) / imagePaths.length);
     }
@@ -498,10 +510,6 @@ class PdfService {
     final mergedDoc = syncfusion.PdfDocument();
     mergedDoc.pageSettings.margins.all = 0;
 
-    syncfusion.PdfSection? currentSection;
-    ui.Size? currentSectionSize;
-    syncfusion.PdfPageRotateAngle? currentSectionRotation;
-
     for (int i = 0; i < validPaths.length; i++) {
       final filePath = validPaths[i];
       final file = File(filePath);
@@ -513,30 +521,31 @@ class PdfService {
         final doc = syncfusion.PdfDocument(inputBytes: inputBytes);
         for (int j = 0; j < doc.pages.count; j++) {
           final page = doc.pages[j];
-          final pageSize = page.size;
+          final contentWidth = page.size.width;
+          final contentHeight = page.size.height;
+          final isLandscape = contentWidth > contentHeight;
+          final a4Size = isLandscape
+              ? ui.Size(syncfusion.PdfPageSize.a4.height, syncfusion.PdfPageSize.a4.width)
+              : syncfusion.PdfPageSize.a4;
 
-          if (currentSection == null ||
-              currentSectionSize != pageSize ||
-              currentSectionRotation != page.rotation) {
-            final newSection = mergedDoc.sections!.add();
-            newSection.pageSettings.size = pageSize;
-            newSection.pageSettings.rotate = page.rotation;
-            newSection.pageSettings.orientation = (pageSize.width > pageSize.height)
-                ? syncfusion.PdfPageOrientation.landscape
-                : syncfusion.PdfPageOrientation.portrait;
-            newSection.pageSettings.margins.all = 0;
-            currentSection = newSection;
-            currentSectionSize = pageSize;
-            currentSectionRotation = page.rotation;
-          }
+          final scale = math.min(
+            a4Size.width / contentWidth,
+            a4Size.height / contentHeight,
+          );
+          final drawWidth = contentWidth * scale;
+          final drawHeight = contentHeight * scale;
+          final dx = (a4Size.width - drawWidth) / 2.0;
+          final dy = (a4Size.height - drawHeight) / 2.0;
 
-          final newPage = currentSection.pages.add();
-          newPage.rotation = page.rotation;
+          final section = mergedDoc.sections!.add();
+          section.pageSettings.size = a4Size;
+          section.pageSettings.margins.all = 0;
+          final newPage = section.pages.add();
           final template = page.createTemplate();
           newPage.graphics.drawPdfTemplate(
             template,
-            ui.Offset.zero,
-            pageSize,
+            ui.Offset(dx, dy),
+            ui.Size(drawWidth, drawHeight),
           );
         }
         doc.dispose();
@@ -554,19 +563,30 @@ class PdfService {
           image = syncfusion.PdfBitmap(pngBytes);
         }
 
+        final contentWidth = image.width.toDouble();
+        final contentHeight = image.height.toDouble();
+        final isLandscape = contentWidth > contentHeight;
+        final a4Size = isLandscape
+            ? ui.Size(syncfusion.PdfPageSize.a4.height, syncfusion.PdfPageSize.a4.width)
+            : syncfusion.PdfPageSize.a4;
+
+        final scale = math.min(
+          a4Size.width / contentWidth,
+          a4Size.height / contentHeight,
+        );
+        final drawWidth = contentWidth * scale;
+        final drawHeight = contentHeight * scale;
+        final dx = (a4Size.width - drawWidth) / 2.0;
+        final dy = (a4Size.height - drawHeight) / 2.0;
+
         final section = mergedDoc.sections!.add();
-        section.pageSettings.size =
-            ui.Size(image.width.toDouble(), image.height.toDouble());
+        section.pageSettings.size = a4Size;
         section.pageSettings.margins.all = 0;
         final page = section.pages.add();
         page.graphics.drawImage(
           image,
-          ui.Rect.fromLTWH(0, 0, page.size.width, page.size.height),
+          ui.Rect.fromLTWH(dx, dy, drawWidth, drawHeight),
         );
-        // Reset section cache since image section changed dimensions
-        currentSection = null;
-        currentSectionSize = null;
-        currentSectionRotation = null;
       }
       onProgress?.call((i + 1) / validPaths.length);
     }
@@ -1063,7 +1083,7 @@ class PdfService {
   static int _workerWatermarkColor(Map<String, dynamic> params) =>
       params['watermarkColor'] as int? ??
       params['watermarkColorHex'] as int? ??
-      0xFFFFFFFF;
+      0xFF2196F3;
 
   static int _workerWatermarkPosition(Map<String, dynamic> params) =>
       params['watermarkPosition'] as int? ??

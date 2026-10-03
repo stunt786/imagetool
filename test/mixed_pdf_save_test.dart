@@ -60,6 +60,12 @@ void main() {
     final doc = syncfusion.PdfDocument(inputBytes: outBytes);
     try {
       expect(doc.pages.count, equals(7));
+      for (int i = 0; i < doc.pages.count; i++) {
+        final size = doc.pages[i].size;
+        final isA4 = (size.width - syncfusion.PdfPageSize.a4.width).abs() < 1.0 ||
+            (size.width - syncfusion.PdfPageSize.a4.height).abs() < 1.0;
+        expect(isA4, isTrue);
+      }
     } finally {
       doc.dispose();
     }

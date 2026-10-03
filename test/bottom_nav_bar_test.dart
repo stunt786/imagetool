@@ -84,7 +84,7 @@ void main() {
     // Initially on Home (index 0)
     expect(find.text('HomeScreenBody'), findsOneWidget);
     expect(find.byIcon(Icons.home_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.snippet_folder_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.folder_outlined), findsOneWidget);
 
     // 3. Tap on Files
     await tester.tap(find.bySemanticsLabel('Files'));

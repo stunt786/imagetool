@@ -23,6 +23,8 @@ import '../../features/pdf_split/presentation/pdf_split_screen.dart';
 import '../../features/pdf_viewer/presentation/pdf_viewer_screen.dart';
 import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 // import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
+import '../../features/settings/presentation/about_screen.dart';
+import '../../features/settings/presentation/privacy_policy_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 import '../services/app_review_service.dart';
@@ -68,6 +70,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/settings',
                 pageBuilder: (context, state) =>
                     _MaterialPage(key: state.pageKey, child: const SettingsScreen()),
+              ),
+              GoRoute(
+                path: '/settings/privacy',
+                pageBuilder: (context, state) =>
+                    _MaterialPage(key: state.pageKey, child: const PrivacyPolicyScreen()),
+              ),
+              GoRoute(
+                path: '/settings/about',
+                pageBuilder: (context, state) =>
+                    _MaterialPage(key: state.pageKey, child: const AboutScreen()),
               ),
               GoRoute(
                 path: '/images/resizer',

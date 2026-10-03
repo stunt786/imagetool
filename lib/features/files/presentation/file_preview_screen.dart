@@ -425,8 +425,9 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.clearSnackBars();
+        final controller = messenger.showSnackBar(
           SnackBar(
             content: Text('$saved page image(s) saved to Gallery'),
             behavior: SnackBarBehavior.floating,
@@ -439,6 +440,11 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
                 : null,
           ),
         );
+        Future.delayed(const Duration(seconds: 2), () {
+          try {
+            controller.close();
+          } catch (_) {}
+        });
       }
     } catch (e) {
       if (mounted) _showSnack('Export failed: $e');
@@ -509,7 +515,9 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
   }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    final controller = messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
@@ -517,6 +525,11 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         backgroundColor: Colors.grey[900],
       ),
     );
+    Future.delayed(const Duration(seconds: 2), () {
+      try {
+        controller.close();
+      } catch (_) {}
+    });
   }
 }
 

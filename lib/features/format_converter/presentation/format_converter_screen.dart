@@ -31,6 +31,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(formatConverterProvider.notifier).clearAll();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);

@@ -25,6 +25,7 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(collageProvider.notifier).reset();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);

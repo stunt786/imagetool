@@ -33,10 +33,10 @@ void main() {
       expect(settings.enableGlobalWatermark, isTrue);
       expect(settings.useWatermarkLogo, isTrue);
       expect(settings.watermarkText, equals('PixelTools'));
-      expect(settings.watermarkColorHex, equals(0xFFFFFFFF));
+      expect(settings.watermarkColorHex, equals(0xFF2196F3));
       expect(settings.watermarkOpacity, equals(0.7));
       expect(settings.watermarkPositionIndex, equals(4)); // Bottom-Right
-      expect(settings.watermarkColor, equals(0xFFFFFFFF));
+      expect(settings.watermarkColor, equals(0xFF2196F3));
       expect(settings.watermarkPosition, equals(4));
     });
 

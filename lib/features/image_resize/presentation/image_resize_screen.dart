@@ -128,6 +128,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(imageEditProvider.notifier).clear();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);

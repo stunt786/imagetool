@@ -33,6 +33,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(imageToPdfProvider.notifier).clearAll();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
