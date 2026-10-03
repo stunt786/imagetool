@@ -6,12 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/app_review_service.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/image_to_pdf_state.dart';
 import '../notifiers/image_to_pdf_notifier.dart';
 import '../widgets/image_thumbnail_card.dart';
@@ -41,7 +39,6 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         final state = ref.read(imageToPdfProvider);
         if (state.images.isEmpty) {
           ref.read(imageToPdfProvider.notifier).pickImages(context);
-          InterstitialTracker.instance.trackAction();
         }
       }
     });
@@ -77,40 +74,38 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
           ),
         ],
       ),
-      body: AdBannerWrapper(
-        child: Column(
-          children: [
-            if (_showSettings)
-              // Bounded and scrollable: an unbounded settings panel overflows
-              // the column in landscape.
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+      body: Column(
+        children: [
+          if (_showSettings)
+            // Bounded and scrollable: an unbounded settings panel overflows
+            // the column in landscape.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.42,
+              ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  16,
+                  16,
+                  16 + MediaQuery.of(context).viewInsets.bottom,
                 ),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    16 + MediaQuery.of(context).viewInsets.bottom,
-                  ),
-                  child: PdfSettingsPanel(
-                    settings: state.pageSettings,
-                    onSettingsChanged: notifier.updatePageSettings,
-                  ),
+                child: PdfSettingsPanel(
+                  settings: state.pageSettings,
+                  onSettingsChanged: notifier.updatePageSettings,
                 ),
               ),
-            Expanded(
-              child: state.images.isEmpty
-                  ? _isOneClickOpening
-                      ? const Center(child: CircularProgressIndicator())
-                      : _buildEmptyState(context, notifier)
-                  : _buildImageGrid(context, state, notifier),
             ),
-            if (state.images.isNotEmpty)
-              _buildBottomBar(context, state, notifier),
-          ],
-        ),
+          Expanded(
+            child: state.images.isEmpty
+                ? _isOneClickOpening
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildEmptyState(context, notifier)
+                : _buildImageGrid(context, state, notifier),
+          ),
+          if (state.images.isNotEmpty)
+            _buildBottomBar(context, state, notifier),
+        ],
       ),
     );
   }
@@ -169,7 +164,6 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
                   FilledButton.icon(
                     onPressed: () {
                       notifier.pickImages(context);
-                      InterstitialTracker.instance.trackAction();
                     },
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: const Text('Select Images'),
@@ -375,14 +369,12 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
               editedAt: DateTime.now(),
               toolIcon: Icons.picture_as_pdf_rounded,
               filePath: pdfPath,
-              thumbnailPath:
-                  sourcePaths.isEmpty ? null : sourcePaths.first,
+              thumbnailPath: sourcePaths.isEmpty ? null : sourcePaths.first,
               pagePaths: sourcePaths.isEmpty ? null : sourcePaths,
             ),
           );
       notifier.clearAll();
       _showPDFSavedDialog(context, pdfPath);
-      InterstitialTracker.instance.trackAction();
       AppReviewService.instance.notifyOperationCompleted(context);
     } else {
       final state = ref.read(imageToPdfProvider);
@@ -407,7 +399,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         fileSize = file.lengthSync();
       }
     } catch (_) {}
-    final sizeStr = fileSize > 0 ? '${PdfService.formatFileSize(fileSize)} · ' : '';
+    final sizeStr =
+        fileSize > 0 ? '${PdfService.formatFileSize(fileSize)} · ' : '';
 
     showDialog(
       context: context,

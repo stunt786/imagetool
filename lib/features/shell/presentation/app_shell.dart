@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../shared/widgets/banner_ad_widget.dart';
 import '../../camera/presentation/camera_screen.dart';
 import 'shell_index_scope.dart';
 
@@ -20,7 +19,6 @@ class AppShell extends StatelessWidget {
     final isMainScreen = currentPath == '/tools' ||
         currentPath == '/camera' ||
         currentPath == '/pdfs';
-    final isCameraFlow = currentPath.startsWith('/camera');
 
     return Scaffold(
       extendBody: isMainScreen,
@@ -35,16 +33,7 @@ class AppShell extends StatelessWidget {
         top: false,
         bottom: false,
         minimum: EdgeInsets.zero,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isCameraFlow) ...[
-              const BannerAdWidget(),
-              const SizedBox(height: 6),
-            ],
-            _BottomNavBar(navigationShell: navigationShell),
-          ],
-        ),
+        child: _BottomNavBar(navigationShell: navigationShell),
       ),
     );
   }
@@ -215,9 +204,7 @@ class _CameraCenterButton extends StatelessWidget {
         ? Colors.white.withValues(alpha: 0.80)
         : const Color(0xFF1A73E8).withValues(alpha: 0.35);
 
-    final iconColor = selected
-        ? Colors.white
-        : const Color(0xFF1A73E8);
+    final iconColor = selected ? Colors.white : const Color(0xFF1A73E8);
 
     return Semantics(
       button: true,
@@ -367,9 +354,8 @@ class _NavItem extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     const activeColor = Color(0xFF1A73E8);
-    final inactiveColor = isDark
-        ? const Color(0xFF5A6679)
-        : const Color(0xFF64748B);
+    final inactiveColor =
+        isDark ? const Color(0xFF5A6679) : const Color(0xFF64748B);
 
     return Semantics(
       button: true,
@@ -532,7 +518,8 @@ Path _buildNotchedBarPath({
   // 3. Left shoulder arc: from -pi/2 to angleTangentLeft
   const steps = 14;
   for (int i = 1; i <= steps; i++) {
-    final ang = -math.pi / 2 + (angleTangentLeft - (-math.pi / 2)) * (i / steps);
+    final ang =
+        -math.pi / 2 + (angleTangentLeft - (-math.pi / 2)) * (i / steps);
     path.lineTo(sxLeft + s * math.cos(ang), sy + s * math.sin(ang));
   }
 
@@ -582,4 +569,3 @@ Path _buildNotchedBarPath({
   path.close();
   return path;
 }
-

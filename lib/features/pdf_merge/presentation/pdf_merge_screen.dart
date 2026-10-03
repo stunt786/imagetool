@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
@@ -67,12 +66,17 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
             ),
           IconButton(
             tooltip: 'Clear',
-            onPressed: state.hasFiles || state.outputPath != null || state.publicExportPath != null ? notifier.clear : null,
+            onPressed: state.hasFiles ||
+                    state.outputPath != null ||
+                    state.publicExportPath != null
+                ? notifier.clear
+                : null,
             icon: const Icon(Icons.delete_outline),
           ),
         ],
@@ -86,7 +90,10 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : _buildEmptyState(context, notifier),
           ),
-          if (state.hasFiles && !state.isProcessing && state.outputPath == null && state.publicExportPath == null)
+          if (state.hasFiles &&
+              !state.isProcessing &&
+              state.outputPath == null &&
+              state.publicExportPath == null)
             _buildBottomBar(context, state, notifier),
         ],
       ),
@@ -135,7 +142,8 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               icon: const Icon(Icons.upload_file),
               label: const Text('Select PDFs'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
             ),
           ],
@@ -160,7 +168,8 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                color:
+                    theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -184,7 +193,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
             ),
             const SizedBox(height: 16),
           ],
-
           if (state.hasFiles && state.outputPath == null)
             ReorderableListView.builder(
               shrinkWrap: true,
@@ -202,7 +210,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                 );
               },
             ),
-
           if (state.isProcessing) ...[
             const SizedBox(height: 16),
             LinearProgressIndicator(value: state.progress),
@@ -214,7 +221,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               ),
             ),
           ],
-
           if (state.outputPath != null) ...[
             Container(
               padding: const EdgeInsets.all(16),
@@ -268,7 +274,11 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      state.publicExportPath!.split('/').sublist(0, state.publicExportPath!.split('/').length - 1).join('/'),
+                      state.publicExportPath!
+                          .split('/')
+                          .sublist(
+                              0, state.publicExportPath!.split('/').length - 1)
+                          .join('/'),
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'monospace',
                         color: theme.colorScheme.onSecondaryContainer,
@@ -279,7 +289,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               ),
             ),
             const SizedBox(height: 20),
-
             if (state.publicExportPath == null) ...[
               FilledButton.icon(
                 onPressed: () => notifier.exportFile(),
@@ -291,7 +300,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
               ),
               const SizedBox(height: 12),
             ],
-
             Text(
               'Output File',
               style: theme.textTheme.titleMedium?.copyWith(
@@ -338,7 +346,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                 ],
               ),
             ),
-
             if (state.publicExportPath != null) ...[
               const SizedBox(height: 20),
               Row(
@@ -411,7 +418,6 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                               thumbnailPath: result,
                             ),
                           );
-                      InterstitialTracker.instance.trackAction();
                     }
                   }
                 : null,

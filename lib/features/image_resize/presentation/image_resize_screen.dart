@@ -7,14 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/app_review_service.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/models/picked_file.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/notifiers/image_edit_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/output_saver.dart';
@@ -203,7 +201,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       var finalSelection = validImages;
       if (validImages.length > _maxBatchCount) {
         finalSelection = validImages.take(_maxBatchCount).toList();
-        _showSnack('Only up to $_maxBatchCount images can be resized at a time.');
+        _showSnack(
+            'Only up to $_maxBatchCount images can be resized at a time.');
       }
 
       _batchFiles = List<PickedFile>.from(finalSelection);
@@ -228,7 +227,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _undoIndex = 0;
       setState(() => _mode = _ResizeMode.dimensions);
       await _refreshEstimate();
-      InterstitialTracker.instance.trackAction();
     } finally {
       if (mounted) {
         setState(() => _isPicking = false);
@@ -287,7 +285,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         final availableSlots = _maxBatchCount - _batchFiles.length;
         if (newFiles.length > availableSlots) {
           _batchFiles.addAll(newFiles.take(availableSlots));
-          _showSnack('Only up to $_maxBatchCount images can be selected in total.');
+          _showSnack(
+              'Only up to $_maxBatchCount images can be selected in total.');
         } else {
           _batchFiles.addAll(newFiles);
         }
@@ -391,7 +390,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         ImageProcessResult? result;
 
         if (_mode == _ResizeMode.smartCompress) {
-          final targetBytes = math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
+          final targetBytes =
+              math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
           result = await ImageProcessorService.compressToTargetSize(
             bytes: file.bytes!,
             targetBytes: targetBytes,
@@ -539,7 +539,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             thumbnailPath: firstSavedPath,
           );
       _showSnack('Batch resize complete. $successCount images saved.');
-      InterstitialTracker.instance.trackAction();
       AppReviewService.instance.notifyOperationCompleted(context);
       _resetScreen();
     }
@@ -811,7 +810,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 180));
     if (!mounted || requestId != _estimateRequestId) return;
 
-    if (_mode == _ResizeMode.smartCompress && _activePanel == _EditorPanel.resize) {
+    if (_mode == _ResizeMode.smartCompress &&
+        _activePanel == _EditorPanel.resize) {
       if (mounted) {
         setState(() => _estimatedBytes = _targetSizeKB * 1024);
       }
@@ -959,12 +959,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             ),
           );
       _showSnack(_replaceOriginal ? 'Replaced original' : 'Saved');
-      InterstitialTracker.instance.trackAction();
       AppReviewService.instance.notifyOperationCompleted(context);
       _resetScreen();
     } catch (error) {
       _showSnack('Resized image is ready, but saving failed: $error');
-      InterstitialTracker.instance.trackAction();
     }
   }
 
@@ -1051,8 +1049,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         fileName: fileName,
         kind: OperationKind.imageEdit,
         replaceOriginal: replaceOriginal,
-        replacePath:
-            replaceOriginal ? _sourcePathFor(state.fileName) : null,
+        replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
@@ -1071,7 +1068,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     } catch (error) {
       _showSnack('Rotation applied, but saving failed: $error');
     }
-    InterstitialTracker.instance.trackAction();
   }
 
   Future<void> _flipImage({
@@ -1124,8 +1120,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         fileName: fileName,
         kind: OperationKind.imageEdit,
         replaceOriginal: replaceOriginal,
-        replacePath:
-            replaceOriginal ? _sourcePathFor(state.fileName) : null,
+        replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
@@ -1138,14 +1133,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               thumbnailPath: savedPath ?? '',
             ),
           );
-      _showSnack(replaceOriginal
-          ? 'Replaced original'
-          : '$label applied & saved.');
+      _showSnack(
+          replaceOriginal ? 'Replaced original' : '$label applied & saved.');
       _resetScreen();
     } catch (error) {
       _showSnack('$label applied, but saving failed: $error');
     }
-    InterstitialTracker.instance.trackAction();
   }
 
   Future<void> _compressImage() async {
@@ -1224,7 +1217,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     } catch (error) {
       _showSnack('Compression applied, but saving failed: $error');
     }
-    InterstitialTracker.instance.trackAction();
   }
 
   void _rotatePreviewBy(double deltaDegrees) {
@@ -1273,8 +1265,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         newWidth = state.width;
         newHeight = (newWidth / ratio).round().clamp(1, state.height);
       }
-      final newX = ((state.width - newWidth) / 2).round().clamp(0, math.max(0, state.width - 1));
-      final newY = ((state.height - newHeight) / 2).round().clamp(0, math.max(0, state.height - 1));
+      final newX = ((state.width - newWidth) / 2)
+          .round()
+          .clamp(0, math.max(0, state.width - 1));
+      final newY = ((state.height - newHeight) / 2)
+          .round()
+          .clamp(0, math.max(0, state.height - 1));
       setState(() {
         _cropPreset = preset;
         _cropXController.text = newX.toString();
@@ -1468,8 +1464,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         fileName: fileName,
         kind: OperationKind.imageEdit,
         replaceOriginal: replaceOriginal,
-        replacePath:
-            replaceOriginal ? _sourcePathFor(state.fileName) : null,
+        replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
@@ -1482,12 +1477,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               thumbnailPath: savedPath ?? '',
             ),
           );
-      _showSnack(replaceOriginal ? 'Replaced original' : 'Crop applied & saved.');
+      _showSnack(
+          replaceOriginal ? 'Replaced original' : 'Crop applied & saved.');
       _resetScreen();
     } catch (error) {
       _showSnack('Crop applied, but saving failed: $error');
     }
-    InterstitialTracker.instance.trackAction();
   }
 
   _ResizeTarget? _resolveTargetSize(ImageEditState state) {
@@ -1914,15 +1909,13 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ],
         ],
       ),
-      body: AdBannerWrapper(
-        child: state.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : state.hasImage
-                ? _buildEditorView(state, target)
-                : _isOneClickOpening
-                    ? const Center(child: CircularProgressIndicator())
-                    : _buildSelectPhotosScreen(),
-      ),
+      body: state.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : state.hasImage
+              ? _buildEditorView(state, target)
+              : _isOneClickOpening
+                  ? const Center(child: CircularProgressIndicator())
+                  : _buildSelectPhotosScreen(),
       bottomNavigationBar: state.hasImage
           ? SafeArea(
               top: false,
@@ -1975,8 +1968,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               icon: const Icon(Icons.photo_library_rounded),
               label: const Text('Pick Images'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 32, vertical: 15),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 15),
                 textStyle: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -3573,7 +3566,8 @@ Color _activeSelectColor(BuildContext context) =>
         : const Color(0xFF15803D);
 
 class _ModeCard extends StatelessWidget {
-  const _ModeCard({    required this.title,
+  const _ModeCard({
+    required this.title,
     required this.icon,
     required this.selected,
     required this.onTap,

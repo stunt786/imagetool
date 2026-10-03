@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 
@@ -53,13 +52,13 @@ class PdfsHubScreen extends ConsumerWidget {
     final padding = width >= 1200
         ? 28.0
         : width >= 700
-        ? 24.0
-        : 18.0;
+            ? 24.0
+            : 18.0;
     final cardAspectRatio = width >= 1000
         ? 1.9
         : width >= 700
-        ? 1.55
-        : 0.82;
+            ? 1.55
+            : 0.82;
     final topPadding = MediaQuery.of(context).padding.top + 72;
 
     final history = ref.watch(editHistoryProvider);
@@ -202,7 +201,6 @@ class _PdfToolCardState extends State<_PdfToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        InterstitialTracker.instance.trackNavigation();
         context.push(data.route);
       },
       onTapCancel: () => setState(() => _pressed = false),
@@ -373,7 +371,8 @@ class _PdfHistoryRow extends StatelessWidget {
                     if (item.compressionLevel != null) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: scheme.primaryContainer,
                           borderRadius: BorderRadius.circular(6),

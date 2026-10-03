@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
@@ -11,7 +10,6 @@ import '../../../core/services/storage_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../models/social_presets.dart';
 import '../state/image_editor_state.dart';
 
@@ -55,8 +53,10 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
   final TextEditingController _widthController = TextEditingController();
   final TextEditingController _heightController = TextEditingController();
-  final TextEditingController _cropXController = TextEditingController(text: '0');
-  final TextEditingController _cropYController = TextEditingController(text: '0');
+  final TextEditingController _cropXController =
+      TextEditingController(text: '0');
+  final TextEditingController _cropYController =
+      TextEditingController(text: '0');
   final TextEditingController _cropWidthController = TextEditingController();
   final TextEditingController _cropHeightController = TextEditingController();
 
@@ -94,14 +94,15 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
       }
 
       if (!mounted) return;
-      await ref.read(imageEditorProvider.notifier).loadImage(file.bytes!, file.name);
+      await ref
+          .read(imageEditorProvider.notifier)
+          .loadImage(file.bytes!, file.name);
       if (!mounted) return;
 
       final state = ref.read(imageEditorProvider).value;
       if (state != null && state.hasImage) {
         _syncInputsFromImage(state.width, state.height);
       }
-      InterstitialTracker.instance.trackAction();
     } finally {
       if (mounted) {
         setState(() => _isPicking = false);
@@ -150,10 +151,14 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (state == null || !state.hasImage) return;
     final x = int.tryParse(_cropXController.text) ?? 0;
     if (x + parsed > state.width) {
-      _cropWidthController.text = (state.width - x).clamp(1, state.width).toString();
+      _cropWidthController.text =
+          (state.width - x).clamp(1, state.width).toString();
     }
     if (_cropPreset.ratio != null) {
-      _cropHeightController.text = (parsed / _cropPreset.ratio!).round().clamp(1, state.height).toString();
+      _cropHeightController.text = (parsed / _cropPreset.ratio!)
+          .round()
+          .clamp(1, state.height)
+          .toString();
     }
     setState(() {});
   }
@@ -165,10 +170,14 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (state == null || !state.hasImage) return;
     final y = int.tryParse(_cropYController.text) ?? 0;
     if (y + parsed > state.height) {
-      _cropHeightController.text = (state.height - y).clamp(1, state.height).toString();
+      _cropHeightController.text =
+          (state.height - y).clamp(1, state.height).toString();
     }
     if (_cropPreset.ratio != null) {
-      _cropWidthController.text = (parsed * _cropPreset.ratio!).round().clamp(1, state.width).toString();
+      _cropWidthController.text = (parsed * _cropPreset.ratio!)
+          .round()
+          .clamp(1, state.width)
+          .toString();
     }
     setState(() {});
   }
@@ -179,7 +188,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     setState(() => _cropPreset = preset);
     if (preset.ratio != null) {
       final width = int.tryParse(_cropWidthController.text) ?? state.width;
-      _cropHeightController.text = (width / preset.ratio!).round().clamp(1, state.height).toString();
+      _cropHeightController.text =
+          (width / preset.ratio!).round().clamp(1, state.height).toString();
     }
   }
 
@@ -192,7 +202,10 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     final width = int.tryParse(_cropWidthController.text) ?? state.width;
     final height = int.tryParse(_cropHeightController.text) ?? state.height;
 
-    if (width <= 0 || height <= 0 || x + width > state.width || y + height > state.height) {
+    if (width <= 0 ||
+        height <= 0 ||
+        x + width > state.width ||
+        y + height > state.height) {
       _showSnack('Enter a valid crop area.');
       return;
     }
@@ -211,7 +224,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (newState != null && newState.hasImage) {
       _syncInputsFromImage(newState.width, newState.height);
       _showSnack('Image cropped.');
-      InterstitialTracker.instance.trackAction();
     }
   }
 
@@ -241,7 +253,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (newState != null && newState.hasImage) {
       _syncInputsFromImage(newState.width, newState.height);
       _showSnack('Image resized.');
-      InterstitialTracker.instance.trackAction();
     }
   }
 
@@ -263,7 +274,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (newState != null && newState.hasImage) {
       _syncInputsFromImage(newState.width, newState.height);
       _showSnack('Image rotated.');
-      InterstitialTracker.instance.trackAction();
     }
   }
 
@@ -277,7 +287,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
     if (!mounted) return;
     _showSnack('Image flipped.');
-    InterstitialTracker.instance.trackAction();
   }
 
   Future<void> _applyPreset() async {
@@ -298,7 +307,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     if (newState != null && newState.hasImage) {
       _syncInputsFromImage(newState.width, newState.height);
       _showSnack('Applied preset: ${preset.name}');
-      InterstitialTracker.instance.trackAction();
     }
   }
 
@@ -339,7 +347,6 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
 
       _showSnack('Saved: $comparison');
       await _showSaveSnackBar(saved.localPath, fileName);
-      InterstitialTracker.instance.trackAction();
     } catch (error) {
       _showSnack('Saving failed: $error');
     }
@@ -386,7 +393,7 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
         ],
       ),
       body: state == null || !state.hasImage
-          ? AdBannerWrapper(child: _buildEmptyState(context))
+          ? _buildEmptyState(context)
           : _buildEditorContent(context, state, theme, asyncState),
     );
   }
@@ -490,7 +497,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildImagePreview(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildImagePreview(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Container(
       height: MediaQuery.of(context).size.height * 0.35,
       padding: const EdgeInsets.all(12),
@@ -521,7 +529,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildImageInfoRow(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildImageInfoRow(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -532,7 +541,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.image_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
+          Icon(Icons.image_rounded,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             state.fileName ?? 'Image',
@@ -648,7 +658,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildCropTab(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildCropTab(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,7 +759,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildResizeTab(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildResizeTab(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -865,7 +877,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildRotateTab(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildRotateTab(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -954,7 +967,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildPresetTab(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildPresetTab(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,7 +1063,8 @@ class _ImageEditorScreenState extends ConsumerState<ImageEditorScreen> {
     );
   }
 
-  Widget _buildBottomBar(BuildContext context, ImageEditorState state, ThemeData theme) {
+  Widget _buildBottomBar(
+      BuildContext context, ImageEditorState state, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
@@ -1260,7 +1275,9 @@ class _TabButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primaryContainer : Colors.transparent,
+          color: selected
+              ? theme.colorScheme.primaryContainer
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(

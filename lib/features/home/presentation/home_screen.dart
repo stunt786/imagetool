@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../camera/presentation/camera_screen.dart';
@@ -1077,7 +1076,6 @@ class _ToolCardState extends State<_ToolCard> {
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
-        InterstitialTracker.instance.trackNavigation();
         if (data.onTap != null) {
           data.onTap!(context);
         } else {
@@ -1117,7 +1115,6 @@ class _ToolCardState extends State<_ToolCard> {
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () {
-                InterstitialTracker.instance.trackNavigation();
                 if (data.onTap != null) {
                   data.onTap!(context);
                 } else {
@@ -1170,7 +1167,8 @@ class _ToolCardState extends State<_ToolCard> {
                             size: chevronSize,
                             color: isDark
                                 ? const Color(0xFF64748B)
-                                : scheme.onSurfaceVariant.withValues(alpha: 0.55),
+                                : scheme.onSurfaceVariant
+                                    .withValues(alpha: 0.55),
                           ),
                         ],
                       ),
@@ -1233,7 +1231,6 @@ class _SearchToolRow extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        InterstitialTracker.instance.trackNavigation();
         if (data.onTap != null) {
           data.onTap!(context);
         } else {

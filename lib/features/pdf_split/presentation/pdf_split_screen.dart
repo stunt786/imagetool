@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -554,7 +553,6 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                               thumbnailPath: firstPath,
                             ),
                           );
-                      InterstitialTracker.instance.trackAction();
                     }
                   }
                 : null,

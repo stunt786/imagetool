@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/services/interstitial_tracker.dart';
-
 const _imageTools = <_ToolData>[
   _ToolData(
     title: 'Resize Image',
@@ -112,19 +110,23 @@ class ImagesHubScreen extends StatelessWidget {
                 padding: EdgeInsets.fromLTRB(16, topPadding, 16, 120),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate.fixed([
-                    _CategoryHeader(title: 'Image Tools', count: _imageTools.length),
+                    _CategoryHeader(
+                        title: 'Image Tools', count: _imageTools.length),
                     const SizedBox(height: 12),
                     ...List.generate(_imageTools.length, (i) {
                       return Padding(
-                        padding: EdgeInsets.only(bottom: i < _imageTools.length - 1 ? 12 : 24),
+                        padding: EdgeInsets.only(
+                            bottom: i < _imageTools.length - 1 ? 12 : 24),
                         child: _ToolRow(data: _imageTools[i]),
                       );
                     }),
-                    _CategoryHeader(title: 'PDF Tools', count: _pdfTools.length),
+                    _CategoryHeader(
+                        title: 'PDF Tools', count: _pdfTools.length),
                     const SizedBox(height: 12),
                     ...List.generate(_pdfTools.length, (i) {
                       return Padding(
-                        padding: EdgeInsets.only(bottom: i < _pdfTools.length - 1 ? 12 : 0),
+                        padding: EdgeInsets.only(
+                            bottom: i < _pdfTools.length - 1 ? 12 : 0),
                         child: _ToolRow(data: _pdfTools[i]),
                       );
                     }),
@@ -198,7 +200,6 @@ class _ToolRow extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () {
-          InterstitialTracker.instance.trackNavigation();
           context.push(data.route);
         },
         child: Padding(
@@ -239,7 +240,8 @@ class _ToolRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded, size: 20, color: scheme.onSurfaceVariant),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20, color: scheme.onSurfaceVariant),
             ],
           ),
         ),

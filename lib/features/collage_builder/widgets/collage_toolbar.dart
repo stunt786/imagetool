@@ -10,7 +10,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/app_review_service.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
@@ -63,7 +62,8 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       child: _ToolbarButton(
                         icon: Icons.grid_on,
                         label: 'Gap',
-                        onTap: isBusy ? null : () => _showGapSlider(context, ref),
+                        onTap:
+                            isBusy ? null : () => _showGapSlider(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -71,7 +71,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       child: _ToolbarButton(
                         icon: Icons.rounded_corner,
                         label: 'Radius',
-                        onTap: isBusy ? null : () => _showRadiusSlider(context, ref),
+                        onTap: isBusy
+                            ? null
+                            : () => _showRadiusSlider(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -79,7 +81,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       child: _ToolbarButton(
                         icon: Icons.palette,
                         label: 'Color',
-                        onTap: isBusy ? null : () => _showColorPicker(context, ref),
+                        onTap: isBusy
+                            ? null
+                            : () => _showColorPicker(context, ref),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -87,7 +91,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       child: _ToolbarButton(
                         icon: Icons.title,
                         label: 'Text',
-                        onTap: isBusy ? null : () => showCollageTextDialog(context),
+                        onTap: isBusy
+                            ? null
+                            : () => showCollageTextDialog(context),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -95,13 +101,14 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       child: _ToolbarButton(
                         icon: Icons.add_photo_alternate,
                         label: 'Add',
-                        onTap: isBusy || state.imageCount >= CollageNotifier.maxCollageImages
+                        onTap: isBusy ||
+                                state.imageCount >=
+                                    CollageNotifier.maxCollageImages
                             ? null
                             : () {
                                 ref
                                     .read(collageProvider.notifier)
                                     .pickImages(context);
-                                InterstitialTracker.instance.trackAction();
                               },
                       ),
                     ),
@@ -174,7 +181,8 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         child: SingleChildScrollView(
           child: Consumer(
             builder: (context, ref, _) {
-              final currentGap = ref.watch(collageProvider.select((s) => s.gap));
+              final currentGap =
+                  ref.watch(collageProvider.select((s) => s.gap));
               final theme = Theme.of(context);
               return Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -197,7 +205,8 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
@@ -286,7 +295,8 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primaryContainer,
                             borderRadius: BorderRadius.circular(12),
@@ -311,10 +321,13 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                             Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
-                                label: Text(r == 0 ? 'Square' : '${r.toInt()}px'),
+                                label:
+                                    Text(r == 0 ? 'Square' : '${r.toInt()}px'),
                                 selected: currentRadius.toInt() == r.toInt(),
                                 onSelected: (_) {
-                                  ref.read(collageProvider.notifier).setCornerRadius(r);
+                                  ref
+                                      .read(collageProvider.notifier)
+                                      .setCornerRadius(r);
                                 },
                               ),
                             ),
@@ -328,7 +341,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                       max: 50,
                       divisions: 50,
                       onChanged: (value) {
-                        ref.read(collageProvider.notifier).setCornerRadius(value);
+                        ref
+                            .read(collageProvider.notifier)
+                            .setCornerRadius(value);
                       },
                     ),
                   ],
@@ -464,7 +479,6 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
     );
   }
 
-
   Future<void> _exportCollage(BuildContext context, WidgetRef ref) async {
     if (_isSharing || ref.read(collageProvider).isExporting) return;
 
@@ -504,7 +518,6 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
           ),
         );
         ref.read(collageProvider.notifier).reset();
-        InterstitialTracker.instance.trackAction();
         AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (e) {
@@ -544,8 +557,12 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       }
 
       Rect? sharePositionOrigin;
-      final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      final box =
+          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box != null &&
+          box.hasSize &&
+          box.size.width > 0 &&
+          box.size.height > 0) {
         sharePositionOrigin = box.localToGlobal(Offset.zero) & box.size;
       }
       if (sharePositionOrigin == null && context.mounted) {
@@ -584,7 +601,6 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
 
       unawaited(_cleanupOldTempCollages(tempDir, fileName));
 
-      InterstitialTracker.instance.trackAction();
       if (context.mounted) {
         AppReviewService.instance.notifyOperationCompleted(context);
       }
@@ -603,7 +619,8 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
     }
   }
 
-  Future<void> _cleanupOldTempCollages(Directory tempDir, String currentFileName) async {
+  Future<void> _cleanupOldTempCollages(
+      Directory tempDir, String currentFileName) async {
     try {
       final list = await tempDir.list().toList();
       final now = DateTime.now();

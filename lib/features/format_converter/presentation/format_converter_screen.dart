@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/app_review_service.dart';
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/services/operation_store_provider.dart';
@@ -11,7 +10,6 @@ import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/format_converter_notifier.dart';
 
 class FormatConverterScreen extends ConsumerStatefulWidget {
@@ -71,7 +69,6 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
       if (mounted) {
         ref.read(formatConverterProvider.notifier).addPickedFiles(pickedFiles);
-        InterstitialTracker.instance.trackAction();
       }
     } finally {
       if (mounted) {
@@ -131,7 +128,8 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
               );
         }
 
-        final destLabel = isPdf ? 'Downloads and Files' : 'the gallery and Files';
+        final destLabel =
+            isPdf ? 'Downloads and Files' : 'the gallery and Files';
         scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -140,7 +138,6 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
           ),
         );
         ref.read(formatConverterProvider.notifier).resetStatusForReconversion();
-        InterstitialTracker.instance.trackAction();
         AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (e) {
@@ -174,7 +171,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       body: state.images.isEmpty
           ? _isOneClickOpening
               ? const Center(child: CircularProgressIndicator())
-              : AdBannerWrapper(child: _buildEmptyState(context))
+              : _buildEmptyState(context)
           : Column(
               children: [
                 _buildFormatSelector(context, state),
@@ -207,66 +204,66 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                 Container(
                   width: badgeSize,
                   height: badgeSize,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary.withValues(alpha: 0.2),
-                    theme.colorScheme.tertiary.withValues(alpha: 0.2),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primary.withValues(alpha: 0.2),
+                        theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.swap_horiz_rounded,
+                    size: 60,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.swap_horiz_rounded,
-                size: 60,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Convert Image Formats',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Select multiple images and convert them to JPG, PNG, WebP, BMP, or TIFF format all at once',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _isPicking ? null : _pickImages,
-              icon: _isPicking
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add_photo_alternate),
-              label: Text(_isPicking ? 'Selecting...' : 'Select Images'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
+                const SizedBox(height: 24),
+                Text(
+                  'Convert Image Formats',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Supports: JPG, PNG, WebP, GIF, BMP, TIFF, HEIC, AVIF',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
+                const SizedBox(height: 12),
+                Text(
+                  'Select multiple images and convert them to JPG, PNG, WebP, BMP, or TIFF format all at once',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                FilledButton.icon(
+                  onPressed: _isPicking ? null : _pickImages,
+                  icon: _isPicking
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.add_photo_alternate),
+                  label: Text(_isPicking ? 'Selecting...' : 'Select Images'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Supports: JPG, PNG, WebP, GIF, BMP, TIFF, HEIC, AVIF',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ),
           ),

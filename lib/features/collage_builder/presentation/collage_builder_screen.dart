@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/services/interstitial_tracker.dart';
 import '../../../core/settings/app_settings.dart';
-import '../../../shared/widgets/ad_banner_wrapper.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
 import '../widgets/collage_toolbar.dart';
@@ -13,7 +11,8 @@ class CollageBuilderScreen extends ConsumerStatefulWidget {
   const CollageBuilderScreen({super.key});
 
   @override
-  ConsumerState<CollageBuilderScreen> createState() => _CollageBuilderScreenState();
+  ConsumerState<CollageBuilderScreen> createState() =>
+      _CollageBuilderScreenState();
 }
 
 class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
@@ -32,7 +31,6 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
         final state = ref.read(collageProvider);
         if (state.imageCount == 0) {
           ref.read(collageProvider.notifier).pickImages(context);
-          InterstitialTracker.instance.trackAction();
         }
       }
     });
@@ -54,13 +52,11 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             ),
         ],
       ),
-      body: AdBannerWrapper(
-        child: state.imageCount == 0
-            ? _isOneClickOpening
-                ? const Center(child: CircularProgressIndicator())
-                : _buildSelectPhotosScreen(context)
-            : _buildCollageEditor(context),
-      ),
+      body: state.imageCount == 0
+          ? _isOneClickOpening
+              ? const Center(child: CircularProgressIndicator())
+              : _buildSelectPhotosScreen(context)
+          : _buildCollageEditor(context),
     );
   }
 
@@ -104,12 +100,12 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             FilledButton.icon(
               onPressed: () {
                 ref.read(collageProvider.notifier).pickImages(context);
-                InterstitialTracker.instance.trackAction();
               },
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('Select Photos (up to 9)'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
               ),
             ),
           ],
@@ -141,5 +137,4 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
       ],
     );
   }
-
 }

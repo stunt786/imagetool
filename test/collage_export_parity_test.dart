@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:pixeltools/core/services/interstitial_tracker.dart';
 import 'package:pixeltools/core/settings/app_settings.dart';
 import 'package:pixeltools/features/collage_builder/models/collage_state.dart';
 import 'package:pixeltools/features/collage_builder/notifiers/collage_notifier.dart';
@@ -67,7 +66,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    InterstitialTracker.instance.reset();
     initialPathProvider = PathProviderPlatform.instance;
     PathProviderPlatform.instance = FakePathProviderPlatform();
   });
@@ -91,7 +89,9 @@ void main() {
       expect(p10.r, equals(255));
     });
 
-    test('setScale clamps scale between 1.0 and 5.0, resets offset when scale is 1.0', () {
+    test(
+        'setScale clamps scale between 1.0 and 5.0, resets offset when scale is 1.0',
+        () {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -125,7 +125,9 @@ void main() {
       expect(state.images[0].offsetY, equals(0.0));
     });
 
-    test('preview dimensions are recorded and scaleFactor adapts to preview size', () {
+    test(
+        'preview dimensions are recorded and scaleFactor adapts to preview size',
+        () {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -142,7 +144,9 @@ void main() {
       expect(state.previewHeight, equals(400.0));
     });
 
-    test('exportCollage with scale=1.0 and scale=2.0 renders zoomed center correctly', () async {
+    test(
+        'exportCollage with scale=1.0 and scale=2.0 renders zoomed center correctly',
+        () async {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -154,7 +158,8 @@ void main() {
       final notifier = container.read(collageProvider.notifier);
 
       // Single slot layout
-      notifier.changeLayout(CollageLayout.all.firstWhere((l) => l.id == 'single'));
+      notifier
+          .changeLayout(CollageLayout.all.firstWhere((l) => l.id == 'single'));
       final imgBytes = _createQuadrantTestPng(width: 400, height: 400);
       notifier.setSlotImage(0, imgBytes, 'quad.png');
       notifier.setGap(0);
@@ -201,7 +206,9 @@ void main() {
       expect(centerPixelYellow.b, lessThan(15));
     });
 
-    test('exportCollage with non-square aspect ratio image preserves cover cropping without stretching', () async {
+    test(
+        'exportCollage with non-square aspect ratio image preserves cover cropping without stretching',
+        () async {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -212,7 +219,8 @@ void main() {
       addTearDown(container.dispose);
       final notifier = container.read(collageProvider.notifier);
 
-      notifier.changeLayout(CollageLayout.all.firstWhere((l) => l.id == 'single'));
+      notifier
+          .changeLayout(CollageLayout.all.firstWhere((l) => l.id == 'single'));
       // Landscape image in square canvas: 400x200 into 1080x1080
       // In BoxFit.cover: the height (200) maps to 1080.
       // The width becomes 1080 * 2 = 2160, so left/right are cropped symmetrically.
@@ -231,7 +239,8 @@ void main() {
       expect(topPixel.r, lessThan(20));
 
       // Bottom edge should be near 255 (white stripe)
-      final bottomPixel = decoded.getPixel(decoded.width ~/ 2, decoded.height - 6);
+      final bottomPixel =
+          decoded.getPixel(decoded.width ~/ 2, decoded.height - 6);
       expect(bottomPixel.r, greaterThan(235));
     });
   });

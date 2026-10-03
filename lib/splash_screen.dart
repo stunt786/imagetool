@@ -1,9 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'core/services/ad_service.dart';
 import 'shared/services/watermark_helper.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -110,12 +108,6 @@ class _SplashScreenState extends State<SplashScreen>
       try {
         await WatermarkHelper.loadIconBytes();
       } catch (_) {}
-
-      if (!kIsWeb) {
-        try {
-          await AdService.instance.initialize();
-        } catch (_) {}
-      }
     } finally {
       _initDone = true;
       _checkComplete();

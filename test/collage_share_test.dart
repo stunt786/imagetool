@@ -17,7 +17,6 @@ import 'package:share_plus_platform_interface/share_plus_platform_interface.dart
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:pixeltools/core/services/interstitial_tracker.dart';
 
 class FakePathProviderPlatform extends PathProviderPlatform {
   @override
@@ -57,7 +56,8 @@ class FakeSharePlatform extends Fake
   }
 }
 
-Uint8List _createSolidTestJpg({int width = 200, int height = 200, required Color color}) {
+Uint8List _createSolidTestJpg(
+    {int width = 200, int height = 200, required Color color}) {
   final image = img.Image(width: width, height: height);
   img.fill(
     image,
@@ -79,7 +79,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    InterstitialTracker.instance.reset();
     fakeShare = FakeSharePlatform();
     initialSharePlatform = SharePlatform.instance;
     SharePlatform.instance = fakeShare;
@@ -105,7 +104,8 @@ void main() {
       addTearDown(container.dispose);
       final notifier = container.read(collageProvider.notifier);
 
-      final redImg = _createSolidTestJpg(width: 100, height: 100, color: Colors.red);
+      final redImg =
+          _createSolidTestJpg(width: 100, height: 100, color: Colors.red);
       notifier.setSlotImage(0, redImg, 'red.jpg');
 
       // First export starts
@@ -114,14 +114,17 @@ void main() {
       final future2 = notifier.exportCollage();
 
       final result2 = await future2;
-      expect(result2, isNull, reason: 'Concurrent export must be rejected and return null');
+      expect(result2, isNull,
+          reason: 'Concurrent export must be rejected and return null');
 
       final result1 = await future1;
       expect(result1, isNotNull);
       expect(result1!.isNotEmpty, isTrue);
     });
 
-    test('exportCollage handles narrow slots and large gaps without negative dimension errors', () async {
+    test(
+        'exportCollage handles narrow slots and large gaps without negative dimension errors',
+        () async {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -138,7 +141,8 @@ void main() {
       final layout3x3 = CollageLayout.all.firstWhere((l) => l.id == 'grid_3x3');
       notifier.changeLayout(layout3x3);
 
-      final imgBytes = _createSolidTestJpg(width: 50, height: 50, color: Colors.blue);
+      final imgBytes =
+          _createSolidTestJpg(width: 50, height: 50, color: Colors.blue);
       notifier.setSlotImage(0, imgBytes, 'blue.jpg');
 
       final bytes = await notifier.exportCollage();
@@ -149,7 +153,9 @@ void main() {
       expect(decoded.height, equals(1080));
     });
 
-    test('exportCollage successfully includes text layers and legacy captionText', () async {
+    test(
+        'exportCollage successfully includes text layers and legacy captionText',
+        () async {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -160,7 +166,8 @@ void main() {
       addTearDown(container.dispose);
       final notifier = container.read(collageProvider.notifier);
 
-      final imgBytes = _createSolidTestJpg(width: 100, height: 100, color: Colors.green);
+      final imgBytes =
+          _createSolidTestJpg(width: 100, height: 100, color: Colors.green);
       notifier.setSlotImage(0, imgBytes, 'green.jpg');
       notifier.addTextLayer();
       final layerId = container.read(collageProvider).textLayers.first.id;
@@ -175,7 +182,9 @@ void main() {
   });
 
   group('CollageToolbar Sharing and UI Interaction', () {
-    testWidgets('Save and Share buttons are disabled when no images are present', (tester) async {
+    testWidgets(
+        'Save and Share buttons are disabled when no images are present',
+        (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
@@ -202,12 +211,14 @@ void main() {
       expect(shareButton.onPressed, isNull);
     });
 
-    testWidgets('Save and Share buttons are enabled when images exist', (tester) async {
+    testWidgets('Save and Share buttons are enabled when images exist',
+        (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
       final notifier = container.read(collageProvider.notifier);
-      final testImg = _createSolidTestJpg(width: 100, height: 100, color: Colors.amber);
+      final testImg =
+          _createSolidTestJpg(width: 100, height: 100, color: Colors.amber);
       notifier.setSlotImage(0, testImg, 'amber.jpg');
 
       await tester.pumpWidget(
@@ -233,7 +244,9 @@ void main() {
       expect(shareButton.onPressed, isNotNull);
     });
 
-    testWidgets('Tapping Share triggers export, provides valid XFile with MIME type and origin, without hanging', (tester) async {
+    testWidgets(
+        'Tapping Share triggers export, provides valid XFile with MIME type and origin, without hanging',
+        (tester) async {
       final container = ProviderContainer(
         overrides: [
           appSettingsProvider.overrideWith(
@@ -244,7 +257,8 @@ void main() {
       addTearDown(container.dispose);
 
       final notifier = container.read(collageProvider.notifier);
-      final testImg = _createSolidTestJpg(width: 100, height: 100, color: Colors.purple);
+      final testImg =
+          _createSolidTestJpg(width: 100, height: 100, color: Colors.purple);
       notifier.setSlotImage(0, testImg, 'purple.jpg');
 
       await tester.pumpWidget(
