@@ -125,22 +125,50 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final bgColor = isDark
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFF8F7FC);
+
+    final bgColors = isDark
+        ? const [
+            Color(0xFF0F172A),
+            Color(0xFF0A101D),
+            Color(0xFF060A12),
+          ]
+        : const [
+            Color(0xFFFFFFFF),
+            Color(0xFFF8F7FC),
+            Color(0xFFF0F0F8),
+          ];
+
+    final titleColor = isDark ? Colors.white : const Color(0xFF171B2E);
+    final taglineColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF5A6078);
+    final statusColor = isDark ? const Color(0xFF64748B) : const Color(0xFF6B7280);
+    final trackColor = isDark
+        ? Colors.white.withValues(alpha: 0.1)
+        : Colors.black.withValues(alpha: 0.08);
+    final fromColor = isDark
+        ? const Color(0xFF64748B).withValues(alpha: 0.7)
+        : const Color(0xFF7A7D90);
+    final brandColor = isDark
+        ? Colors.white.withValues(alpha: 0.85)
+        : const Color(0xFF171B2E);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: bgColor,
       body: Stack(
         children: [
           // Background ambient gradient
           Positioned.fill(
             child: DecoratedBox(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF0F172A),
-                    Color(0xFF0A101D),
-                    Color(0xFF060A12),
-                  ],
+                  colors: bgColors,
                 ),
               ),
             ),
@@ -210,10 +238,10 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 24),
 
                       // App Name
-                      const Text(
+                      Text(
                         'PixelTools',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: titleColor,
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
@@ -222,10 +250,10 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 6),
 
                       // Tagline
-                      const Text(
+                      Text(
                         'Convert · Edit · Create',
                         style: TextStyle(
-                          color: Color(0xFF94A3B8),
+                          color: taglineColor,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           letterSpacing: 0.4,
@@ -241,7 +269,7 @@ class _SplashScreenState extends State<SplashScreen>
                             Container(
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.1),
+                                color: trackColor,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Align(
@@ -275,8 +303,8 @@ class _SplashScreenState extends State<SplashScreen>
                             const SizedBox(height: 12),
                             Text(
                               _loadingStatus,
-                              style: const TextStyle(
-                                color: Color(0xFF64748B),
+                              style: TextStyle(
+                                color: statusColor,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 letterSpacing: 0.2,
@@ -304,7 +332,7 @@ class _SplashScreenState extends State<SplashScreen>
                     Text(
                       'from',
                       style: TextStyle(
-                        color: const Color(0xFF64748B).withValues(alpha: 0.7),
+                        color: fromColor,
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 1.8,
@@ -314,7 +342,7 @@ class _SplashScreenState extends State<SplashScreen>
                     Text(
                       'bnbkio',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
+                        color: brandColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 3.5,

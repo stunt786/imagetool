@@ -221,6 +221,14 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
       }
 
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Filter applied successfully'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
         context.pop();
       }
     } finally {

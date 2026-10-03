@@ -304,13 +304,14 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                         Text(
                           state.compressionRatio! > 0
                               ? 'Reduced by ${state.compressionRatio!.toStringAsFixed(1)}% (${PdfService.formatFileSize(state.selectedFileSize!)} → ${PdfService.formatFileSize(state.outputFileSize!)})'
-                              : 'No size reduction was possible for this PDF (${PdfService.formatFileSize(state.selectedFileSize!)}). The original file was kept; the output is never larger than the input.',
+                              : 'Already compressed at highest level',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSecondaryContainer,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      if (state.note != null) ...[
+                      if (state.note != null &&
+                          state.note != 'Already compressed at highest level') ...[
                         const SizedBox(height: 6),
                         Text(
                           state.note!,

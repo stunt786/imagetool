@@ -98,6 +98,16 @@ abstract final class PublicStorage {
 
   // ── Publishing ─────────────────────────────────────────────────────────
 
+  /// Ensures that any public exported file name has the 'pixeltools_' prefix.
+  static String ensurePixelToolsPrefix(String name) {
+    final trimmed = name.trim();
+    final base = path.basename(trimmed);
+    if (base.toLowerCase().startsWith('pixeltools')) {
+      return base;
+    }
+    return 'pixeltools_$base';
+  }
+
   /// Writes [bytes] into public storage and returns a human-readable
   /// destination path (for example `/storage/emulated/0/Download/PixelTools`).
   ///
@@ -110,13 +120,14 @@ abstract final class PublicStorage {
     required PublicFileKind kind,
     String? treeUriOverride,
   }) async {
+    final safeName = ensurePixelToolsPrefix(fileName);
     final treeUri = treeUriOverride ?? await loadTreeUri();
     if (!supportsNativeStorage) {
-      return _fallbackLocalPath(fileName, bytes: bytes);
+      return _fallbackLocalPath(safeName, bytes: bytes);
     }
     return _invokeSave('saveBytes', {
       'bytes': bytes,
-      'displayName': fileName,
+      'displayName': safeName,
       'kind': kind.name,
       'treeUri': treeUri,
     });
@@ -131,11 +142,12 @@ abstract final class PublicStorage {
     required PublicFileKind kind,
     String? treeUriOverride,
   }) async {
+    final safeName = ensurePixelToolsPrefix(fileName);
     if (!supportsNativeStorage) return sourcePath;
     final treeUri = treeUriOverride ?? await loadTreeUri();
     return _invokeSave('saveFile', {
       'sourcePath': sourcePath,
-      'displayName': fileName,
+      'displayName': safeName,
       'kind': kind.name,
       'treeUri': treeUri,
     });

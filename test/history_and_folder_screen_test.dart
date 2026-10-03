@@ -183,7 +183,8 @@ void main() {
   });
 
   group('OperationFolderScreen (prev.jpg & prev1.jpg)', () {
-    testWidgets('displays numbered pages, collage promo card, and Ask AI button',
+    testWidgets(
+        'displays numbered pages, collage promo card, and has Ask AI removed',
         (tester) async {
       final op = await seed(
         tester,
@@ -195,7 +196,7 @@ void main() {
       expect(find.text('01'), findsOneWidget);
       expect(find.text('02'), findsOneWidget);
       expect(find.text('Try making a collage'), findsOneWidget);
-      expect(find.text('Ask AI'), findsOneWidget);
+      expect(find.text('Ask AI'), findsNothing);
       expect(find.text('Tags +'), findsOneWidget);
     });
 

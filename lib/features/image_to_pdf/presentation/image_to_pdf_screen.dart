@@ -404,7 +404,13 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogCtx) {
+        Future.delayed(const Duration(milliseconds: 2500), () {
+          if (dialogCtx.mounted && Navigator.of(dialogCtx).canPop()) {
+            Navigator.of(dialogCtx).pop();
+          }
+        });
+        return AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
         content: Column(
@@ -466,7 +472,8 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
             label: const Text('Share'),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 

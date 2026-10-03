@@ -281,8 +281,6 @@ class _FilterOption {
 
 final List<_FilterOption> _filterOptions = [
   const _FilterOption(FilterType.none, Icons.auto_fix_high, 'Original'),
-  const _FilterOption(FilterType.smartScan, Icons.auto_mode_rounded, 'Smart Clean'),
-  const _FilterOption(FilterType.autoFlatten, Icons.straighten_rounded, 'Auto Flatten'),
   const _FilterOption(FilterType.antiLight, Icons.light_mode_outlined, 'Anti-Light'),
   const _FilterOption(FilterType.autoBrighten, Icons.brightness_6_outlined, 'Auto Bright'),
   const _FilterOption(FilterType.magicColor, Icons.palette_outlined, 'Magic color'),

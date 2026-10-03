@@ -1,3 +1,4 @@
+// ignore_for_file: deprecated_member_use
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -17,6 +18,8 @@ import '../../../core/services/public_storage.dart';
 import '../../camera/notifiers/document_batch_notifier.dart';
 import '../../format_converter/notifiers/format_converter_notifier.dart'
     show ConvertFormat;
+import '../../pdf_compress/models/pdf_compress_state.dart'
+    show CompressionLevel;
 import '../notifiers/operation_library_notifier.dart';
 import '../services/file_actions.dart';
 import '../services/file_open_service.dart';
@@ -224,7 +227,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
 
       final base = p.basenameWithoutExtension(widget.item.fileName);
-      final fileName = '${base}_resized_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
+      final fileName = 'pixeltools_${base}_resized_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
 
       final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
@@ -242,18 +245,15 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       final newSize = await File(saved.first.localPath).length();
       if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Image resized (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})',
           ),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () =>
-                Share.shareXFiles([XFile(saved.first.localPath)]),
-          ),
+          duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -369,9 +369,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
 
       final base = p.basenameWithoutExtension(widget.item.fileName);
-      final fileName = '${base}_${DateTime.now().millisecondsSinceEpoch}.${selectedFormat.extension}';
+      final fileName = 'pixeltools_${base}_${DateTime.now().millisecondsSinceEpoch}.${selectedFormat.extension}';
 
-      final saved = await saveToolOutputs(
+      await saveToolOutputs(
         ref.read(operationStoreProvider),
         kind: OperationKind.convert,
         entries: [
@@ -386,16 +386,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       await ref.read(operationLibraryProvider.notifier).reload();
 
       if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Converted to ${selectedFormat.label} successfully'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () =>
-                Share.shareXFiles([XFile(saved.first.localPath)]),
-          ),
+          duration: const Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -427,10 +424,10 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       final base = p.basenameWithoutExtension(widget.item.fileName);
       final outPath = await PdfService.instance.createPdfFromImages(
         imagePaths: [widget.item.path],
-        outputBaseName: base,
+        outputBaseName: 'pixeltools_$base',
       );
 
-      final saved = await saveToolOutputs(
+      await saveToolOutputs(
         ref.read(operationStoreProvider),
         kind: OperationKind.imageToPdf,
         entries: [
@@ -445,16 +442,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       await ref.read(operationLibraryProvider.notifier).reload();
 
       if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Converted to PDF successfully'),
+        const SnackBar(
+          content: Text('Converted to PDF successfully'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () =>
-                Share.shareXFiles([XFile(saved.first.localPath)]),
-          ),
+          duration: Duration(seconds: 2),
         ),
       );
     } catch (e) {
@@ -477,6 +471,18 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _compressPdf() async {
+    final selectedLevel = await showModalBottomSheet<CompressionLevel>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF22252D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => const _CompressOptionsSheet(),
+    );
+
+    if (selectedLevel == null || !mounted) return;
+
     if (_isBusy) return;
     setState(() {
       _isBusy = true;
@@ -492,7 +498,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       await PdfService.compressPdfFile(
         inputPath: widget.item.path,
         outputPath: outPath,
-        quality: 0.65,
+        quality: selectedLevel.qualityFactor,
       );
 
       final saved = await saveToolOutputs(
@@ -511,18 +517,26 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       final newSize = await File(saved.first.localPath).length();
       if (!mounted) return;
+
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      final msg = (newSize >= widget.item.sizeBytes)
+          ? 'Already compressed at highest level'
+          : 'PDF compressed (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'PDF compressed (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})',
-          ),
+          content: Text(msg),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Share',
-            onPressed: () =>
-                Share.shareXFiles([XFile(saved.first.localPath)]),
-          ),
+          duration: const Duration(seconds: 2),
+          action: (newSize < widget.item.sizeBytes)
+              ? SnackBarAction(
+                  label: 'Share',
+                  onPressed: () =>
+                      Share.shareXFiles([XFile(saved.first.localPath)]),
+                )
+              : null,
         ),
       );
     } catch (e) {
@@ -531,7 +545,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Could not compress PDF: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     } finally {
@@ -545,17 +559,62 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _splitPdf() async {
+    int totalPages = 1;
+    try {
+      totalPages = await PdfService.instance.getPageCount(widget.item.path);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final result = await showModalBottomSheet<_SplitOptionsResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF22252D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) =>
+          _SplitOptionsSheet(totalPages: totalPages > 0 ? totalPages : 1),
+    );
+
+    if (result == null || !mounted) return;
+
     if (_isBusy) return;
     setState(() {
       _isBusy = true;
-      _busyLabel = 'Splitting PDF pages in background...';
+      _busyLabel = 'Splitting PDF in background...';
     });
     try {
       final base = p.basenameWithoutExtension(widget.item.fileName);
-      final splitPaths = await PdfService.instance.splitPdfAllPages(
-        inputPath: widget.item.path,
-        outputBaseName: base,
-      );
+      List<String> splitPaths = [];
+
+      switch (result.mode) {
+        case _SplitModeType.allPages:
+          splitPaths = await PdfService.instance.splitPdfAllPages(
+            inputPath: widget.item.path,
+            outputBaseName: base,
+          );
+          break;
+        case _SplitModeType.byChunks:
+          splitPaths = await PdfService.instance.splitPdfByChunk(
+            inputPath: widget.item.path,
+            pageSize: result.chunkSize,
+            outputBaseName: base,
+          );
+          break;
+        case _SplitModeType.pageRange:
+          final pages = [
+            for (var pNum = result.startPage; pNum <= result.endPage; pNum++)
+              pNum
+          ];
+          final singleOut = await PdfService.instance.extractPages(
+            inputPath: widget.item.path,
+            pageNumbers: pages,
+            outputBaseName: '${base}_p${result.startPage}-${result.endPage}',
+          );
+          splitPaths = [singleOut];
+          break;
+      }
 
       final entries = splitPaths
           .map((sp) => OutputEntry.file(
@@ -574,16 +633,19 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       await ref.read(operationLibraryProvider.notifier).reload();
 
       if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('PDF split into ${saved.length} page documents'),
+          content: Text('PDF split into ${saved.length} document(s)'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           action: saved.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
-                  onPressed: () =>
-                      Share.shareXFiles([XFile(saved.first.localPath)]),
+                  onPressed: () => Share.shareXFiles(
+                      saved.map((s) => XFile(s.localPath)).toList()),
                 )
               : null,
         ),
@@ -594,7 +656,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Could not split PDF: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     } finally {
@@ -614,7 +676,28 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _savePdfPagesAsImages() async {
+    int totalPages = 1;
+    try {
+      totalPages = await PdfService.instance.getPageCount(widget.item.path);
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    final result = await showModalBottomSheet<_PdfToImagesOptionsResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF22252D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) =>
+          _PdfToImagesOptionsSheet(totalPages: totalPages > 0 ? totalPages : 1),
+    );
+
+    if (result == null || !mounted) return;
+
     final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       const SnackBar(
         content: Row(
@@ -641,11 +724,17 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         RegExp(r'\.pdf$', caseSensitive: false),
         '',
       );
+
+      final pageNumbers = result.isAllPages
+          ? null
+          : [for (var i = result.startPage; i <= result.endPage; i++) i];
+
       final outputPaths = await PdfService.instance.convertPdfToImages(
         inputPath: widget.item.path,
-        format: 'jpg',
+        format: result.format,
         outputBaseName: baseName,
-        dpi: 200,
+        dpi: result.dpi,
+        pageNumbers: pageNumbers,
       );
 
       var savedCount = 0;
@@ -665,11 +754,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       messenger.hideCurrentSnackBar();
       if (!mounted) return;
+      Navigator.pop(context);
+
       messenger.showSnackBar(
         SnackBar(
           content: Text('$savedCount page image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
           action: savedFiles.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
@@ -685,7 +776,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         SnackBar(
           content: Text('Could not save pages as images: $e'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -1272,3 +1363,525 @@ class _ActionButton extends StatelessWidget {
     );
   }
 }
+
+enum _SplitModeType { allPages, byChunks, pageRange }
+
+class _SplitOptionsResult {
+  const _SplitOptionsResult({
+    required this.mode,
+    this.chunkSize = 5,
+    this.startPage = 1,
+    this.endPage = 1,
+  });
+
+  final _SplitModeType mode;
+  final int chunkSize;
+  final int startPage;
+  final int endPage;
+}
+
+class _SplitOptionsSheet extends StatefulWidget {
+  const _SplitOptionsSheet({required this.totalPages});
+
+  final int totalPages;
+
+  @override
+  State<_SplitOptionsSheet> createState() => _SplitOptionsSheetState();
+}
+
+class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
+  _SplitModeType _mode = _SplitModeType.allPages;
+  int _chunkSize = 2;
+  int _startPage = 1;
+  late int _endPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _endPage = widget.totalPages > 0 ? widget.totalPages : 1;
+    if (widget.totalPages >= 5) {
+      _chunkSize = 5;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final maxPages = widget.totalPages > 0 ? widget.totalPages : 1;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          24 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Split PDF Options',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white12,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${widget.totalPages} pages',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            RadioListTile<_SplitModeType>(
+              value: _SplitModeType.allPages,
+              groupValue: _mode,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('All Pages',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text(
+                  'Split each page into an individual PDF file',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+              onChanged: (val) {
+                if (val != null) setState(() => _mode = val);
+              },
+            ),
+            RadioListTile<_SplitModeType>(
+              value: _SplitModeType.byChunks,
+              groupValue: _mode,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('By Page Chunks',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text(
+                  'Group every N pages into separate PDF files',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+              onChanged: (val) {
+                if (val != null) setState(() => _mode = val);
+              },
+            ),
+            if (_mode == _SplitModeType.byChunks) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 36, bottom: 8),
+                child: Row(
+                  children: [
+                    const Text('Pages per chunk: ',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    for (final s in [2, 3, 5, 10])
+                      if (s <= maxPages || s == 2)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text('$s'),
+                            selected: _chunkSize == s,
+                            onSelected: (_) => setState(() => _chunkSize = s),
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            ],
+            RadioListTile<_SplitModeType>(
+              value: _SplitModeType.pageRange,
+              groupValue: _mode,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Custom Page Range',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Extract a specific range of pages into one PDF',
+                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+              onChanged: (val) {
+                if (val != null) setState(() => _mode = val);
+              },
+            ),
+            if (_mode == _SplitModeType.pageRange) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 36, bottom: 8),
+                child: Row(
+                  children: [
+                    const Text('From: ',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    SizedBox(
+                      width: 60,
+                      child: DropdownButton<int>(
+                        value: _startPage,
+                        dropdownColor: const Color(0xFF232730),
+                        style: const TextStyle(color: Colors.white),
+                        underline: const SizedBox(),
+                        items: [
+                          for (var i = 1; i <= _endPage; i++)
+                            DropdownMenuItem(value: i, child: Text('$i')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _startPage = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    const Text('To: ',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    SizedBox(
+                      width: 60,
+                      child: DropdownButton<int>(
+                        value: _endPage,
+                        dropdownColor: const Color(0xFF232730),
+                        style: const TextStyle(color: Colors.white),
+                        underline: const SizedBox(),
+                        items: [
+                          for (var i = _startPage; i <= maxPages; i++)
+                            DropdownMenuItem(value: i, child: Text('$i')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) setState(() => _endPage = v);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.pop(
+                    context,
+                    _SplitOptionsResult(
+                      mode: _mode,
+                      chunkSize: _chunkSize,
+                      startPage: _startPage,
+                      endPage: _endPage,
+                    ),
+                  );
+                },
+                child: const Text('Split PDF',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdfToImagesOptionsResult {
+  const _PdfToImagesOptionsResult({
+    required this.format,
+    required this.dpi,
+    required this.isAllPages,
+    required this.startPage,
+    required this.endPage,
+  });
+
+  final String format;
+  final int dpi;
+  final bool isAllPages;
+  final int startPage;
+  final int endPage;
+}
+
+class _PdfToImagesOptionsSheet extends StatefulWidget {
+  const _PdfToImagesOptionsSheet({required this.totalPages});
+
+  final int totalPages;
+
+  @override
+  State<_PdfToImagesOptionsSheet> createState() =>
+      _PdfToImagesOptionsSheetState();
+}
+
+class _PdfToImagesOptionsSheetState extends State<_PdfToImagesOptionsSheet> {
+  String _format = 'jpg';
+  int _dpi = 200;
+  bool _isAllPages = true;
+  int _startPage = 1;
+  late int _endPage;
+
+  @override
+  void initState() {
+    super.initState();
+    _endPage = widget.totalPages > 0 ? widget.totalPages : 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final maxPages = widget.totalPages > 0 ? widget.totalPages : 1;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          24 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Save Pages as Images',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white12,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${widget.totalPages} pages',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text('Image Format',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('JPG (Recommended)'),
+                  selected: _format == 'jpg',
+                  onSelected: (_) => setState(() => _format = 'jpg'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('PNG (Lossless)'),
+                  selected: _format == 'png',
+                  onSelected: (_) => setState(() => _format = 'png'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text('Resolution / Quality',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('150 DPI'),
+                  selected: _dpi == 150,
+                  onSelected: (_) => setState(() => _dpi = 150),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('200 DPI'),
+                  selected: _dpi == 200,
+                  onSelected: (_) => setState(() => _dpi = 200),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('300 DPI'),
+                  selected: _dpi == 300,
+                  onSelected: (_) => setState(() => _dpi = 300),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            const Text('Pages to Save',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ChoiceChip(
+                  label: Text('All Pages (1-$maxPages)'),
+                  selected: _isAllPages,
+                  onSelected: (_) => setState(() => _isAllPages = true),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Custom Range'),
+                  selected: !_isAllPages,
+                  onSelected: (_) => setState(() => _isAllPages = false),
+                ),
+              ],
+            ),
+            if (!_isAllPages) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('From: ',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  SizedBox(
+                    width: 60,
+                    child: DropdownButton<int>(
+                      value: _startPage,
+                      dropdownColor: const Color(0xFF232730),
+                      style: const TextStyle(color: Colors.white),
+                      underline: const SizedBox(),
+                      items: [
+                        for (var i = 1; i <= _endPage; i++)
+                          DropdownMenuItem(value: i, child: Text('$i')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _startPage = v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Text('To: ',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  SizedBox(
+                    width: 60,
+                    child: DropdownButton<int>(
+                      value: _endPage,
+                      dropdownColor: const Color(0xFF232730),
+                      style: const TextStyle(color: Colors.white),
+                      underline: const SizedBox(),
+                      items: [
+                        for (var i = _startPage; i <= maxPages; i++)
+                          DropdownMenuItem(value: i, child: Text('$i')),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setState(() => _endPage = v);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.pop(
+                    context,
+                    _PdfToImagesOptionsResult(
+                      format: _format,
+                      dpi: _dpi,
+                      isAllPages: _isAllPages,
+                      startPage: _startPage,
+                      endPage: _endPage,
+                    ),
+                  );
+                },
+                child: const Text('Convert & Save Images',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompressOptionsSheet extends StatefulWidget {
+  const _CompressOptionsSheet();
+
+  @override
+  State<_CompressOptionsSheet> createState() => _CompressOptionsSheetState();
+}
+
+class _CompressOptionsSheetState extends State<_CompressOptionsSheet> {
+  CompressionLevel _selected = CompressionLevel.medium;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          24 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Compress PDF Options',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (final level in CompressionLevel.values)
+              RadioListTile<CompressionLevel>(
+                value: level,
+                groupValue: _selected,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  level.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  level.description,
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+                onChanged: (val) {
+                  if (val != null) setState(() => _selected = val);
+                },
+              ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => Navigator.pop(context, _selected),
+                child: const Text(
+                  'Compress PDF',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

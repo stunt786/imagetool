@@ -16,6 +16,7 @@ import '../../files/presentation/operation_folder_screen.dart';
 import '../../files/services/file_actions.dart';
 import '../../files/widgets/file_thumbnail.dart';
 import '../../files/widgets/selection_action_bar.dart';
+import '../../onboarding/presentation/feature_highlight_overlay.dart';
 
 final _imageTools = <_ToolData>[
   _ToolData(
@@ -480,7 +481,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 delegate: SliverChildListDelegate.fixed([
                                   const _HomeHeroBanner(),
                                   const SizedBox(height: 18),
-                                  _ToolsGrid(tools: _allTools),
+                                  _ToolsGrid(
+                                    key: ref
+                                        .watch(featureHighlightKeysProvider)
+                                        .toolsKey,
+                                    tools: _allTools,
+                                  ),
                                   const SizedBox(height: 22),
                                   _SectionHeader(
                                     title: 'Recent History',
@@ -974,7 +980,7 @@ class _BannerIllustration extends StatelessWidget {
 }
 
 class _ToolsGrid extends StatelessWidget {
-  const _ToolsGrid({required this.tools});
+  const _ToolsGrid({super.key, required this.tools});
 
   final List<_ToolData> tools;
 
@@ -1074,14 +1080,7 @@ class _ToolCardState extends State<_ToolCard> {
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        if (data.onTap != null) {
-          data.onTap!(context);
-        } else {
-          context.push(data.route);
-        }
-      },
+      onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.95 : 1.0,

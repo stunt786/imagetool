@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/settings/app_settings.dart';
 import '../../camera/presentation/camera_screen.dart';
+import '../../onboarding/presentation/feature_highlight_overlay.dart';
 import 'shell_index_scope.dart';
 
 class AppShell extends StatelessWidget {
@@ -13,13 +15,13 @@ class AppShell extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  @override
-  Widget build(BuildContext context) {
-    final currentPath = GoRouterState.of(context).uri.path;
-    final isMainScreen = currentPath == '/tools' ||
-        currentPath == '/camera' ||
-        currentPath == '/pdfs';
-
+  Widget _buildScaffold(
+    BuildContext context, {
+    required bool isMainScreen,
+    Key? cameraKey,
+    Key? filesKey,
+    VoidCallback? onCameraTap,
+  }) {
     return Scaffold(
       extendBody: isMainScreen,
       extendBodyBehindAppBar: isMainScreen,
@@ -33,16 +35,70 @@ class AppShell extends StatelessWidget {
         top: false,
         bottom: false,
         minimum: EdgeInsets.zero,
-        child: _BottomNavBar(navigationShell: navigationShell),
+        child: _BottomNavBar(
+          navigationShell: navigationShell,
+          cameraKey: cameraKey,
+          filesKey: filesKey,
+          onCameraTap: onCameraTap,
+        ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentPath = GoRouterState.of(context).uri.path;
+    final isMainScreen = currentPath == '/tools' ||
+        currentPath == '/camera' ||
+        currentPath == '/pdfs';
+
+    final hasScope = context.getElementForInheritedWidgetOfExactType<UncontrolledProviderScope>() != null;
+    if (!hasScope) {
+      return _buildScaffold(
+        context,
+        isMainScreen: isMainScreen,
+      );
+    }
+
+    return Consumer(
+      builder: (context, ref, child) {
+        final hasCompletedOnboarding = ref.watch(
+            appSettingsProvider.select((s) => s.hasCompletedOnboarding));
+        final keys = ref.watch(featureHighlightKeysProvider);
+
+        final scaffold = _buildScaffold(
+          context,
+          isMainScreen: isMainScreen,
+          cameraKey: keys.cameraKey,
+          filesKey: keys.filesKey,
+          onCameraTap: () {
+            ref.read(cameraLaunchTriggerProvider.notifier).state++;
+            navigationShell.goBranch(1, initialLocation: true);
+          },
+        );
+
+        if (hasCompletedOnboarding) {
+          return scaffold;
+        }
+
+        return FeatureHighlightOverlay(child: scaffold);
+      },
     );
   }
 }
 
-class _BottomNavBar extends ConsumerWidget {
-  const _BottomNavBar({required this.navigationShell});
+class _BottomNavBar extends StatelessWidget {
+  const _BottomNavBar({
+    required this.navigationShell,
+    this.cameraKey,
+    this.filesKey,
+    this.onCameraTap,
+  });
 
   final StatefulNavigationShell navigationShell;
+  final Key? cameraKey;
+  final Key? filesKey;
+  final VoidCallback? onCameraTap;
 
   static const double _barHeight = 84.0;
   static const double _topOffset = 26.0;
@@ -53,7 +109,7 @@ class _BottomNavBar extends ConsumerWidget {
   static const double _cornerRadius = 24.0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
@@ -129,11 +185,15 @@ class _BottomNavBar extends ConsumerWidget {
                   left: cx - _buttonRadius,
                   top: _circleCenterY - _buttonRadius,
                   child: _CameraCenterButton(
+                    key: cameraKey,
                     selected: currentIndex == 1,
                     diameter: _buttonRadius * 2,
                     onTap: () {
-                      ref.read(cameraLaunchTriggerProvider.notifier).state++;
-                      navigationShell.goBranch(1, initialLocation: true);
+                      if (onCameraTap != null) {
+                        onCameraTap!();
+                      } else {
+                        navigationShell.goBranch(1, initialLocation: true);
+                      }
                     },
                   ),
                 ),
@@ -146,6 +206,7 @@ class _BottomNavBar extends ConsumerWidget {
                   height: _barHeight - _topOffset,
                   child: Center(
                     child: _NavItem(
+                      key: filesKey,
                       label: 'Files',
                       icon: Icons.snippet_folder_outlined,
                       selectedIcon: Icons.folder_rounded,
@@ -172,6 +233,7 @@ class _BottomNavBar extends ConsumerWidget {
 
 class _CameraCenterButton extends StatelessWidget {
   const _CameraCenterButton({
+    super.key,
     required this.selected,
     required this.onTap,
     this.diameter = 56.0,
@@ -335,6 +397,7 @@ class _ReticlePainter extends CustomPainter {
 
 class _NavItem extends StatelessWidget {
   const _NavItem({
+    super.key,
     required this.label,
     required this.icon,
     required this.selectedIcon,

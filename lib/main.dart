@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app/pixeltools_app.dart';
 import 'core/settings/app_settings.dart';
+import 'core/theme/app_theme.dart';
 import 'splash_screen.dart';
 
 void main() {
@@ -45,11 +46,13 @@ class _AppEntryState extends ConsumerState<AppEntry> {
   @override
   Widget build(BuildContext context) {
     if (_showSplash) {
+      final themeMode =
+          ref.watch(appSettingsProvider.select((s) => s.themeMode));
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: const Color(0xFF0F172A),
-        ),
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: themeMode,
         home: SplashScreen(onSplashComplete: _onSplashComplete),
       );
     }

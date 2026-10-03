@@ -486,7 +486,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       final bytes = await ref.read(collageProvider.notifier).exportCollage();
       if (bytes == null || bytes.isEmpty) return;
 
-      final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final fileName = 'pixeltools_collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
         kind: OperationKind.collage,
@@ -519,6 +519,9 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         );
         ref.read(collageProvider.notifier).reset();
         AppReviewService.instance.notifyOperationCompleted(context);
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -547,7 +550,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         return;
       }
 
-      final fileName = 'collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final fileName = 'pixeltools_collage_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(path.join(tempDir.path, fileName));
       tempFile.writeAsBytesSync(bytes, flush: true);

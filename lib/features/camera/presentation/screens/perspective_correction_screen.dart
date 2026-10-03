@@ -280,11 +280,12 @@ class _PerspectiveCorrectionScreenState
             );
 
         if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Crop & perspective applied'),
               behavior: SnackBarBehavior.floating,
-              duration: Duration(seconds: 1),
+              duration: Duration(seconds: 2),
             ),
           );
           Navigator.of(context).pop();

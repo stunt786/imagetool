@@ -353,7 +353,19 @@ class MagicRemoveService {
             for (int nx = minX; nx <= maxX; nx++) {
               final nIdx = ny * width + nx;
               if (edgeMag[nIdx] > edgeThreshold) {
-                dilatedMask[nIdx] = 1;
+                // Protect text strokes: do not expand mask into thin dark letter edges
+                final isTextStroke = gray[nIdx] < 130 &&
+                    ((nx >= 2 &&
+                            nx < width - 2 &&
+                            gray[ny * width + (nx - 2)] > 170 &&
+                            gray[ny * width + (nx + 2)] > 170) ||
+                        (ny >= 2 &&
+                            ny < height - 2 &&
+                            gray[(ny - 2) * width + nx] > 170 &&
+                            gray[(ny + 2) * width + nx] > 170));
+                if (!isTextStroke) {
+                  dilatedMask[nIdx] = 1;
+                }
               }
             }
           }

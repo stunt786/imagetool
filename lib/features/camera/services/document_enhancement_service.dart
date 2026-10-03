@@ -383,24 +383,20 @@ class DocumentEnhancementService {
         final fullMinY = (minY / scale).floor().clamp(0, h - 1);
         final fullMaxY = (maxY / scale).ceil().clamp(0, h - 1);
 
-        final bg = _sampleCleanBackgroundNear(
-            image, fullMinX, fullMinY, fullMaxX, fullMaxY, avgPaperR, avgPaperG, avgPaperB);
-
-        for (final pixelIndex in comp) {
-          final cx = pixelIndex % sw;
-          final cy = pixelIndex ~/ sw;
-          final pxStart = (cx / scale).floor().clamp(0, w - 1);
-          final pxEnd = ((cx + 1) / scale).ceil().clamp(0, w);
-          final pyStart = (cy / scale).floor().clamp(0, h - 1);
-          final pyEnd = ((cy + 1) / scale).ceil().clamp(0, h);
-
-          for (var py = pyStart; py < pyEnd; py++) {
-            for (var px = pxStart; px < pxEnd; px++) {
-              image.setPixelRgb(px, py, bg[0], bg[1], bg[2]);
-              modifiedAny = true;
-            }
-          }
-        }
+        _blendMatchBackground(
+          image,
+          minX: fullMinX,
+          minY: fullMinY,
+          maxX: fullMaxX,
+          maxY: fullMaxY,
+          comp: comp,
+          sw: sw,
+          scale: scale,
+          fallbackR: avgPaperR,
+          fallbackG: avgPaperG,
+          fallbackB: avgPaperB,
+        );
+        modifiedAny = true;
       }
     }
 
@@ -525,23 +521,65 @@ class DocumentEnhancementService {
         }
       }
 
-      // An isolated housefly, bug, dirt speck, crumb, or blemish:
-      // Has almost no other dark pixels in its surrounding neighborhood (isolated on paper)
-      // and has small-to-medium compact size (not a large photo/diagram).
-      final isHouseflyOrDirt = (surroundingDark <= 4) &&
-          blobArea >= 2 &&
-          blobArea <= 600 &&
-          blobWidth <= 60 &&
-          blobHeight <= 60;
-
-      // Foreign object in margins (clips, staples, stamps, smudges, stray marks):
+      // Text detection & protection:
+      // 1. Text characters align horizontally with neighboring glyphs on the same line.
+      // 2. Text lines and words have elongated aspect ratios (width >> height).
+      // 3. Isolated bugs, dirt specks, stains have compact dimensions and aspect ratio near 1.0.
       final isInMargin = minX < marginX ||
           maxX > sw - marginX ||
           minY < marginY ||
           maxY > sh - marginY;
+
+      var horizontalNeighbors = 0;
+      const checkDist = 32;
+      final hMinX = math.max(0, minX - checkDist);
+      final hMaxX = math.min(sw - 1, maxX + checkDist);
+      for (var y = minY; y <= maxY; y++) {
+        for (var x = hMinX; x <= hMaxX; x++) {
+          if (x >= minX && x <= maxX) continue;
+          if (darkMask[y * sw + x] == 1) horizontalNeighbors++;
+        }
+      }
+
+      // If it aligns with multiple characters on the same line, protect it as text!
+      final isPartOfTextLine = horizontalNeighbors >= 10;
+
+      // Elongated horizontal bars (text lines, sentences, underlines) or tall strokes:
+      final aspectRatio = blobWidth / math.max(1, blobHeight);
+      final isElongatedText = (blobWidth > 18 && aspectRatio > 2.5) ||
+          (blobHeight > 25 && aspectRatio < 0.35);
+
+      // Check interior solidity (text strokes are thin; dirt/bugs have solid cores)
+      final compSet = comp.toSet();
+      var interiorPixels = 0;
+      for (final pIdx in comp) {
+        if (compSet.contains(pIdx - 1) &&
+            compSet.contains(pIdx + 1) &&
+            compSet.contains(pIdx - sw) &&
+            compSet.contains(pIdx + sw)) {
+          interiorPixels++;
+        }
+      }
+      final interiorRatio = comp.isNotEmpty ? interiorPixels / comp.length : 0.0;
+      final isSolidBlob = interiorRatio >= 0.10 || (blobWidth >= 5 && blobHeight >= 5 && blobArea >= 20);
+
+      // An isolated housefly, bug, dirt speck, crumb, or blemish:
+      final isHouseflyOrDirt = !isPartOfTextLine &&
+          !isElongatedText &&
+          (surroundingDark <= 4) &&
+          blobArea >= 2 &&
+          blobArea <= 600 &&
+          blobWidth <= 50 &&
+          blobHeight <= 50 &&
+          isSolidBlob;
+
+      // Foreign object in margins (clips, staples, stamps, smudges, stray marks):
       final isMarginObject = isInMargin &&
+          !isPartOfTextLine &&
+          !isElongatedText &&
           (surroundingDark <= 12) &&
-          blobArea <= 2000;
+          blobArea >= 15 &&
+          blobArea <= 2500;
 
       if (isHouseflyOrDirt || isMarginObject) {
         final fullMinX = (minX / scale).floor().clamp(0, w - 1);
@@ -549,68 +587,182 @@ class DocumentEnhancementService {
         final fullMinY = (minY / scale).floor().clamp(0, h - 1);
         final fullMaxY = (maxY / scale).ceil().clamp(0, h - 1);
 
-        final bg = _sampleCleanBackgroundNear(
-            image, fullMinX, fullMinY, fullMaxX, fullMaxY, 245, 245, 245);
-
-        for (final pixelIndex in comp) {
-          final cx = pixelIndex % sw;
-          final cy = pixelIndex ~/ sw;
-          final pxStart = (cx / scale).floor().clamp(0, w - 1);
-          final pxEnd = ((cx + 1) / scale).ceil().clamp(0, w);
-          final pyStart = (cy / scale).floor().clamp(0, h - 1);
-          final pyEnd = ((cy + 1) / scale).ceil().clamp(0, h);
-
-          for (var py = pyStart; py < pyEnd; py++) {
-            for (var px = pxStart; px < pxEnd; px++) {
-              image.setPixelRgb(px, py, bg[0], bg[1], bg[2]);
-              removedAny = true;
-            }
-          }
-        }
+        _blendMatchBackground(
+          image,
+          minX: fullMinX,
+          minY: fullMinY,
+          maxX: fullMaxX,
+          maxY: fullMaxY,
+          comp: comp,
+          sw: sw,
+          scale: scale,
+          fallbackR: 245,
+          fallbackG: 245,
+          fallbackB: 245,
+        );
+        removedAny = true;
       }
     }
 
     return removedAny;
   }
 
-  static List<int> _sampleCleanBackgroundNear(
-    img.Image image,
-    int minX,
-    int minY,
-    int maxX,
-    int maxY,
-    int fallbackR,
-    int fallbackG,
-    int fallbackB,
-  ) {
-    var sumR = 0, sumG = 0, sumB = 0, count = 0;
-    const ringPad = 12;
-    final rMinX = math.max(0, minX - ringPad);
-    final rMaxX = math.min(image.width - 1, maxX + ringPad);
-    final rMinY = math.max(0, minY - ringPad);
-    final rMaxY = math.min(image.height - 1, maxY + ringPad);
+  /// Seamlessly blends and matches surrounding paper background over the region,
+  /// preserving local paper gradients and illumination without flat RGB patches.
+  static void _blendMatchBackground(
+    img.Image image, {
+    required int minX,
+    required int minY,
+    required int maxX,
+    required int maxY,
+    required List<int> comp,
+    required int sw,
+    required double scale,
+    required int fallbackR,
+    required int fallbackG,
+    required int fallbackB,
+  }) {
+    final w = image.width;
+    final h = image.height;
+    const ringPad = 14;
 
-    for (var y = rMinY; y <= rMaxY; y += 2) {
-      for (var x = rMinX; x <= rMaxX; x += 2) {
-        if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
+    final topC = <int>[0, 0, 0];
+    var topCount = 0;
+    final botC = <int>[0, 0, 0];
+    var botCount = 0;
+    final leftC = <int>[0, 0, 0];
+    var leftCount = 0;
+    final rightC = <int>[0, 0, 0];
+    var rightCount = 0;
+
+    // Top boundary
+    final topY0 = math.max(0, minY - ringPad);
+    final topY1 = math.max(0, minY - 1);
+    for (var y = topY0; y <= topY1; y += 2) {
+      for (var x = minX; x <= maxX; x += 2) {
         final p = image.getPixel(x, y);
         final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
-        if (lum > 140) {
-          sumR += p.r.toInt();
-          sumG += p.g.toInt();
-          sumB += p.b.toInt();
-          count++;
+        if (lum > 130) {
+          topC[0] += p.r.toInt();
+          topC[1] += p.g.toInt();
+          topC[2] += p.b.toInt();
+          topCount++;
         }
       }
     }
-    if (count > 0) {
-      return [
-        (sumR / count).round().clamp(0, 255),
-        (sumG / count).round().clamp(0, 255),
-        (sumB / count).round().clamp(0, 255),
-      ];
+
+    // Bottom boundary
+    final botY0 = math.min(h - 1, maxY + 1);
+    final botY1 = math.min(h - 1, maxY + ringPad);
+    for (var y = botY0; y <= botY1; y += 2) {
+      for (var x = minX; x <= maxX; x += 2) {
+        final p = image.getPixel(x, y);
+        final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        if (lum > 130) {
+          botC[0] += p.r.toInt();
+          botC[1] += p.g.toInt();
+          botC[2] += p.b.toInt();
+          botCount++;
+        }
+      }
     }
-    return [fallbackR, fallbackG, fallbackB];
+
+    // Left boundary
+    final leftX0 = math.max(0, minX - ringPad);
+    final leftX1 = math.max(0, minX - 1);
+    for (var y = minY; y <= maxY; y += 2) {
+      for (var x = leftX0; x <= leftX1; x += 2) {
+        final p = image.getPixel(x, y);
+        final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        if (lum > 130) {
+          leftC[0] += p.r.toInt();
+          leftC[1] += p.g.toInt();
+          leftC[2] += p.b.toInt();
+          leftCount++;
+        }
+      }
+    }
+
+    // Right boundary
+    final rightX0 = math.min(w - 1, maxX + 1);
+    final rightX1 = math.min(w - 1, maxX + ringPad);
+    for (var y = minY; y <= maxY; y += 2) {
+      for (var x = rightX0; x <= rightX1; x += 2) {
+        final p = image.getPixel(x, y);
+        final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
+        if (lum > 130) {
+          rightC[0] += p.r.toInt();
+          rightC[1] += p.g.toInt();
+          rightC[2] += p.b.toInt();
+          rightCount++;
+        }
+      }
+    }
+
+    final hasTop = topCount > 0;
+    final hasBot = botCount > 0;
+    final hasLeft = leftCount > 0;
+    final hasRight = rightCount > 0;
+
+    final tR = hasTop
+        ? topC[0] / topCount
+        : (hasBot ? botC[0] / botCount : fallbackR.toDouble());
+    final tG = hasTop
+        ? topC[1] / topCount
+        : (hasBot ? botC[1] / botCount : fallbackG.toDouble());
+    final tB = hasTop
+        ? topC[2] / topCount
+        : (hasBot ? botC[2] / botCount : fallbackB.toDouble());
+
+    final bR = hasBot ? botC[0] / botCount : tR;
+    final bG = hasBot ? botC[1] / botCount : tG;
+    final bB = hasBot ? botC[2] / botCount : tB;
+
+    final lR = hasLeft
+        ? leftC[0] / leftCount
+        : (hasRight ? rightC[0] / rightCount : tR);
+    final lG = hasLeft
+        ? leftC[1] / leftCount
+        : (hasRight ? rightC[1] / rightCount : tG);
+    final lB = hasLeft
+        ? leftC[2] / leftCount
+        : (hasRight ? rightC[2] / rightCount : tB);
+
+    final rR = hasRight ? rightC[0] / rightCount : lR;
+    final rG = hasRight ? rightC[1] / rightCount : lG;
+    final rB = hasRight ? rightC[2] / rightCount : lB;
+
+    final spanX = math.max(1, maxX - minX);
+    final spanY = math.max(1, maxY - minY);
+
+    for (final pixelIndex in comp) {
+      final cx = pixelIndex % sw;
+      final cy = pixelIndex ~/ sw;
+      final pxStart = (cx / scale).floor().clamp(0, w - 1);
+      final pxEnd = ((cx + 1) / scale).ceil().clamp(0, w);
+      final pyStart = (cy / scale).floor().clamp(0, h - 1);
+      final pyEnd = ((cy + 1) / scale).ceil().clamp(0, h);
+
+      for (var py = pyStart; py < pyEnd; py++) {
+        final v = ((py - minY) / spanY).clamp(0.0, 1.0);
+        final vr = tR * (1.0 - v) + bR * v;
+        final vg = tG * (1.0 - v) + bG * v;
+        final vb = tB * (1.0 - v) + bB * v;
+
+        for (var px = pxStart; px < pxEnd; px++) {
+          final u = ((px - minX) / spanX).clamp(0.0, 1.0);
+          final hr = lR * (1.0 - u) + rR * u;
+          final hg = lG * (1.0 - u) + rG * u;
+          final hb = lB * (1.0 - u) + rB * u;
+
+          final finalR = ((vr + hr) * 0.5).round().clamp(0, 255);
+          final finalG = ((vg + hg) * 0.5).round().clamp(0, 255);
+          final finalB = ((vb + hb) * 0.5).round().clamp(0, 255);
+
+          image.setPixelRgb(px, py, finalR, finalG, finalB);
+        }
+      }
+    }
   }
 
   static img.Image _levelPaperBackground(img.Image src) {

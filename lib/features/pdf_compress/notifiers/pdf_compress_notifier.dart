@@ -306,7 +306,7 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
       final outputFileSize = await File(outputPath).length();
 
       if (!didImprove && note == null) {
-        note = 'This PDF is already highly optimised; the original file was kept.';
+        note = 'Already compressed at highest level';
       }
 
       state = state.copyWith(

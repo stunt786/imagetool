@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +15,6 @@ import '../../features/format_converter/presentation/format_converter_screen.dar
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/image_resize/presentation/image_resize_screen.dart';
 import '../../features/image_to_pdf/presentation/image_to_pdf_screen.dart';
-import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pdf_compress/presentation/pdf_compress_screen.dart';
 import '../../features/files/presentation/files_screen.dart';
 import '../../features/files/presentation/history_screen.dart';
@@ -38,18 +38,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: ref.read(appSettingsProvider).hasCompletedOnboarding
-        ? '/tools'
-        : '/onboarding',
+    initialLocation: '/tools',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
-      final settings = ref.read(appSettingsProvider);
-      final onboardingDone = settings.hasCompletedOnboarding;
-      final isOnboardingRoute = state.matchedLocation == '/onboarding';
-      if (!onboardingDone && !isOnboardingRoute) {
-        return '/onboarding';
-      }
-      if (onboardingDone && isOnboardingRoute) {
+      if (state.matchedLocation == '/onboarding') {
         return '/tools';
       }
       return null;
@@ -57,9 +49,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: <RouteBase>[
       GoRoute(
         path: '/onboarding',
-        parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (context, state) =>
-            const _MaterialPage(child: OnboardingScreen()),
+        redirect: (context, state) => '/tools',
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -96,6 +86,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/images/to-pdf',
                 pageBuilder: (context, state) =>
                     const _MaterialPage(child: ImageToPdfScreen()),
+              ),
+              // PDF tools located in Branch 0 for seamless push/swap-back to HomeScreen
+              GoRoute(
+                path: '/pdfs/compress',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: PdfCompressScreen()),
+              ),
+              GoRoute(
+                path: '/pdfs/merge',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: PdfMergeScreen()),
+              ),
+              GoRoute(
+                path: '/pdfs/split',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: PdfSplitScreen()),
+              ),
+              GoRoute(
+                path: '/pdfs/convert',
+                pageBuilder: (context, state) =>
+                    const _MaterialPage(child: PdfConvertScreen()),
               ),
               GoRoute(
                 path: '/history',
@@ -166,28 +177,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/pdfs',
                 builder: (context, state) => const FilesScreen(),
-                routes: <RouteBase>[
-                  GoRoute(
-                    path: 'compress',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PdfCompressScreen()),
-                  ),
-                  GoRoute(
-                    path: 'merge',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PdfMergeScreen()),
-                  ),
-                  GoRoute(
-                    path: 'split',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PdfSplitScreen()),
-                  ),
-                  GoRoute(
-                    path: 'convert',
-                    pageBuilder: (context, state) =>
-                        const _MaterialPage(child: PdfConvertScreen()),
-                  ),
-                ],
               ),
             ],
           ),
@@ -205,10 +194,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Backwards-compatible deep links from the earlier scaffold.
       GoRoute(
         path: '/',
-        redirect: (context, state) =>
-            ref.read(appSettingsProvider).hasCompletedOnboarding
-                ? '/tools'
-                : '/onboarding',
+        redirect: (context, state) => '/tools',
       ),
       GoRoute(path: '/home', redirect: (context, state) => '/tools'),
       GoRoute(
@@ -254,7 +240,7 @@ class _MaterialPage extends Page<void> {
 
   @override
   Route<void> createRoute(BuildContext context) {
-    return MaterialPageRoute<void>(builder: (context) => child, settings: this);
+    return CupertinoPageRoute<void>(builder: (context) => child, settings: this);
   }
 }
 

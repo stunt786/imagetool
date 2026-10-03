@@ -154,13 +154,15 @@ void main() {
       expect(operation.status, OperationStatus.completed);
       expect(operation.itemCount, 2);
       expect(
-        File(path.join(operation.directoryPath, 'first.png')).existsSync(),
+        File(path.join(operation.directoryPath, path.basename(outputs[0].localPath))).existsSync(),
         isTrue,
       );
       expect(
-        File(path.join(operation.directoryPath, 'second.png')).existsSync(),
+        File(path.join(operation.directoryPath, path.basename(outputs[1].localPath))).existsSync(),
         isTrue,
       );
+      expect(path.basename(outputs[0].localPath), startsWith('pixeltools'));
+      expect(path.basename(outputs[1].localPath), startsWith('pixeltools'));
     });
 
     test('moves a source file into the operation folder and removes it',

@@ -37,8 +37,13 @@ class PdfService {
 
   /// Generates a unique filename with the given extension.
   static String _generateFileName(String baseName, String extension) {
-    final sanitizedBase =
+    var sanitizedBase =
         path.basename(baseName).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
+    if (sanitizedBase.toLowerCase().startsWith('pixeltools_')) {
+      sanitizedBase = sanitizedBase.substring('pixeltools_'.length);
+    } else if (sanitizedBase.toLowerCase().startsWith('pixeltools')) {
+      sanitizedBase = sanitizedBase.substring('pixeltools'.length);
+    }
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     return 'pixeltools_${sanitizedBase}_$timestamp.$extension';
   }
@@ -623,12 +628,14 @@ class PdfService {
   /// Converts a PDF to images (JPG or PNG).
   /// [format] is either 'jpg' or 'png'.
   /// [dpi] controls the resolution (default 150).
+  /// [pageNumbers] (optional) 1-indexed list of specific pages to convert.
   /// Returns a list of paths to the converted image files.
   Future<List<String>> convertPdfToImages({
     required String inputPath,
     required String format,
     required String outputBaseName,
     int dpi = 150,
+    List<int>? pageNumbers,
     void Function(double progress)? onProgress,
   }) async {
     final pdfDoc = await pdfx.PdfDocument.openFile(inputPath);
@@ -637,8 +644,12 @@ class PdfService {
     final outputPaths = <String>[];
 
     final scale = dpi / 72.0;
+    final pages = (pageNumbers != null && pageNumbers.isNotEmpty)
+        ? pageNumbers.where((p) => p >= 1 && p <= pageCount).toList()
+        : List.generate(pageCount, (i) => i + 1);
 
-    for (int i = 1; i <= pageCount; i++) {
+    for (int idx = 0; idx < pages.length; idx++) {
+      final i = pages[idx];
       final page = await pdfDoc.getPage(i);
 
       final pageImage = await page.render(
@@ -672,7 +683,7 @@ class PdfService {
         }
       }
 
-      onProgress?.call(i / pageCount);
+      onProgress?.call((idx + 1) / pages.length);
     }
 
     await pdfDoc.close();

@@ -1,13 +1,19 @@
 ## Splash Screen
 - update splash screen background color to light color that match device light mode and dark color to match dark mode.
 
+## Onboarding screen & In-App Feature Highlighting (Tooltips / Spotlights)
+- Remove current onbaording feature and implement and implement In-App Feature Highlighting interactive element spotlighting (pointing arrows or glowing highlights to specific buttons inside the actual app interface on first open) rather than a multi-page onboarding slide
+
+## Navigation
+- Implement swap back from tools pages to home page navigation
+
 ## Files page
-- From Files modify tools for Images, collage feature-> after collage completion, the screen is taking to collage builder instead to files page where merge operation was being processed from.
+- From Files modify tools for Images, collage feature-> after collage completion, the screen is taking to collage builder instead to files page where collage operation was being processed from.
 - The successful message for crop, filters, resize, convert, To pdf, compress, split: After operation is completed the message should be auto destroyed after 2-3 seconds, it is not dismissing and have to manually dismiss messages.
 - For PDF files: Add additional settings for PDF related pages in files. Options for custom pages to save_>save pages as Images
 - Compress PDF & Split : Additional options for split and compress as in the respected modules.
 - Remove 'Ask AI' option in files->preview pages
-
+- Only allow Images Collage from Files page and provide preventive message for other file formates.
 ## NAming of exported files
 - All exported images, PDFs,and other formats should contain 'pixeltools' prefix name in all files.
 

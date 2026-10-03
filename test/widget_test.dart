@@ -41,7 +41,7 @@ void main() {
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 
-  testWidgets('First time app launch shows onboarding and does not bypass it',
+  testWidgets('First time app launch shows in-app feature highlight spotlight',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -60,9 +60,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Privacy First'), findsOneWidget);
-    expect(find.text('Skip'), findsOneWidget);
-    expect(find.text('Work Smarter'), findsNothing);
+    expect(find.text('Skip Tour'), findsOneWidget);
+    expect(find.text('STEP 1 OF 3'), findsOneWidget);
   });
 }
 

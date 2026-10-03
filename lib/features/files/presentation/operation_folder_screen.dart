@@ -10,10 +10,10 @@ import '../../../core/models/operation_folder.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/public_storage.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../collage_builder/notifiers/collage_notifier.dart';
 import '../notifiers/operation_library_notifier.dart';
 import '../services/file_actions.dart';
-import '../widgets/ai_document_sheet.dart';
 import '../widgets/file_edit_sheet.dart';
 import '../widgets/file_thumbnail.dart';
 import '../widgets/move_copy_dialog.dart';
@@ -240,7 +240,45 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
   Future<void> _makeCollageFromItems(List<AppFileItem> items) async {
     if (items.isEmpty) return;
-    final paths = items.map((f) => f.path).toList();
+
+    final imageItems = items
+        .where((f) =>
+            FileTypeDetector.detect(path: f.path, name: f.fileName).isImage)
+        .toList();
+
+    if (imageItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Collage only supports image files (JPG, PNG, WEBP). Non-image files cannot be included.',
+            ),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (imageItems.length < items.length) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Collage only supports image files. Non-image files were excluded.',
+            ),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+
+    final paths = imageItems.map((f) => f.path).toList();
     await ref.read(collageProvider.notifier).loadFromPaths(paths);
     if (mounted) {
       context.push('/images/collage');
@@ -321,29 +359,17 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       body: SafeArea(
         child: files.isEmpty
             ? _buildEmpty(operation)
-            : Stack(
+            : Column(
                 children: [
-                  Column(
-                    children: [
-                      if (_isSelecting)
-                        _buildReorderBanner()
-                      else
-                        _buildHintBanner(),
-                      Expanded(
-                        child: _isSelecting
-                            ? _buildReorderableGrid(files)
-                            : _buildNormalGrid(files),
-                      ),
-                    ],
+                  if (_isSelecting)
+                    _buildReorderBanner()
+                  else
+                    _buildHintBanner(),
+                  Expanded(
+                    child: _isSelecting
+                        ? _buildReorderableGrid(files)
+                        : _buildNormalGrid(files),
                   ),
-
-                  // Floating `✦ Ask AI` button (shown in normal mode)
-                  if (!_isSelecting && files.isNotEmpty)
-                    Positioned(
-                      right: 16,
-                      bottom: 20,
-                      child: _buildAskAiButton(operation, files),
-                    ),
                 ],
               ),
       ),
@@ -649,55 +675,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
     );
   }
 
-  Widget _buildAskAiButton(OperationFolder operation, List<AppFileItem> files) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
-      onTap: () => AiDocumentAssistantSheet.show(
-        context,
-        operation: operation,
-        files: files,
-      ),
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        decoration: BoxDecoration(
-          color: const Color(0xFF161F2A),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: const Color(0xFF00E5FF),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF00E5FF).withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.auto_awesome_rounded,
-              color: Color(0xFF00E5FF),
-              size: 20,
-            ),
-            SizedBox(width: 8),
-            Text(
-              'Ask AI',
-              style: TextStyle(
-                color: Color(0xFF00E5FF),
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildSelectionBottomBar(List<AppFileItem> files) {
     final selectedCount = _selected.length;

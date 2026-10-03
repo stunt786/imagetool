@@ -43,6 +43,16 @@ class SavedOutput {
   final String? publicPath;
 }
 
+/// Ensures that any exported file name has the 'pixeltools_' prefix.
+String ensurePixelToolsPrefix(String fileName) {
+  final trimmed = fileName.trim();
+  final base = path.basename(trimmed);
+  if (base.toLowerCase().startsWith('pixeltools')) {
+    return base;
+  }
+  return 'pixeltools_$base';
+}
+
 /// Persists finished tool outputs in two steps:
 ///
 /// 1. files are written into the operation's own folder so the Files library
@@ -66,9 +76,10 @@ Future<List<SavedOutput>> saveToolOutputs(
         .start(kind, expectedItems: entries.length);
     session = started;
     for (var i = 0; i < entries.length; i++) {
+      final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
       final target = await store.resolveOutputPath(
         Directory(started.directoryPath),
-        entries[i].fileName,
+        sanitizedName,
       );
       await _materialize(entries[i], target);
       await started.recordFile(target);
@@ -87,7 +98,8 @@ Future<List<SavedOutput>> saveToolOutputs(
     await staging.create(recursive: true);
     for (var i = 0; i < entries.length; i++) {
       if (placed[i] != null) continue;
-      final target = path.join(staging.path, entries[i].fileName);
+      final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
+      final target = path.join(staging.path, sanitizedName);
       await _materialize(entries[i], target);
       placed[i] = target;
     }
