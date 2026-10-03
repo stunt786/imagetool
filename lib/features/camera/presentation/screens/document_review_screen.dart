@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/models/operation_folder.dart';
+import '../../../../core/services/app_review_service.dart';
 import '../../../../core/services/operation_recorder.dart';
 import '../../../../core/services/operation_store_provider.dart';
 import '../../../../core/services/output_saver.dart';
@@ -39,6 +40,7 @@ class DocumentReviewScreen extends ConsumerStatefulWidget {
 class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   int _selectedIndex = 0;
   bool _isBusy = false;
+  bool _isNavigating = false;
 
   Future<void> _addPage() async {
     if (_isBusy) return;
@@ -116,11 +118,9 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   }
 
   void _exitToHome() {
-    if (!mounted) return;
+    if (!mounted || _isNavigating) return;
+    _isNavigating = true;
     final shell = StatefulNavigationShell.maybeOf(context);
-    if (context.canPop()) {
-      context.pop();
-    }
     if (shell != null) {
       shell.goBranch(0, initialLocation: true);
     } else {
@@ -322,9 +322,9 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     );
   }
 
-  Future<void> _navigateAfterCamera(VoidCallback action) async {
+  Future<void> _navigateAfterCamera(Future<void> Function() action) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (mounted) action();
+    if (mounted) await action();
   }
 
   Future<void> _keepInFiles(List<ScannedPage> pages) async {
@@ -332,6 +332,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       _showError('The scanned pages could not be retained.');
       return;
     }
+    if (_isNavigating) return;
     final batch = ref.read(documentBatchProvider);
     // Create an operation folder to keep all scanned pages together.
     try {
@@ -363,16 +364,20 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     }
     await ref.read(documentBatchProvider.notifier).clearBatch();
     if (!mounted) return;
-    if (context.canPop()) {
-      context.pop();
-    }
+    _isNavigating = true;
+    final shell = StatefulNavigationShell.maybeOf(context);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Scan saved in Files for later export.'),
         duration: Duration(seconds: 2),
       ),
     );
-    context.go('/pdfs');
+    if (shell != null) {
+      shell.goBranch(2, initialLocation: true);
+    } else {
+      context.go('/pdfs');
+    }
+    AppReviewService.instance.notifyOperationCompleted(context);
   }
 
   Future<void> _saveAsPdf(List<ScannedPage> pages) async {
@@ -380,6 +385,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       _showError('The scanned pages could not be saved as PDF.');
       return;
     }
+    if (_isNavigating) return;
     setState(() => _isBusy = true);
     final settings = ref.read(appSettingsProvider);
     try {
@@ -484,6 +490,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       );
       if (mounted) {
         _exitToHome();
+        AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (error) {
       _showError('Saving PDF failed: $error');
@@ -493,6 +500,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   }
 
   Future<void> _saveAsImages(List<ScannedPage> pages) async {
+    if (_isNavigating) return;
     final settings = ref.read(appSettingsProvider);
     try {
       final entries = [
@@ -535,6 +543,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
       );
       if (mounted) {
         _exitToHome();
+        AppReviewService.instance.notifyOperationCompleted(context);
       }
     } catch (error) {
       _showError('Saving failed: $error');
@@ -557,14 +566,9 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
   Widget build(BuildContext context) {
     final batch = ref.watch(documentBatchProvider);
     if (!batch.hasPages) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _exitToHome();
-      });
       return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
+        backgroundColor: Color(0xFF111214),
+        body: SizedBox.shrink(),
       );
     }
 

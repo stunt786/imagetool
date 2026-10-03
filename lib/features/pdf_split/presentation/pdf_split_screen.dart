@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_review_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -554,6 +555,9 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                               thumbnailPath: firstPath,
                             ),
                           );
+                      if (context.mounted) {
+                        AppReviewService.instance.notifyOperationCompleted(context);
+                      }
                     }
                   }
                 : null,

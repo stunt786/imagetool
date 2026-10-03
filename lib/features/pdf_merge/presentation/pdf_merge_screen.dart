@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/app_review_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
@@ -418,6 +419,9 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
                               thumbnailPath: result,
                             ),
                           );
+                      if (context.mounted) {
+                        AppReviewService.instance.notifyOperationCompleted(context);
+                      }
                     }
                   }
                 : null,

@@ -53,6 +53,9 @@ class PdfService {
   /// Caches the generated thumbnail in the temporary directory.
   Future<String?> renderPdfThumbnail(String pdfPath) async {
     try {
+      if (!kIsWeb && (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS && !Platform.isWindows)) {
+        return null;
+      }
       final file = File(pdfPath);
       if (!await file.exists()) return null;
 

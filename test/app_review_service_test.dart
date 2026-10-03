@@ -61,10 +61,15 @@ void main() {
       // Rating dialog should appear
       expect(find.text('Enjoying PixelTools?'), findsOneWidget);
       expect(find.text('Rate Now'), findsOneWidget);
-      expect(find.text('Remind Later'), findsOneWidget);
+      expect(find.text('Rate Later'), findsOneWidget);
 
-      // Tap Remind Later
-      await tester.tap(find.text('Remind Later'));
+      // Tap outside dialog: barrierDismissible is false, dialog should NOT dismiss
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('Enjoying PixelTools?'), findsOneWidget);
+
+      // Tap Rate Later
+      await tester.tap(find.text('Rate Later'));
       await tester.pumpAndSettle();
 
       expect(find.text('Enjoying PixelTools?'), findsNothing);
@@ -96,12 +101,13 @@ void main() {
       expect(find.text('Enjoying PixelTools?'), findsNothing);
     });
 
-    testWidgets('Does not prompt within 48-hour interval after previous prompt', (tester) async {
+    testWidgets('Does not prompt again on the same day after previous prompt', (tester) async {
       final service = AppReviewService.instance;
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now();
-      // Set last prompt to 24 hours ago (less than 48 hours)
-      await prefs.setInt('app_review_last_prompt_ms', now.subtract(const Duration(hours: 24)).millisecondsSinceEpoch);
+      // Set last prompt to earlier today
+      final earlierToday = DateTime(now.year, now.month, now.day, 6, 0);
+      await prefs.setInt('app_review_last_prompt_ms', earlierToday.millisecondsSinceEpoch);
       await prefs.setInt('app_review_operation_count', 5);
 
       await tester.pumpWidget(
@@ -125,12 +131,13 @@ void main() {
       expect(find.text('Enjoying PixelTools?'), findsNothing);
     });
 
-    testWidgets('Prompts after 48-hour interval has elapsed since last prompt', (tester) async {
+    testWidgets('Prompts on first operation of a new calendar day', (tester) async {
       final service = AppReviewService.instance;
       final prefs = await SharedPreferences.getInstance();
       final now = DateTime.now();
-      // Set last prompt to 49 hours ago (more than 48 hours)
-      await prefs.setInt('app_review_last_prompt_ms', now.subtract(const Duration(hours: 49)).millisecondsSinceEpoch);
+      // Set last prompt to yesterday
+      final yesterday = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+      await prefs.setInt('app_review_last_prompt_ms', yesterday.millisecondsSinceEpoch);
       await prefs.setInt('app_review_operation_count', 5);
 
       await tester.pumpWidget(
@@ -193,9 +200,9 @@ void main() {
 
       expect(find.text('Enjoying PixelTools?'), findsOneWidget);
       expect(find.text('Rate Now'), findsOneWidget);
-      expect(find.text('Remind Later'), findsOneWidget);
+      expect(find.text('Rate Later'), findsOneWidget);
 
-      await tester.tap(find.text('Remind Later'));
+      await tester.tap(find.text('Rate Later'));
       await tester.pumpAndSettle();
     });
 
@@ -232,7 +239,7 @@ void main() {
       expect(find.text('Enjoying PixelTools?'), findsOneWidget);
       expect(find.text('Rate Now'), findsOneWidget);
 
-      await tester.tap(find.text('Remind Later'));
+      await tester.tap(find.text('Rate Later'));
       await tester.pumpAndSettle();
     });
 
@@ -270,7 +277,7 @@ void main() {
       expect(find.text('Enjoying PixelTools?'), findsOneWidget);
       expect(find.text('Rate Now'), findsOneWidget);
 
-      await tester.tap(find.text('Remind Later'));
+      await tester.tap(find.text('Rate Later'));
       await tester.pumpAndSettle();
     });
   });

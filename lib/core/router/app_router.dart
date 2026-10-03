@@ -25,10 +25,12 @@ import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 // import '../../features/premium/presentation/premium_screen.dart'; // TODO: Re-enable in upcoming version with premium features
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
+import '../services/app_review_service.dart';
 import '../settings/app_settings.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final rootNavigatorKey = GlobalKey<NavigatorState>();
+  final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNavigator');
+  AppReviewService.instance.rootNavigatorKey = rootNavigatorKey;
   final refreshNotifier = ValueNotifier<int>(0);
 
   // Re-evaluate GoRouter redirects when settings finish loading
