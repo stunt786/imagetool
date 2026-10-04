@@ -15,6 +15,7 @@ import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/platform_image_encoder.dart';
 import '../../../core/services/public_storage.dart';
+import '../../../core/services/thumbnail_service.dart';
 import '../../camera/presentation/screens/magic_remove_screen.dart';
 import '../../format_converter/notifiers/format_converter_notifier.dart'
     show ConvertFormat;
@@ -60,54 +61,79 @@ class FileEditSheet extends ConsumerStatefulWidget {
 }
 
 class _FileEditSheetState extends ConsumerState<FileEditSheet> {
+  late AppFileItem _item;
+  int _imageVersion = 0;
   bool _isBusy = false;
   String? _busyLabel;
 
+  @override
+  void initState() {
+    super.initState();
+    _item = widget.item;
+  }
+
+  @override
+  void didUpdateWidget(covariant FileEditSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id) {
+      _item = widget.item;
+    }
+  }
+
   Future<Uint8List?> _readBytes() async {
-    final file = File(widget.item.path);
+    final file = File(_item.path);
     if (await file.exists()) {
       return file.readAsBytes();
     }
     return null;
   }
 
-  /// Closes the sheet, so callers must have finished their work first.
-  void _closeAndNotify(String message) {
+  Future<void> _onImageReplaced(AppFileItem updated, String message) async {
+    try {
+      await FileImage(File(updated.path)).evict();
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+
     if (!mounted) return;
+    setState(() {
+      _item = updated;
+      _imageVersion++;
+    });
+
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.pop(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
 
   Future<void> _openCrop() async {
     if (_isBusy) return;
-    if (!await File(widget.item.path).exists()) return;
+    if (!await File(_item.path).exists()) return;
     if (!mounted) return;
 
-    final savedName = await Navigator.of(context).push<String?>(
+    final updated = await Navigator.of(context).push<AppFileItem?>(
       MaterialPageRoute(
-        builder: (_) => FileCropScreen(item: widget.item),
+        builder: (_) => FileCropScreen(item: _item),
       ),
     );
-    if (savedName == null || !mounted) return;
-    _closeAndNotify('Cropped image saved to this folder');
+    if (updated == null || !mounted) return;
+    await _onImageReplaced(updated, 'Image cropped');
   }
 
   Future<void> _openFilter() async {
     if (_isBusy) return;
-    if (!await File(widget.item.path).exists()) return;
+    if (!await File(_item.path).exists()) return;
     if (!mounted) return;
 
-    final saved = await FileFilterSheet.show(context, item: widget.item);
-    if (!saved || !mounted) return;
-    _closeAndNotify('Filtered image saved to this folder');
+    final updated = await FileFilterSheet.show(context, item: _item);
+    if (updated == null || !mounted) return;
+    await _onImageReplaced(updated, 'Filter applied');
   }
 
   Future<void> _openMagicRemove() async {
@@ -139,26 +165,28 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       _busyLabel = 'Saving cleaned image...';
     });
     try {
-      final base = widget.item.baseName;
-      final fileName =
-          'pixeltools_${base}_cleaned_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      Uint8List finalBytes = cleaned;
+      final ext = _item.extension.toLowerCase();
+      if (ext == 'png' || ext == 'webp' || ext == 'tiff' || ext == 'tif') {
+        final converted = await ImageIsolateService.transform(
+          cleaned,
+          ImageTransformRequest(targetExtension: ext, quality: 95),
+        );
+        if (converted != null && converted.isNotEmpty) {
+          finalBytes = converted;
+        }
+      }
 
-      await saveToolOutputs(
-        ref.read(operationStoreProvider),
-        kind: OperationKind.imageEdit,
-        entries: [
-          OutputEntry.bytes(
-            bytes: cleaned,
-            fileName: fileName,
-            publicKind: PublicFileKind.image,
-          ),
-        ],
-        intoOperationId: widget.item.operationId,
+      final updated = await ref.read(operationStoreProvider).replaceFileBytes(
+        fileId: _item.id,
+        bytes: finalBytes,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
       if (!mounted) return;
-      _closeAndNotify('Magic clean saved to this folder');
+      if (updated != null) {
+        await _onImageReplaced(updated, 'Magic clean applied');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -288,11 +316,14 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         maxWidth = (currentWidth * 0.85).round();
       }
 
-      final ext = widget.item.extension.toLowerCase();
-      final targetExt =
-          (ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp')
-              ? ext
-              : 'jpg';
+      final ext = _item.extension.toLowerCase();
+      final targetExt = switch (ext) {
+        'png' => 'png',
+        'webp' => 'webp',
+        'bmp' => 'bmp',
+        'tif' || 'tiff' => 'tiff',
+        _ => 'jpg',
+      };
 
       Uint8List? resized;
       if (targetExt == 'webp') {
@@ -318,38 +349,21 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         throw Exception('Resize failed');
       }
 
-      final base = p.basenameWithoutExtension(widget.item.fileName);
-      final fileName =
-          'pixeltools_${base}_resized_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
-
-      final saved = await saveToolOutputs(
-        ref.read(operationStoreProvider),
-        kind: OperationKind.resize,
-        entries: [
-          OutputEntry.bytes(
-            bytes: resized,
-            fileName: fileName,
-            publicKind: PublicFileKind.image,
-          ),
-        ],
-        intoOperationId: widget.item.operationId,
+      final oldSize = _item.sizeBytes;
+      final updated = await ref.read(operationStoreProvider).replaceFileBytes(
+        fileId: _item.id,
+        bytes: resized,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
 
-      final newSize = await File(saved.first.localPath).length();
       if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Image resized (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (updated != null) {
+        await _onImageReplaced(
+          updated,
+          'Image resized (${_formatSize(oldSize)} → ${_formatSize(updated.sizeBytes)})',
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -462,7 +476,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         throw Exception('Image conversion failed');
       }
 
-      final base = p.basenameWithoutExtension(widget.item.fileName);
+      final base = p.basenameWithoutExtension(_item.fileName);
       final fileName =
           'pixeltools_${base}_${DateTime.now().millisecondsSinceEpoch}.${selectedFormat.extension}';
 
@@ -473,10 +487,12 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           OutputEntry.bytes(
             bytes: converted,
             fileName: fileName,
-            publicKind: PublicFileKind.image,
+            publicKind: selectedFormat == ConvertFormat.tiff
+                ? PublicFileKind.document
+                : PublicFileKind.image,
           ),
         ],
-        intoOperationId: widget.item.operationId,
+        intoOperationId: _item.operationId,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
@@ -518,9 +534,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       _busyLabel = 'Converting image to PDF in background...';
     });
     try {
-      final base = p.basenameWithoutExtension(widget.item.fileName);
+      final base = p.basenameWithoutExtension(_item.fileName);
       final outPath = await PdfService.instance.createPdfFromImages(
-        imagePaths: [widget.item.path],
+        imagePaths: [_item.path],
         outputBaseName: 'pixeltools_$base',
       );
 
@@ -587,13 +603,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     });
     try {
       final tempDir = await getTemporaryDirectory();
-      final base = p.basenameWithoutExtension(widget.item.fileName);
+      final base = p.basenameWithoutExtension(_item.fileName);
       final outPath = p.join(
         tempDir.path,
         'pixeltools_${base}_compressed_${DateTime.now().millisecondsSinceEpoch}.pdf',
       );
       await PdfService.compressPdfFile(
-        inputPath: widget.item.path,
+        inputPath: _item.path,
         outputPath: outPath,
         quality: selectedLevel.qualityFactor,
       );
@@ -618,16 +634,16 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).clearSnackBars();
 
-      final msg = (newSize >= widget.item.sizeBytes)
+      final msg = (newSize >= _item.sizeBytes)
           ? 'Already compressed at highest level'
-          : 'PDF compressed (${_formatSize(widget.item.sizeBytes)} → ${_formatSize(newSize)})';
+          : 'PDF compressed (${_formatSize(_item.sizeBytes)} → ${_formatSize(newSize)})';
 
       final controller = ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(msg),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
-          action: (newSize < widget.item.sizeBytes)
+          action: (newSize < _item.sizeBytes)
               ? SnackBarAction(
                   label: 'Share',
                   onPressed: () =>
@@ -663,7 +679,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   Future<void> _splitPdf() async {
     int totalPages = 1;
     try {
-      totalPages = await PdfService.instance.getPageCount(widget.item.path);
+      totalPages = await PdfService.instance.getPageCount(_item.path);
     } catch (_) {}
 
     if (!mounted) return;
@@ -687,19 +703,19 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       _busyLabel = 'Splitting PDF in background...';
     });
     try {
-      final base = p.basenameWithoutExtension(widget.item.fileName);
+      final base = p.basenameWithoutExtension(_item.fileName);
       List<String> splitPaths = [];
 
       switch (result.mode) {
         case _SplitModeType.allPages:
           splitPaths = await PdfService.instance.splitPdfAllPages(
-            inputPath: widget.item.path,
+            inputPath: _item.path,
             outputBaseName: base,
           );
           break;
         case _SplitModeType.byChunks:
           splitPaths = await PdfService.instance.splitPdfByChunk(
-            inputPath: widget.item.path,
+            inputPath: _item.path,
             pageSize: result.chunkSize,
             outputBaseName: base,
           );
@@ -710,7 +726,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
               pNum
           ];
           final singleOut = await PdfService.instance.extractPages(
-            inputPath: widget.item.path,
+            inputPath: _item.path,
             pageNumbers: pages,
             outputBaseName: '${base}_p${result.startPage}-${result.endPage}',
           );
@@ -772,15 +788,15 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _share(BuildContext context) async {
-    if (await File(widget.item.path).exists()) {
-      Share.shareXFiles([XFile(widget.item.path)], text: widget.item.fileName);
+    if (await File(_item.path).exists()) {
+      Share.shareXFiles([XFile(_item.path)], text: _item.fileName);
     }
   }
 
   Future<void> _savePdfPagesAsImages() async {
     int totalPages = 1;
     try {
-      totalPages = await PdfService.instance.getPageCount(widget.item.path);
+      totalPages = await PdfService.instance.getPageCount(_item.path);
     } catch (_) {}
 
     if (!mounted) return;
@@ -822,7 +838,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     );
 
     try {
-      final baseName = widget.item.fileName.replaceAll(
+      final baseName = _item.fileName.replaceAll(
         RegExp(r'\.pdf$', caseSensitive: false),
         '',
       );
@@ -832,7 +848,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           : [for (var i = result.startPage; i <= result.endPage; i++) i];
 
       final outputPaths = await PdfService.instance.convertPdfToImages(
-        inputPath: widget.item.path,
+        inputPath: _item.path,
         format: result.format,
         outputBaseName: baseName,
         dpi: result.dpi,
@@ -892,11 +908,14 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   void _openPdfViewer(BuildContext context) {
     Navigator.pop(context);
     FileOpenService.open(context,
-        path: widget.item.path, name: widget.item.fileName);
+        path: _item.path, name: _item.fileName);
   }
 
   Future<void> _save(BuildContext context) async {
-    if (widget.item.isPdf) {
+    final ext = _item.extension.toLowerCase();
+    final isTiff = ext == 'tiff' || ext == 'tif';
+
+    if (_item.isPdf) {
       final choice = await showModalBottomSheet<String>(
         context: context,
         backgroundColor: const Color(0xFF22252D),
@@ -953,12 +972,73 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       if (!context.mounted) return;
       if (choice == 'pdf') {
-        await FileActions.save(context, [widget.item]);
+        await FileActions.save(context, [_item]);
       } else if (choice == 'images') {
         await _savePdfPagesAsImages();
       }
+    } else if (isTiff) {
+      final choice = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: const Color(0xFF22252D),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.file_download_outlined,
+                    color: Color(0xFF29B6F6),
+                  ),
+                  title: const Text(
+                    'Export TIFF File',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Save original raw TIFF file to device storage',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'export'),
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.photo_library_outlined,
+                    color: Color(0xFF00E676),
+                  ),
+                  title: const Text(
+                    'Save to Photos / Gallery (JPG)',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'Convert & save viewable image to Gallery',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'gallery'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (!context.mounted) return;
+      if (choice == 'export') {
+        await FileActions.exportFile(context, _item);
+      } else if (choice == 'gallery') {
+        await FileActions.save(context, [_item]);
+      }
     } else {
-      await FileActions.save(context, [widget.item]);
+      await FileActions.save(context, [_item]);
     }
   }
 
@@ -966,26 +1046,26 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final newName = await FileActions.promptForName(
       context,
       title: 'Rename File',
-      initialValue: widget.item.fileName,
+      initialValue: _item.fileName,
     );
     if (newName == null) return;
     await ref
         .read(operationLibraryProvider.notifier)
-        .renameFile(widget.item.id, newName);
+        .renameFile(_item.id, newName);
     if (context.mounted) Navigator.pop(context);
   }
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await FileActions.confirmDelete(
       context,
-      title: 'Delete "${widget.item.fileName}"?',
+      title: 'Delete "${_item.fileName}"?',
       message:
           'This will remove the file from this folder. Gallery copies are not affected.',
     );
     if (!confirmed) return;
     await ref
         .read(operationLibraryProvider.notifier)
-        .deleteFiles([widget.item.id]);
+        .deleteFiles([_item.id]);
     widget.onDeleted();
     if (context.mounted) Navigator.pop(context);
   }
@@ -996,6 +1076,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final ext = _item.extension.toLowerCase();
+    final isTiff =
+        ext == 'tiff' || ext == 'tif' || _item.mimeType == 'image/tiff';
 
     return Container(
       constraints: BoxConstraints(
@@ -1030,7 +1113,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.item.fileName,
+                          _item.fileName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -1039,7 +1122,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                           ),
                         ),
                         Text(
-                          '${_formatSize(widget.item.sizeBytes)} · ${_formatDate(widget.item.createdAt)}',
+                          '${_formatSize(_item.sizeBytes)} · ${_formatDate(_item.createdAt)}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: isDark
                                 ? Colors.white60
@@ -1071,10 +1154,10 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                   border: Border.all(color: Colors.white10),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: widget.item.isPdf
+                child: _item.isPdf
                     ? FutureBuilder<Uint8List?>(
                         future: PdfService.instance.renderPageThumbnail(
-                          inputPath: widget.item.path,
+                          inputPath: _item.path,
                           pageNumber: 1,
                           maxWidth: 600,
                         ),
@@ -1156,24 +1239,76 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                           );
                         },
                       )
-                    : InteractiveViewer(
-                        minScale: 0.8,
-                        maxScale: 4.0,
-                        child: Center(
-                          child: Image.file(
-                            File(widget.item.path),
-                            fit: BoxFit.contain,
-                            cacheWidth: zoomDecodeWidthFor(context),
-                            errorBuilder: (_, __, ___) => const Center(
-                              child: Icon(
-                                Icons.broken_image_rounded,
-                                size: 48,
-                                color: Colors.white38,
+                    : isTiff
+                        ? FutureBuilder<String?>(
+                            key: ValueKey('${_item.path}_$_imageVersion'),
+                            future: ThumbnailService.instance.thumbnailFor(
+                              _item.path,
+                              maxSide: 2048,
+                            ),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF00E5FF),
+                                  ),
+                                );
+                              }
+                              final thumbPath = snapshot.data;
+                              if (thumbPath != null &&
+                                  File(thumbPath).existsSync()) {
+                                return InteractiveViewer(
+                                  minScale: 0.8,
+                                  maxScale: 4.0,
+                                  child: Center(
+                                    child: Image.file(
+                                      File(thumbPath),
+                                      key: ValueKey(
+                                          '${thumbPath}_$_imageVersion'),
+                                      fit: BoxFit.contain,
+                                      cacheWidth: zoomDecodeWidthFor(context),
+                                      errorBuilder: (_, __, ___) =>
+                                          const Center(
+                                        child: Icon(
+                                          Icons.broken_image_rounded,
+                                          size: 48,
+                                          color: Colors.white38,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const Center(
+                                child: Icon(
+                                  Icons.broken_image_rounded,
+                                  size: 48,
+                                  color: Colors.white38,
+                                ),
+                              );
+                            },
+                          )
+                        : InteractiveViewer(
+                            minScale: 0.8,
+                            maxScale: 4.0,
+                            child: Center(
+                              child: Image.file(
+                                File(_item.path),
+                                key: ValueKey('${_item.path}_$_imageVersion'),
+                                fit: BoxFit.contain,
+                                cacheWidth: zoomDecodeWidthFor(context),
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(
+                                    Icons.broken_image_rounded,
+                                    size: 48,
+                                    color: Colors.white38,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
               ),
             ),
 
@@ -1250,7 +1385,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  if (widget.item.isPdf)
+                  if (_item.isPdf)
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -1353,7 +1488,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                       ),
                       _ActionButton(
                         icon: Icons.download_outlined,
-                        label: widget.item.isPdf ? 'Export' : 'Save',
+                        label: (_item.isPdf || isTiff) ? 'Export' : 'Save',
                         onTap: () => _save(context),
                       ),
                       _ActionButton(

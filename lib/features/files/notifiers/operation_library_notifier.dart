@@ -118,6 +118,18 @@ class OperationLibraryNotifier extends Notifier<OperationLibrary> {
     return ok;
   }
 
+  Future<AppFileItem?> replaceFileBytes({
+    required String fileId,
+    required Uint8List bytes,
+  }) async {
+    final updated = await _store.replaceFileBytes(
+      fileId: fileId,
+      bytes: bytes,
+    );
+    _emit();
+    return updated;
+  }
+
   Future<bool> updateOperationTags(
       String operationId, List<String> tags) async {
     final ok = await _store.updateOperationTags(operationId, tags);

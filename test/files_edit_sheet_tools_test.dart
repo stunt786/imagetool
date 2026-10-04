@@ -95,7 +95,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets('Crop writes the cropped image into the same folder',
+  testWidgets('Crop replaces the image in-place in the same folder',
       (tester) async {
     setUpPhoneViewport(tester);
 
@@ -116,12 +116,17 @@ void main() {
     expect(stillOpen, isFalse, reason: 'crop screen never closed');
 
     final names = folderFileNames();
-    expect(names, hasLength(2));
-    expect(names.any((n) => n.contains('_cropped_')), isTrue,
-        reason: 'cropped output missing from ${names.join(', ')}');
+    expect(names, hasLength(1),
+        reason: 'crop should replace the image in-place, not create a new one');
+    expect(names.first, item.fileName);
+    final updatedItem = store.filesFor(operation.id).first;
+    expect(updatedItem.id, item.id);
+    final newBytes = File(updatedItem.path).readAsBytesSync();
+    final decoded = img.decodeImage(newBytes);
+    expect(decoded, isNotNull);
   });
 
-  testWidgets('Filters write the filtered image into the same folder',
+  testWidgets('Filters replace the image in-place in the same folder',
       (tester) async {
     setUpPhoneViewport(tester);
 
@@ -159,20 +164,26 @@ void main() {
     });
 
     final names = folderFileNames();
-    expect(names, hasLength(2));
-    expect(names.any((n) => n.contains('_antiLight_')), isTrue,
-        reason: 'filtered output missing from ${names.join(', ')}');
+    expect(names, hasLength(1),
+        reason: 'filter should replace the image in-place, not create a new one');
+    expect(names.first, item.fileName);
+    final updatedItem = store.filesFor(operation.id).first;
+    expect(updatedItem.id, item.id);
+    final newBytes = File(updatedItem.path).readAsBytesSync();
+    final decoded = img.decodeImage(newBytes);
+    expect(decoded, isNotNull);
   });
 
-  testWidgets('Magic Clean persists the cleaned bitmap into the folder',
+  testWidgets('Magic Clean replaces the image in-place in the same folder',
       (tester) async {
     setUpPhoneViewport(tester);
 
+    late Uint8List cleaned;
     await tester.runAsync(() async {
       await pumpHost(tester, FileEditSheet(item: item, onDeleted: () {}));
 
       final original = await File(item.path).readAsBytes();
-      final cleaned = Uint8List.fromList(original);
+      cleaned = Uint8List.fromList(original);
       // Any byte difference is enough: the sheet only skips identical output.
       cleaned[cleaned.length - 1] = (cleaned[cleaned.length - 1] + 1) & 0xFF;
 
@@ -191,12 +202,16 @@ void main() {
     });
 
     final names = folderFileNames();
-    expect(names, hasLength(2));
-    expect(names.any((n) => n.contains('_cleaned_')), isTrue,
-        reason: 'cleaned output missing from ${names.join(', ')}');
+    expect(names, hasLength(1),
+        reason: 'magic clean should replace the image in-place, not create a new one');
+    expect(names.first, item.fileName);
+    final updatedItem = store.filesFor(operation.id).first;
+    expect(updatedItem.id, item.id);
+    final updatedBytes = File(updatedItem.path).readAsBytesSync();
+    expect(updatedBytes, equals(cleaned));
   });
 
-  testWidgets('Resize writes the resized image into the same folder',
+  testWidgets('Resize replaces the image in-place in the same folder',
       (tester) async {
     setUpPhoneViewport(tester);
 
@@ -214,9 +229,16 @@ void main() {
     });
 
     final names = folderFileNames();
-    expect(names, hasLength(2));
-    expect(names.any((n) => n.contains('_resized_')), isTrue,
-        reason: 'resized output missing from ${names.join(', ')}');
+    expect(names, hasLength(1),
+        reason: 'resize should replace the image in-place, not create a new one');
+    expect(names.first, item.fileName);
+    final updatedItem = store.filesFor(operation.id).first;
+    expect(updatedItem.id, item.id);
+    final newBytes = File(updatedItem.path).readAsBytesSync();
+    final decoded = img.decodeImage(newBytes);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, equals(40));
+    expect(decoded.height, equals(30));
   });
 
   testWidgets('Convert writes a TIFF into the same folder', (tester) async {
@@ -264,6 +286,82 @@ void main() {
         expect(rect.center.dy, lessThan(appSize.height),
             reason: '"$label" pill is off-screen vertically');
       }
+    });
+  });
+
+  testWidgets('Resize on a TIFF image preserves TIFF format and dimensions',
+      (tester) async {
+    setUpPhoneViewport(tester);
+
+    await tester.runAsync(() async {
+      final tiffImage = img.Image(width: 100, height: 80);
+      img.fill(tiffImage, color: img.ColorRgb8(50, 150, 250));
+      final tiffBytes = img.encodeTiff(tiffImage);
+      final tiffPath = '${operation.directoryPath}/sample.tiff';
+      File(tiffPath).writeAsBytesSync(tiffBytes);
+      await store.addOutputFile(operationId: operation.id, filePath: tiffPath);
+      final tiffItem = store
+          .filesFor(operation.id)
+          .firstWhere((f) => f.fileName == 'sample.tiff');
+
+      await pumpHost(tester, FileEditSheet(item: tiffItem, onDeleted: () {}));
+
+      expect(find.text('Export'), findsOneWidget);
+
+      await tester.tap(find.text('Resize'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Resize Image Preset'), findsOneWidget);
+
+      await tester.tap(find.text('50% Scale (Half Size)'));
+      await Future<void>.delayed(const Duration(seconds: 8));
+      await tester.pump();
+    });
+
+    final updatedItem =
+        store.filesFor(operation.id).firstWhere((f) => f.fileName == 'sample.tiff');
+    final updatedBytes = File(updatedItem.path).readAsBytesSync();
+    final isTiffHeader = (updatedBytes[0] == 0x49 &&
+            updatedBytes[1] == 0x49 &&
+            updatedBytes[2] == 0x2A &&
+            updatedBytes[3] == 0x00) ||
+        (updatedBytes[0] == 0x4D &&
+            updatedBytes[1] == 0x4D &&
+            updatedBytes[2] == 0x00 &&
+            updatedBytes[3] == 0x2A);
+    expect(isTiffHeader, isTrue,
+        reason: 'Resized TIFF must retain valid TIFF header, not JPEG bytes');
+
+    final decoded = img.decodeTiff(updatedBytes);
+    expect(decoded, isNotNull);
+    expect(decoded!.width, equals(50));
+    expect(decoded.height, equals(40));
+  });
+
+  testWidgets('TIFF shows Export options for original raw TIFF and gallery JPG',
+      (tester) async {
+    setUpPhoneViewport(tester);
+
+    await tester.runAsync(() async {
+      final tiffImage = img.Image(width: 60, height: 60);
+      img.fill(tiffImage, color: img.ColorRgb8(200, 100, 50));
+      final tiffPath = '${operation.directoryPath}/document.tiff';
+      File(tiffPath).writeAsBytesSync(img.encodeTiff(tiffImage));
+      await store.addOutputFile(operationId: operation.id, filePath: tiffPath);
+      final tiffItem = store
+          .filesFor(operation.id)
+          .firstWhere((f) => f.fileName == 'document.tiff');
+
+      await pumpHost(tester, FileEditSheet(item: tiffItem, onDeleted: () {}));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Export'), findsOneWidget);
+      await tester.tap(find.text('Export'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Export TIFF File'), findsOneWidget);
+      expect(find.text('Save to Photos / Gallery (JPG)'), findsOneWidget);
     });
   });
 }

@@ -126,7 +126,7 @@ class PrivateToPublicPdfManager {
     final name = path.basename(suggestedName ?? path.basename(sandboxPath)).replaceAll(RegExp(r'[\/\\:\*\?"<>|]'), '_');
 
     final outputPath = await FilePicker.saveFile(
-      dialogTitle: 'Save PDF',
+      dialogTitle: name.toLowerCase().endsWith('.pdf') ? 'Save PDF' : 'Save File',
       fileName: name,
       bytes: bytes,
     );

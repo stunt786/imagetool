@@ -323,9 +323,14 @@ Uint8List? _transformWorker(Map<String, Object?> params) {
   image = _resizeIfNeeded(image, maxWidth, maxHeight);
 
   if (flattenAlpha &&
-      image.hasAlpha &&
-      (target == 'jpg' || target == 'jpeg' || target == 'bmp')) {
-    image = _flattenAlpha(image, background);
+      (target == 'jpg' ||
+          target == 'jpeg' ||
+          target == 'bmp' ||
+          target == 'tif' ||
+          target == 'tiff')) {
+    if (image.hasAlpha || image.numChannels > 3) {
+      image = _flattenAlpha(image, background);
+    }
   }
 
   final encoded = _encode(image, target, quality);
@@ -356,6 +361,15 @@ Uint8List? _cropWorker(Map<String, Object?> params) {
     width: cropWidth,
     height: cropHeight,
   );
+
+  if ((image.hasAlpha || image.numChannels > 3) &&
+      (target == 'jpg' ||
+          target == 'jpeg' ||
+          target == 'bmp' ||
+          target == 'tif' ||
+          target == 'tiff')) {
+    image = _flattenAlpha(image, 0xFFFFFFFF);
+  }
 
   final encoded = _encode(image, target, quality);
   return encoded == null ? null : Uint8List.fromList(encoded);

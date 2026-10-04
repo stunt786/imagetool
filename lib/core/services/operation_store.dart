@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -365,6 +366,59 @@ class OperationStore extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Overwrites an existing file in-place with [bytes], updating metadata
+  /// (size, mime type, extension) and the parent operation's [modifiedAt] timestamp
+  /// without creating a new file entry.
+  Future<AppFileItem?> replaceFileBytes({
+    required String fileId,
+    required Uint8List bytes,
+  }) async {
+    await load();
+    final item = fileById(fileId);
+    if (item == null) return null;
+
+    final file = File(item.path);
+    await file.writeAsBytes(bytes, flush: true);
+
+    if (item.thumbnailPath != null && item.thumbnailPath != item.path) {
+      try {
+        final thumbFile = File(item.thumbnailPath!);
+        if (await thumbFile.exists()) {
+          await thumbFile.delete();
+        }
+      } catch (_) {}
+    }
+
+    try {
+      PaintingBinding.instance.imageCache.evict(FileImage(file));
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+
+    final newSize = await file.length();
+    final detected = FileTypeDetector.detect(path: item.path);
+
+    final updated = item.copyWith(
+      sizeBytes: newSize,
+      mimeType: detected.mimeType,
+      extension: detected.extension,
+      thumbnailPath: item.thumbnailPath == item.path ? item.path : null,
+    );
+
+    _replaceFile(updated);
+
+    final operation = operationById(item.operationId);
+    if (operation != null) {
+      _replaceOperation(operation.copyWith(
+        modifiedAt: DateTime.now(),
+      ));
+    }
+
+    await _persist();
+    notifyListeners();
+    return updated;
   }
 
   /// Updates tags for an operation.

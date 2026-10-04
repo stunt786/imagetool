@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/services/public_storage.dart';
@@ -72,6 +74,28 @@ abstract final class FileActions {
           failed++;
           continue;
         }
+
+        final ext = item.extension.toLowerCase();
+        if (ext == 'tiff' || ext == 'tif') {
+          // System photo galleries (Android MediaStore / iOS Photos) cannot decode TIFF images natively.
+          // Save a high-quality JPEG to the gallery so it can be viewed and shared cleanly without corruption.
+          final bytes = await file.readAsBytes();
+          final jpgBytes = await ImageIsolateService.transform(
+            bytes,
+            const ImageTransformRequest(targetExtension: 'jpg', quality: 95),
+          );
+          if (jpgBytes != null && jpgBytes.isNotEmpty) {
+            final base = p.basenameWithoutExtension(item.fileName);
+            await PublicStorage.publishBytes(
+              bytes: jpgBytes,
+              fileName: '$base.jpg',
+              kind: PublicFileKind.image,
+            );
+            saved++;
+            continue;
+          }
+        }
+
         await PublicStorage.publishFile(
           sourcePath: item.path,
           fileName: item.fileName,
@@ -96,6 +120,22 @@ abstract final class FileActions {
     } else {
       _message(context, 'Could not save to the gallery.');
     }
+  }
+
+  /// Exports a single file (TIFF, image, PDF, document) through the system save dialog.
+  static Future<void> exportFile(
+    BuildContext context,
+    AppFileItem item,
+  ) async {
+    final result = await PrivateToPublicPdfManager().exportSingleFile(
+      sandboxPath: item.path,
+      suggestedName: item.fileName,
+    );
+    if (!context.mounted) return;
+    _message(
+      context,
+      result == null ? 'Export cancelled.' : 'Exported "${item.fileName}".',
+    );
   }
 
   /// Exports PDFs through the system save dialog.

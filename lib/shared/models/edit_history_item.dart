@@ -89,10 +89,37 @@ class EditHistoryItem {
     };
   }
 
+  /// Every icon a history entry can persist. Icons must be declared as const
+  /// literals (not built from a code point at runtime) so the release build
+  /// can tree shake the Material icon font.
+  static const List<IconData> _knownIcons = [
+    Icons.image_outlined,
+    Icons.call_split_rounded,
+    Icons.dashboard_customize_rounded,
+    Icons.photo_size_select_large_rounded,
+    Icons.rotate_right_rounded,
+    Icons.flip_rounded,
+    Icons.compress_rounded,
+    Icons.crop_rounded,
+    Icons.merge_type_rounded,
+    Icons.document_scanner_outlined,
+    Icons.picture_as_pdf_outlined,
+    Icons.transform_rounded,
+    Icons.picture_as_pdf_rounded,
+    Icons.swap_horiz_rounded,
+  ];
+
+  static IconData _iconForCodePoint(int? codePoint) {
+    if (codePoint != null) {
+      for (final icon in _knownIcons) {
+        if (icon.codePoint == codePoint) return icon;
+      }
+    }
+    return Icons.image_outlined;
+  }
+
   factory EditHistoryItem.fromJson(Map<String, dynamic> json) {
-    final codePoint =
-        json['toolIconCodePoint'] as int? ?? Icons.image_outlined.codePoint;
-    final fontFamily = json['toolIconFontFamily'] as String? ?? 'MaterialIcons';
+    final codePoint = json['toolIconCodePoint'] as int?;
     return EditHistoryItem(
       fileName: json['fileName'] as String? ?? '',
       toolUsed: json['toolUsed'] as String? ?? '',
@@ -100,7 +127,7 @@ class EditHistoryItem {
           DateTime.now(),
       filePath: json['filePath'] as String?,
       thumbnailPath: json['thumbnailPath'] as String?,
-      toolIcon: IconData(codePoint, fontFamily: fontFamily),
+      toolIcon: _iconForCodePoint(codePoint),
       compressionLevel: json['compressionLevel'] as String?,
       isGroup: json['isGroup'] as bool? ?? false,
       groupCount: json['groupCount'] as int?,

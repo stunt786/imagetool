@@ -602,6 +602,7 @@ class _OperationRow extends StatelessWidget {
         child: Row(
           children: [
             FileThumbnail(
+              key: ValueKey('${operation.id}_${operation.modifiedAt.millisecondsSinceEpoch}'),
               path: thumbnailPath ?? '',
               isPdf: looksLikePdf(operation, thumbnailPath),
               size: 56,
@@ -756,6 +757,7 @@ class _OperationCard extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(3),
                       child: FileThumbnail(
+                        key: ValueKey('${operation.id}_${operation.modifiedAt.millisecondsSinceEpoch}'),
                         path: thumbnailPath ?? '',
                         isPdf: _OperationRow.looksLikePdf(
                             operation, thumbnailPath),

@@ -103,13 +103,16 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
     try {
       final isPdf = state.selectedFormat.isPdf;
+      final isTiff = state.selectedFormat == ConvertFormat.tiff;
+      final isDocument = isPdf || isTiff;
       final entries = convertedImages.map((image) {
         final outputName =
             '${image.baseName}.${state.selectedFormat.extension}';
         return OutputEntry.bytes(
           bytes: image.convertedBytes!,
           fileName: outputName,
-          publicKind: isPdf ? PublicFileKind.document : PublicFileKind.image,
+          publicKind:
+              isDocument ? PublicFileKind.document : PublicFileKind.image,
         );
       }).toList();
 

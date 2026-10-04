@@ -851,6 +851,7 @@ class _DocumentPageTile extends StatelessWidget {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: FileThumbnail(
+                      key: ValueKey('${item.id}_${item.sizeBytes}'),
                       path: item.path,
                       isPdf: item.isPdf,
                       size: 260,

@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/image_isolate_service.dart';
-import '../../../core/services/output_saver.dart';
-import '../../../core/services/public_storage.dart';
 import '../../image_resize/models/crop_geometry.dart';
 import '../../image_resize/widgets/crop_overlay.dart';
 import '../notifiers/operation_library_notifier.dart';
@@ -41,6 +39,7 @@ enum _CropAspect {
 
 class _FileCropScreenState extends ConsumerState<FileCropScreen> {
   Uint8List? _bytes;
+  Uint8List? _displayBytes;
   ImageProbeResult? _probe;
   CropRect? _crop;
   _CropAspect _aspect = _CropAspect.free;
@@ -64,9 +63,18 @@ class _FileCropScreenState extends ConsumerState<FileCropScreen> {
       if (!probe.isValid || probe.width <= 0 || probe.height <= 0) {
         throw Exception('This file could not be decoded as an image');
       }
+      final ext = widget.item.extension.toLowerCase();
+      Uint8List displayBytes = bytes;
+      if (ext == 'tiff' || ext == 'tif') {
+        final thumb = await ImageIsolateService.thumbnail(bytes, maxSide: 2048);
+        if (thumb != null && thumb.isNotEmpty) {
+          displayBytes = thumb;
+        }
+      }
       if (!mounted) return;
       setState(() {
         _bytes = bytes;
+        _displayBytes = displayBytes;
         _probe = probe;
         _crop = CropRect.full(probe.width, probe.height);
       });
@@ -112,27 +120,15 @@ class _FileCropScreenState extends ConsumerState<FileCropScreen> {
         throw Exception('Crop failed');
       }
 
-      final base = widget.item.baseName;
-      final fileName =
-          'pixeltools_${base}_cropped_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
-
-      await saveToolOutputs(
-        ref.read(operationStoreProvider),
-        kind: OperationKind.imageEdit,
-        entries: [
-          OutputEntry.bytes(
-            bytes: cropped,
-            fileName: fileName,
-            publicKind: PublicFileKind.image,
-          ),
-        ],
-        intoOperationId: widget.item.operationId,
+      final updated = await ref.read(operationStoreProvider).replaceFileBytes(
+        fileId: widget.item.id,
+        bytes: cropped,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
 
       if (!mounted) return;
-      Navigator.pop(context, fileName);
+      Navigator.pop(context, updated ?? widget.item);
     } catch (error) {
       if (!mounted) return;
       setState(() => _isApplying = false);
@@ -200,7 +196,7 @@ class _FileCropScreenState extends ConsumerState<FileCropScreen> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
                           child: CropOverlay(
-                            imageBytes: bytes,
+                            imageBytes: _displayBytes ?? bytes,
                             imageWidth: probe.width,
                             imageHeight: probe.height,
                             crop: crop,

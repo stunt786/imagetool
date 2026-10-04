@@ -1,7 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages, implementation_imports
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
@@ -11,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pixeltools/core/models/operation_folder.dart';
 import 'package:pixeltools/features/files/services/file_actions.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:share_plus_platform_interface/share_plus_platform_interface.dart';
 
 class FakeSharePlatform extends Fake
@@ -323,6 +321,41 @@ void main() {
         tester,
         (context) =>
             FileActions.exportPdfs(context, [item('report.pdf', pdf: true)]),
+      );
+
+      expect(find.text('Export cancelled.'), findsOneWidget);
+    });
+  });
+
+  group('FileActions.exportFile', () {
+    testWidgets('exports any file through the save dialog', (tester) async {
+      await pumpHarness(tester);
+      fakePicker.nextResult = '/public/document.tiff';
+
+      await act(
+        tester,
+        (context) => FileActions.exportFile(
+          context,
+          item('document.tiff', image: true),
+        ),
+      );
+
+      expect(fakePicker.saveCallCount, 1);
+      expect(fakePicker.lastSuggestedName, 'document.tiff');
+      expect(find.text('Exported "document.tiff".'), findsOneWidget);
+    });
+
+    testWidgets('treats a dismissed save dialog as a cancellation',
+        (tester) async {
+      await pumpHarness(tester);
+      fakePicker.nextResult = null;
+
+      await act(
+        tester,
+        (context) => FileActions.exportFile(
+          context,
+          item('document.tiff', image: true),
+        ),
       );
 
       expect(find.text('Export cancelled.'), findsOneWidget);

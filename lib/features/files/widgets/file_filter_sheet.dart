@@ -5,8 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/operation_folder.dart';
-import '../../../core/services/output_saver.dart';
-import '../../../core/services/public_storage.dart';
+import '../../../core/services/image_isolate_service.dart';
 import '../../camera/models/scanned_page.dart';
 import '../../camera/services/image_filter_service.dart';
 import '../notifiers/operation_library_notifier.dart';
@@ -21,8 +20,8 @@ class FileFilterSheet extends ConsumerStatefulWidget {
 
   final AppFileItem item;
 
-  static Future<bool> show(BuildContext context, {required AppFileItem item}) {
-    return showModalBottomSheet<bool>(
+  static Future<AppFileItem?> show(BuildContext context, {required AppFileItem item}) {
+    return showModalBottomSheet<AppFileItem?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF1B1E26),
@@ -30,7 +29,7 @@ class FileFilterSheet extends ConsumerStatefulWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => FileFilterSheet(item: item),
-    ).then((value) => value ?? false);
+    );
   }
 
   @override
@@ -67,6 +66,7 @@ const List<_FilterOption> _filterOptions = [
 
 class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
   Uint8List? _bytes;
+  Uint8List? _basePreviewBytes;
   String? _error;
   FilterType _selected = FilterType.none;
   Uint8List? _previewBytes;
@@ -87,8 +87,16 @@ class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
         throw Exception('File is no longer available');
       }
       final bytes = await file.readAsBytes();
+      final ext = widget.item.extension.toLowerCase();
+      Uint8List? basePreview;
+      if (ext == 'tiff' || ext == 'tif') {
+        basePreview = await ImageIsolateService.thumbnail(bytes, maxSide: 2048);
+      }
       if (!mounted) return;
-      setState(() => _bytes = bytes);
+      setState(() {
+        _bytes = bytes;
+        _basePreviewBytes = basePreview;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '$error');
@@ -141,28 +149,28 @@ class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
         throw Exception('Filter could not be applied');
       }
 
-      final base = widget.item.baseName;
-      final filterName = _selected.name;
-      final fileName =
-          'pixeltools_${base}_${filterName}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      Uint8List finalBytes = result.bytes;
+      final ext = widget.item.extension.toLowerCase();
+      if (ext == 'png' || ext == 'webp' || ext == 'tiff' || ext == 'tif' || ext == 'bmp') {
+        final targetExt = (ext == 'tif') ? 'tiff' : ext;
+        final converted = await ImageIsolateService.transform(
+          result.bytes,
+          ImageTransformRequest(targetExtension: targetExt, quality: 95),
+        );
+        if (converted != null && converted.isNotEmpty) {
+          finalBytes = converted;
+        }
+      }
 
-      await saveToolOutputs(
-        ref.read(operationStoreProvider),
-        kind: OperationKind.imageEdit,
-        entries: [
-          OutputEntry.bytes(
-            bytes: result.bytes,
-            fileName: fileName,
-            publicKind: PublicFileKind.image,
-          ),
-        ],
-        intoOperationId: widget.item.operationId,
+      final updated = await ref.read(operationStoreProvider).replaceFileBytes(
+        fileId: widget.item.id,
+        bytes: finalBytes,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
 
       if (!mounted) return;
-      Navigator.pop(context, true);
+      Navigator.pop(context, updated ?? widget.item);
     } catch (error) {
       if (!mounted) return;
       setState(() => _isApplying = false);
@@ -275,7 +283,7 @@ class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
       );
     }
 
-    final Uint8List source = _previewBytes ?? bytes;
+    final Uint8List source = _previewBytes ?? _basePreviewBytes ?? bytes;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
