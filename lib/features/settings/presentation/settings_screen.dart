@@ -31,8 +31,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = ref.watch(appSettingsProvider);
     final appInfoAsync = ref.watch(appInfoProvider);
     final versionText = appInfoAsync.maybeWhen(
-      data: (info) => info.versionWithBuild,
-      orElse: () => AppInfoService.instance.cachedInfo.versionWithBuild,
+      data: (info) => info.version,
+      orElse: () => AppInfoService.instance.cachedInfo.version,
     );
 
     return Scaffold(

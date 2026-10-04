@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -220,64 +219,74 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final choice = await showModalBottomSheet<String>(
       context: context,
       useRootNavigator: true,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E2129),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(
-                  'Resize Image Preset',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height -
+                MediaQuery.viewPaddingOf(ctx).top -
+                16,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Text(
+                      'Resize Image Preset',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                  ListTile(
+                    leading: const Icon(Icons.aspect_ratio_rounded,
+                        color: Color(0xFF29B6F6)),
+                    title: const Text('75% Scale',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(ctx, '75%'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.aspect_ratio_rounded,
+                        color: Color(0xFF00E676)),
+                    title: const Text('50% Scale (Half Size)',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(ctx, '50%'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.aspect_ratio_rounded,
+                        color: Color(0xFFFFA726)),
+                    title: const Text('25% Scale (Quarter Size)',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(ctx, '25%'),
+                  ),
+                  ListTile(
+                    leading:
+                        const Icon(Icons.hd_outlined, color: Color(0xFFAB47BC)),
+                    title: const Text('Full HD (Max 1920x1080)',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(ctx, '1080p'),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.compress_rounded,
+                        color: Color(0xFFFF7043)),
+                    title: const Text('Smart Compression (Best Quality / Size)',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () => Navigator.pop(ctx, 'smart'),
+                  ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded,
-                    color: Color(0xFF29B6F6)),
-                title: const Text('75% Scale',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, '75%'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded,
-                    color: Color(0xFF00E676)),
-                title: const Text('50% Scale (Half Size)',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, '50%'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded,
-                    color: Color(0xFFFFA726)),
-                title: const Text('25% Scale (Quarter Size)',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, '25%'),
-              ),
-              ListTile(
-                leading:
-                    const Icon(Icons.hd_outlined, color: Color(0xFFAB47BC)),
-                title: const Text('Full HD (Max 1920x1080)',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, '1080p'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.compress_rounded,
-                    color: Color(0xFFFF7043)),
-                title: const Text('Smart Compression (Best Quality / Size)',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () => Navigator.pop(ctx, 'smart'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -393,63 +402,65 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final selectedFormat = await showModalBottomSheet<ConvertFormat>(
       context: context,
       useRootNavigator: true,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E2129),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Convert to Format',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(ctx).height -
+                MediaQuery.viewPaddingOf(ctx).top -
+                16,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final fmt in [
-                    ConvertFormat.jpg,
-                    ConvertFormat.png,
-                    ConvertFormat.webp,
-                    ConvertFormat.pdf,
-                    ConvertFormat.tiff,
-                    ConvertFormat.bmp,
-                  ])
-                    ActionChip(
-                      backgroundColor: const Color(0xFF2B303C),
-                      label: Text(
-                        fmt.label,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      onPressed: () => Navigator.pop(ctx, fmt),
+                  const Text(
+                    'Convert to Format',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final fmt in [
+                        ConvertFormat.jpg,
+                        ConvertFormat.png,
+                        ConvertFormat.bmp,
+                      ])
+                        ActionChip(
+                          backgroundColor: const Color(0xFF2B303C),
+                          label: Text(
+                            fmt.label,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(ctx, fmt),
+                        ),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
 
     if (selectedFormat == null || !mounted) return;
-
-    if (selectedFormat == ConvertFormat.pdf) {
-      await _createPdf();
-      return;
-    }
 
     setState(() {
       _isBusy = true;
@@ -474,28 +485,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         } catch (_) {}
       }
 
-      Uint8List? converted;
-      if (selectedFormat == ConvertFormat.webp && Platform.isAndroid) {
-        var imageToEncode = bytes;
-        final enableWatermark = settings.enableGlobalWatermark;
-        if (enableWatermark) {
-          var decoded = img.decodeImage(bytes);
-          if (decoded != null) {
-            decoded = WatermarkHelper.applyToImage(
-              decoded,
-              settings,
-              iconBytes: WatermarkHelper.cachedIconBytes,
-            );
-            imageToEncode = Uint8List.fromList(img.encodePng(decoded));
-          }
-        }
-        converted = await PlatformImageEncoder.encodeWebP(
-          imageToEncode,
-          quality: 90,
-        );
-      }
-
-      converted ??= await compute(convertFormatWorker, <String, Object?>{
+      final converted = await compute(convertFormatWorker, <String, Object?>{
         'source': bytes,
         'target': selectedFormat.codec,
         'quality': 90,
@@ -518,9 +508,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           OutputEntry.bytes(
             bytes: converted,
             fileName: fileName,
-            publicKind: selectedFormat == ConvertFormat.tiff
-                ? PublicFileKind.document
-                : PublicFileKind.image,
+            publicKind: PublicFileKind.image,
           ),
         ],
         intoOperationId: _item.operationId,
@@ -544,62 +532,6 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Conversion failed: $e'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-          _busyLabel = null;
-        });
-      }
-    }
-  }
-
-  Future<void> _createPdf() async {
-    if (_isBusy) return;
-    setState(() {
-      _isBusy = true;
-      _busyLabel = 'Converting image to PDF in background...';
-    });
-    try {
-      final base = p.basenameWithoutExtension(_item.fileName);
-      final outPath = await PdfService.instance.createPdfFromImages(
-        imagePaths: [_item.path],
-        outputBaseName: 'pixeltools_$base',
-      );
-
-      await saveToolOutputs(
-        ref.read(operationStoreProvider),
-        kind: OperationKind.imageToPdf,
-        entries: [
-          OutputEntry.file(
-            sourcePath: outPath,
-            fileName: p.basename(outPath),
-            publicKind: PublicFileKind.document,
-          ),
-        ],
-      );
-
-      await ref.read(operationLibraryProvider.notifier).reload();
-
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Converted to PDF successfully'),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not convert to PDF: $e'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -1507,13 +1439,6 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                           enabled: !_isBusy,
                           onTap: () => _convertFormat(),
                         ),
-                        _ToolPill(
-                          icon: Icons.picture_as_pdf_outlined,
-                          label: 'To PDF',
-                          color: const Color(0xFFEF5350),
-                          enabled: !_isBusy,
-                          onTap: () => _createPdf(),
-                        ),
                       ],
                     ),
                   const SizedBox(height: 14),
@@ -1715,176 +1640,189 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
     final maxPages = widget.totalPages > 0 ? widget.totalPages : 1;
 
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height -
+              MediaQuery.viewPaddingOf(context).top -
+              16,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Split PDF Options',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${widget.totalPages} pages',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Split PDF Options',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white12,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${widget.totalPages} pages',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                RadioListTile<_SplitModeType>(
+                  value: _SplitModeType.allPages,
+                  groupValue: _mode,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('All Pages',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: const Text(
+                      'Split each page into an individual PDF file',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _mode = val);
+                  },
+                ),
+                RadioListTile<_SplitModeType>(
+                  value: _SplitModeType.byChunks,
+                  groupValue: _mode,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('By Page Chunks',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: const Text(
+                      'Group every N pages into separate PDF files',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _mode = val);
+                  },
+                ),
+                if (_mode == _SplitModeType.byChunks) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 36, bottom: 8),
+                    child: Row(
+                      children: [
+                        const Text('Pages per chunk: ',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 13)),
+                        for (final s in [2, 3, 5, 10])
+                          if (s <= maxPages || s == 2)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text('$s'),
+                                selected: _chunkSize == s,
+                                onSelected: (_) =>
+                                    setState(() => _chunkSize = s),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+                ],
+                RadioListTile<_SplitModeType>(
+                  value: _SplitModeType.pageRange,
+                  groupValue: _mode,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Custom Page Range',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  subtitle: const Text(
+                      'Extract a specific range of pages into one PDF',
+                      style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _mode = val);
+                  },
+                ),
+                if (_mode == _SplitModeType.pageRange) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 36, bottom: 8),
+                    child: Row(
+                      children: [
+                        const Text('From: ',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 13)),
+                        SizedBox(
+                          width: 60,
+                          child: DropdownButton<int>(
+                            value: _startPage,
+                            dropdownColor: const Color(0xFF232730),
+                            style: const TextStyle(color: Colors.white),
+                            underline: const SizedBox(),
+                            items: [
+                              for (var i = 1; i <= _endPage; i++)
+                                DropdownMenuItem(value: i, child: Text('$i')),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setState(() => _startPage = v);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const Text('To: ',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 13)),
+                        SizedBox(
+                          width: 60,
+                          child: DropdownButton<int>(
+                            value: _endPage,
+                            dropdownColor: const Color(0xFF232730),
+                            style: const TextStyle(color: Colors.white),
+                            underline: const SizedBox(),
+                            items: [
+                              for (var i = _startPage; i <= maxPages; i++)
+                                DropdownMenuItem(value: i, child: Text('$i')),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setState(() => _endPage = v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.pop(
+                        context,
+                        _SplitOptionsResult(
+                          mode: _mode,
+                          chunkSize: _chunkSize,
+                          startPage: _startPage,
+                          endPage: _endPage,
+                        ),
+                      );
+                    },
+                    child: const Text('Split PDF',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            RadioListTile<_SplitModeType>(
-              value: _SplitModeType.allPages,
-              groupValue: _mode,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('All Pages',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text(
-                  'Split each page into an individual PDF file',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
-              onChanged: (val) {
-                if (val != null) setState(() => _mode = val);
-              },
-            ),
-            RadioListTile<_SplitModeType>(
-              value: _SplitModeType.byChunks,
-              groupValue: _mode,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('By Page Chunks',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text(
-                  'Group every N pages into separate PDF files',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
-              onChanged: (val) {
-                if (val != null) setState(() => _mode = val);
-              },
-            ),
-            if (_mode == _SplitModeType.byChunks) ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 36, bottom: 8),
-                child: Row(
-                  children: [
-                    const Text('Pages per chunk: ',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    for (final s in [2, 3, 5, 10])
-                      if (s <= maxPages || s == 2)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            label: Text('$s'),
-                            selected: _chunkSize == s,
-                            onSelected: (_) => setState(() => _chunkSize = s),
-                          ),
-                        ),
-                  ],
-                ),
-              ),
-            ],
-            RadioListTile<_SplitModeType>(
-              value: _SplitModeType.pageRange,
-              groupValue: _mode,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Custom Page Range',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text(
-                  'Extract a specific range of pages into one PDF',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
-              onChanged: (val) {
-                if (val != null) setState(() => _mode = val);
-              },
-            ),
-            if (_mode == _SplitModeType.pageRange) ...[
-              Padding(
-                padding: const EdgeInsets.only(left: 36, bottom: 8),
-                child: Row(
-                  children: [
-                    const Text('From: ',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    SizedBox(
-                      width: 60,
-                      child: DropdownButton<int>(
-                        value: _startPage,
-                        dropdownColor: const Color(0xFF232730),
-                        style: const TextStyle(color: Colors.white),
-                        underline: const SizedBox(),
-                        items: [
-                          for (var i = 1; i <= _endPage; i++)
-                            DropdownMenuItem(value: i, child: Text('$i')),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _startPage = v);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const Text('To: ',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    SizedBox(
-                      width: 60,
-                      child: DropdownButton<int>(
-                        value: _endPage,
-                        dropdownColor: const Color(0xFF232730),
-                        style: const TextStyle(color: Colors.white),
-                        underline: const SizedBox(),
-                        items: [
-                          for (var i = _startPage; i <= maxPages; i++)
-                            DropdownMenuItem(value: i, child: Text('$i')),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) setState(() => _endPage = v);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.pop(
-                    context,
-                    _SplitOptionsResult(
-                      mode: _mode,
-                      chunkSize: _chunkSize,
-                      startPage: _startPage,
-                      endPage: _endPage,
-                    ),
-                  );
-                },
-                child: const Text('Split PDF',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2133,58 +2071,68 @@ class _CompressOptionsSheetState extends State<_CompressOptionsSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height -
+              MediaQuery.viewPaddingOf(context).top -
+              16,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Compress PDF Options',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 16),
-            for (final level in CompressionLevel.values)
-              RadioListTile<CompressionLevel>(
-                value: level,
-                groupValue: _selected,
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  level.label,
-                  style: const TextStyle(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Compress PDF Options',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                subtitle: Text(
-                  level.description,
-                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                const SizedBox(height: 16),
+                for (final level in CompressionLevel.values)
+                  RadioListTile<CompressionLevel>(
+                    value: level,
+                    groupValue: _selected,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      level.label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      level.description,
+                      style:
+                          const TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selected = val);
+                    },
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(context, _selected),
+                    child: const Text(
+                      'Compress PDF',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selected = val);
-                },
-              ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, _selected),
-                child: const Text(
-                  'Compress PDF',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -241,7 +241,7 @@ void main() {
     expect(decoded.height, equals(30));
   });
 
-  testWidgets('Convert writes a TIFF into the same folder', (tester) async {
+  testWidgets('Convert writes a PNG into the same folder', (tester) async {
     setUpPhoneViewport(tester);
 
     await tester.runAsync(() async {
@@ -252,15 +252,35 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Convert to Format'), findsOneWidget);
 
-      await tester.tap(find.text('TIFF'));
+      await tester.tap(find.text('PNG'));
       await Future<void>.delayed(const Duration(seconds: 8));
       await tester.pump();
     });
 
     final names = folderFileNames();
     expect(names, hasLength(2));
-    expect(names.any((n) => n.toLowerCase().endsWith('.tiff')), isTrue,
-        reason: 'tiff output missing from ${names.join(', ')}');
+    expect(names.any((n) => n.toLowerCase().endsWith('.png')), isTrue,
+        reason: 'png output missing from ${names.join(', ')}');
+  });
+
+  testWidgets('Convert offers JPG, PNG and BMP only', (tester) async {
+    setUpPhoneViewport(tester);
+
+    await tester.runAsync(() async {
+      await pumpHost(tester, FileEditSheet(item: item, onDeleted: () {}));
+
+      await tester.tap(find.text('Convert'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Convert to Format'), findsOneWidget);
+      expect(find.text('JPG'), findsOneWidget);
+      expect(find.text('PNG'), findsOneWidget);
+      expect(find.text('BMP'), findsOneWidget);
+      expect(find.text('WEBP'), findsNothing);
+      expect(find.text('PDF'), findsNothing);
+      expect(find.text('TIFF'), findsNothing);
+    });
   });
 
   testWidgets('tools stay visible without horizontal scrolling',
@@ -278,7 +298,6 @@ void main() {
         'Magic Clean',
         'Resize',
         'Convert',
-        'To PDF',
       ]) {
         final rect = tester.getRect(find.text(label));
         expect(rect.center.dx, lessThan(appSize.width),
@@ -286,6 +305,8 @@ void main() {
         expect(rect.center.dy, lessThan(appSize.height),
             reason: '"$label" pill is off-screen vertically');
       }
+      expect(find.text('To PDF'), findsNothing,
+          reason: '"To PDF" option was removed');
     });
   });
 

@@ -93,7 +93,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Version'), findsOneWidget);
-      expect(find.text('1.0.1+2'), findsOneWidget);
+      expect(find.text('1.0.1'), findsOneWidget);
     });
 
     testWidgets('reflects bumped version in SettingsScreen when pubspec version changes', (tester) async {
@@ -130,7 +130,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Version'), findsOneWidget);
-      expect(find.text('1.2.0+5'), findsOneWidget);
+      expect(find.text('1.2.0'), findsOneWidget);
     });
   });
 }
