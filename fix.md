@@ -1,2 +1,0 @@
-## Support
-- Add Contact option in the settings page with message email dialogue and add link contact@bnbkio.com that takes users to their emailing app for contacting. Also make email easily copyable. Also provide beautiful user message.

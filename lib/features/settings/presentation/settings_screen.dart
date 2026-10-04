@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/services/app_review_service.dart';
@@ -460,6 +462,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // ── Support ──────────────────────────────────────────────
+                  _buildSection(
+                    context,
+                    title: 'Support',
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.mail_outline_rounded),
+                        title: const Text('Contact Us'),
+                        subtitle: const Text(
+                          '${AppStrings.contactEmail} · questions, feedback or bugs',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _showContactDialog(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   // ── App & Updates ────────────────────────────────────────
                   _buildSection(
                     context,
@@ -581,6 +600,203 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       );
     }
+  }
+
+  /// Contact dialog: friendly message, a tappable (and copyable) address and
+  /// a shortcut that hands the user over to their default email app.
+  Future<void> _showContactDialog(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final messenger = ScaffoldMessenger.of(context);
+
+    Future<void> openEmailApp() async {
+      final mailto = Uri(
+        scheme: 'mailto',
+        path: AppStrings.contactEmail,
+        queryParameters: {
+          'subject': '${AppStrings.appName} — Hello!',
+          'body': 'Hi bnbKio,\n\n',
+        },
+      );
+      try {
+        final launched = await launchUrl(mailto, mode: LaunchMode.externalApplication);
+        if (!launched) throw Exception('launch failed');
+      } catch (_) {
+        await Clipboard.setData(const ClipboardData(text: AppStrings.contactEmail));
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No email app found — address copied instead. '
+              'Paste it into your favourite mail app to reach us.',
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var copied = false;
+
+        Future<void> copyEmail(StateSetter setState) async {
+          await Clipboard.setData(const ClipboardData(text: AppStrings.contactEmail));
+          setState(() => copied = true);
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text('Email copied — paste it anywhere you like'),
+                  ),
+                ],
+              ),
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.mail_rounded, color: scheme.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Get in touch',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Got a question, an idea, or bumped into a bug? "
+                  "We'd love to hear it.\n\n"
+                  'Drop us a line and a real person will get back to you — '
+                  'usually within a day or two.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        height: 1.45,
+                      ),
+                ),
+                const SizedBox(height: 18),
+                Semantics(
+                  button: true,
+                  label: 'Email ${AppStrings.contactEmail}. Tap to copy.',
+                  child: GestureDetector(
+                    onTap: () => copyEmail(setState),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.alternate_email_rounded,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              AppStrings.contactEmail,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -0.2,
+                                  ),
+                            ),
+                          ),
+                          Icon(
+                            copied
+                                ? Icons.check_circle_rounded
+                                : Icons.copy_rounded,
+                            size: 18,
+                            color: copied
+                                ? Colors.green
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: Text(
+                      copied ? 'Copied!' : 'Tap the address to copy it',
+                      key: ValueKey(copied),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: copied
+                                ? Colors.green
+                                : scheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton.icon(
+                onPressed: () => copyEmail(setState),
+                icon: Icon(
+                  copied ? Icons.check_rounded : Icons.copy_rounded,
+                  size: 18,
+                ),
+                label: Text(copied ? 'Copied' : 'Copy'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  openEmailApp();
+                },
+                icon: const Icon(Icons.edit_rounded, size: 18),
+                label: const Text('Write to us'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   /// Resolves the destination shown under Save Location: the SAF folder the
