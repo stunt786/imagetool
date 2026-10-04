@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/decode_size.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 import '../../services/image_filter_service.dart';
@@ -242,6 +243,7 @@ class _EnhanceFiltersSheetState extends ConsumerState<EnhanceFiltersSheet> {
           Image.memory(
             previewSource,
             fit: BoxFit.contain,
+            cacheWidth: zoomDecodeWidthFor(context),
             errorBuilder: (_, __, ___) => const Center(
               child: Icon(Icons.broken_image_outlined,
                   color: Colors.black54, size: 40),

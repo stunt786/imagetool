@@ -23,6 +23,7 @@ import '../models/social_presets.dart';
 import '../services/image_processor_service.dart';
 import '../widgets/crop_overlay.dart';
 import '../../../core/utils/file_type_detector.dart';
+import '../../../core/utils/deferred_clear.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -87,6 +88,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   List<Uint8List> _undoStack = <Uint8List>[];
   int _undoIndex = -1;
 
+  /// Cap on retained undo snapshots. Each snapshot is a full-resolution
+  /// bitmap, so an unbounded stack turns a long editing session into
+  /// unbounded growth.
+  static const int _maxUndoDepth = 10;
+
   _EditorPanel _activePanel = _EditorPanel.resize;
   _ResizeMode _mode = _ResizeMode.dimensions;
   _CropAspectPreset _cropPreset = _CropAspectPreset.free;
@@ -121,14 +127,16 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _isBatchMode = false;
   bool _isCropDragging = false;
 
+  late final ImageEditNotifier _imageEditNotifier;
+
   @override
   void initState() {
     super.initState();
+    _imageEditNotifier = ref.read(imageEditProvider.notifier);
     _loadRecentSizes();
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(imageEditProvider.notifier).clear();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
@@ -142,6 +150,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   @override
   void dispose() {
+    // Release the provider's retained byte buffers on exit. Clearing is
+    // deferred past the current frame so notifying listeners never happens
+    // while the element tree is being torn down.
+    runDeferredClear(_imageEditNotifier.clear);
     _widthController.dispose();
     _heightController.dispose();
     _percentageController.dispose();
@@ -210,21 +222,22 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _isBatchMode = _batchFiles.length > 1;
 
       final file = _batchFiles.first;
-      if (file.bytes == null || file.bytes!.isEmpty) {
+      final fileBytes = await file.resolveBytes();
+      if (fileBytes == null || fileBytes.isEmpty) {
         _showSnack('Unable to read that image.');
         return;
       }
 
       await ref
           .read(imageEditProvider.notifier)
-          .loadImage(file.bytes!, file.name, sourcePath: file.path);
+          .loadImage(fileBytes, file.name, sourcePath: file.path);
       if (!mounted) return;
 
       final state = ref.read(imageEditProvider);
       if (!state.hasImage) return;
 
       _syncInputsFromImage(state.width, state.height);
-      _undoStack = <Uint8List>[file.bytes!];
+      _undoStack = <Uint8List>[fileBytes];
       _undoIndex = 0;
       setState(() => _mode = _ResizeMode.dimensions);
       await _refreshEstimate();
@@ -296,10 +309,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
       if (!ref.read(imageEditProvider).hasImage && _batchFiles.isNotEmpty) {
         final first = _batchFiles.first;
-        if (first.bytes != null) {
+        final firstBytes = await first.resolveBytes();
+        if (firstBytes != null) {
           await ref
               .read(imageEditProvider.notifier)
-              .loadImage(first.bytes!, first.name, sourcePath: first.path);
+              .loadImage(firstBytes, first.name, sourcePath: first.path);
           _syncInputsFromImage(ref.read(imageEditProvider).width,
               ref.read(imageEditProvider).height);
         }
@@ -326,10 +340,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     if (ref.read(imageEditProvider).fileName == removed.name &&
         _batchFiles.isNotEmpty) {
       final next = _batchFiles.first;
-      if (next.bytes != null) {
+      final nextBytes = await next.resolveBytes();
+      if (nextBytes != null) {
         await ref
             .read(imageEditProvider.notifier)
-            .loadImage(next.bytes!, next.name, sourcePath: next.path);
+            .loadImage(nextBytes, next.name, sourcePath: next.path);
         _syncInputsFromImage(ref.read(imageEditProvider).width,
             ref.read(imageEditProvider).height);
       }
@@ -386,7 +401,8 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       for (int i = 0; i < _batchFiles.length; i++) {
         progressNotifier.value = (current: i + 1, total: _batchFiles.length);
         final file = _batchFiles[i];
-        if (file.bytes == null || file.bytes!.isEmpty) continue;
+        final sourceBytes = await file.resolveBytes();
+        if (sourceBytes == null || sourceBytes.isEmpty) continue;
 
         ImageProcessResult? result;
 
@@ -394,7 +410,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           final targetBytes =
               math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
           result = await ImageProcessorService.compressToTargetSize(
-            bytes: file.bytes!,
+            bytes: sourceBytes,
             targetBytes: targetBytes,
             format: _outputFormat,
             settings: appSettings,
@@ -402,20 +418,20 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         } else if (_mode == _ResizeMode.preset &&
             _selectedSocialPreset != null) {
           result = await ImageProcessorService.resizeToPreset(
-            bytes: file.bytes!,
+            bytes: sourceBytes,
             preset: _selectedSocialPreset!,
             format: _outputFormat,
             quality: _quality.value,
             settings: appSettings,
           );
         } else if (_mode == _ResizeMode.percentage) {
-          final info = await ImageProcessorService.decodeImageInfo(file.bytes!);
+          final info = await ImageProcessorService.decodeImageInfo(sourceBytes);
           if (info != null) {
             final factor = _percentage / 100;
             final targetWidth = math.max(1, (info.width * factor).round());
             final targetHeight = math.max(1, (info.height * factor).round());
             result = await ImageProcessorService.resize(
-              bytes: file.bytes!,
+              bytes: sourceBytes,
               width: targetWidth,
               height: targetHeight,
               format: _outputFormat,
@@ -425,7 +441,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
             );
           }
         } else if (_mode == _ResizeMode.bestFit) {
-          final info = await ImageProcessorService.decodeImageInfo(file.bytes!);
+          final info = await ImageProcessorService.decodeImageInfo(sourceBytes);
           if (info != null) {
             final maxWidth =
                 int.tryParse(_bestFitWidthController.text) ?? info.width;
@@ -442,7 +458,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
               targetHeight = math.max(1, (info.height * scale).round());
             }
             result = await ImageProcessorService.resize(
-              bytes: file.bytes!,
+              bytes: sourceBytes,
               width: targetWidth,
               height: targetHeight,
               format: _outputFormat,
@@ -456,7 +472,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           final target = _resolveTargetSize(state);
           if (target != null) {
             result = await ImageProcessorService.resize(
-              bytes: file.bytes!,
+              bytes: sourceBytes,
               width: target.width,
               height: target.height,
               format: _outputFormat,
@@ -1776,6 +1792,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _undoStack = _undoStack.sublist(0, _undoIndex + 1);
     }
     _undoStack.add(bytes);
+    // Every entry is a full-resolution copy of the image, so the stack needs a
+    // hard ceiling or a long editing session grows without bound.
+    while (_undoStack.length > _maxUndoDepth) {
+      _undoStack.removeAt(0);
+      if (_undoIndex >= 0) _undoIndex--;
+    }
     _undoIndex = _undoStack.length - 1;
     setState(() {});
   }
@@ -1859,15 +1881,38 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     return base;
   }
 
+  /// Batch strip thumbnail. Prefers the in-memory bytes, otherwise decodes
+  /// straight from the picked path at a bounded size so a 12 MP source never
+  /// lands in the image cache at full resolution.
+  Widget _batchThumb(PickedFile file, Color placeholderColor) {
+    final bytes = file.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      return Image.memory(bytes, fit: BoxFit.cover, cacheWidth: 140);
+    }
+    if (file.hasReadablePath) {
+      return Image.file(
+        File(file.path!),
+        fit: BoxFit.cover,
+        cacheWidth: 140,
+        errorBuilder: (context, error, stackTrace) => Container(
+          color: placeholderColor,
+          child: const Icon(Icons.image),
+        ),
+      );
+    }
+    return Container(color: placeholderColor, child: const Icon(Icons.image));
+  }
+
   /// Loads the batch image at [index] into the editor (used by the compact
   /// previous/next control shown for Crop and Rotate).
   Future<void> _selectBatchIndex(int index) async {
     if (index < 0 || index >= _batchFiles.length) return;
     final file = _batchFiles[index];
-    if (file.bytes == null) return;
+    final fileBytes = await file.resolveBytes();
+    if (fileBytes == null) return;
 
     await ref.read(imageEditProvider.notifier).loadImage(
-          file.bytes!,
+          fileBytes,
           file.name,
           sourcePath: file.path,
         );
@@ -2174,11 +2219,12 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                     children: [
                       GestureDetector(
                         onTap: () async {
-                          if (file.bytes != null) {
+                          final thumbBytes = await file.resolveBytes();
+                          if (thumbBytes != null) {
                             await ref
                                 .read(imageEditProvider.notifier)
                                 .loadImage(
-                                  file.bytes!,
+                                  thumbBytes,
                                   file.name,
                                   sourcePath: file.path,
                                 );
@@ -2201,16 +2247,10 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
                             ),
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: file.bytes != null
-                              ? Image.memory(
-                                  file.bytes!,
-                                  fit: BoxFit.cover,
-                                  cacheWidth: 140,
-                                )
-                              : Container(
-                                  color: scheme.surfaceContainerHighest,
-                                  child: const Icon(Icons.image),
-                                ),
+                          child: _batchThumb(
+                            file,
+                            scheme.surfaceContainerHighest,
+                          ),
                         ),
                       ),
                       Positioned(

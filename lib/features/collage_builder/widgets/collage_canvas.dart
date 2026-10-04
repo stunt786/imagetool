@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:vector_math/vector_math_64.dart' as vec;
 
+import '../../../core/utils/decode_size.dart';
 import '../models/collage_state.dart';
 import '../notifiers/collage_notifier.dart';
 import 'collage_text_dialog.dart';
@@ -188,7 +189,7 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(state.cornerRadius),
               child: slot.hasImage && !isDragSource
-                ? _buildImageContent(slot, width, height, index)
+                ? _buildImageContent(context, slot, width, height, index)
                 : slot.hasImage && isDragSource
                     ? Center(
                         child: Icon(
@@ -211,7 +212,8 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
     );
   }
 
-  Widget _buildImageContent(CollageImageSlot slot, double width, double height, int index) {
+  Widget _buildImageContent(BuildContext context, CollageImageSlot slot,
+      double width, double height, int index) {
     final isPinching = _pinchSlotIndex == index;
     final isPanning = _panSlotIndex == index;
     final scale = isPinching ? _currentScale : slot.scale;
@@ -242,6 +244,9 @@ class _CollageCanvasState extends ConsumerState<CollageCanvas> {
                       : slot.fitMode == ImageFitMode.contain
                           ? BoxFit.contain
                           : BoxFit.fill,
+                  // Slots are scaled by the pinch gesture, so decode for the
+                  // scaled size rather than the source's native resolution.
+                  cacheWidth: decodeWidthFor(context, width * scale),
                   gaplessPlayback: true,
                   filterQuality: FilterQuality.medium,
                 ),

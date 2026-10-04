@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../core/utils/decode_size.dart';
 import '../models/edit_history_item.dart';
 
 /// Reusable thumbnail preview for a history item.
@@ -39,6 +40,7 @@ class HistoryThumbnail extends StatelessWidget {
             width: width,
             height: height,
             fit: BoxFit.cover,
+            cacheWidth: decodeWidthFor(context, width),
             errorBuilder: (_, __, ___) => _buildFallback(isImage),
           ),
         );
@@ -54,6 +56,7 @@ class HistoryThumbnail extends StatelessWidget {
           width: width,
           height: height,
           fit: BoxFit.cover,
+          cacheWidth: decodeWidthFor(context, width),
           errorBuilder: (_, __, ___) => _buildFallback(isImage),
         ),
       );

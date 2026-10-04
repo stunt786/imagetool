@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 
+import '../../../../core/utils/decode_size.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 import '../../services/document_enhancement_service.dart';
@@ -142,8 +143,12 @@ class _PerspectiveCorrectionScreenState
                         rect: imageRect,
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child:
-                              Image.memory(displayBytes, fit: BoxFit.contain),
+                          child: Image.memory(
+                            displayBytes,
+                            fit: BoxFit.contain,
+                            cacheWidth: decodeWidthFor(context,
+                                MediaQuery.sizeOf(context).width),
+                          ),
                         ),
                       ),
                       CustomPaint(

@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/models/operation_folder.dart';
+import '../../../../core/utils/decode_size.dart';
 import '../../../../core/services/app_review_service.dart';
 import '../../../../core/services/operation_recorder.dart';
 import '../../../../core/services/operation_store_provider.dart';
@@ -666,7 +667,11 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
             children: [
               Center(
                 child: InteractiveViewer(
-                  child: Image.memory(page.displayBytes, fit: BoxFit.contain),
+                  child: Image.memory(
+                    page.displayBytes,
+                    fit: BoxFit.contain,
+                    cacheWidth: zoomDecodeWidthFor(context),
+                  ),
                 ),
               ),
               Positioned(
@@ -790,6 +795,8 @@ class _LargePagePreview extends StatelessWidget {
                 fit: BoxFit.contain,
                 width: double.infinity,
                 height: double.infinity,
+                cacheWidth: decodeWidthFor(context,
+                    MediaQuery.sizeOf(context).width),
                 errorBuilder: (_, __, ___) => const Center(
                   child: Icon(Icons.broken_image_outlined,
                       color: Colors.black54, size: 48),
@@ -915,7 +922,11 @@ class _Thumbnail extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(3),
-                child: Image.memory(page.displayBytes, fit: BoxFit.contain),
+                child: Image.memory(
+                  page.displayBytes,
+                  fit: BoxFit.contain,
+                  cacheWidth: decodeWidthFor(context, 58),
+                ),
               ),
             ),
           ),

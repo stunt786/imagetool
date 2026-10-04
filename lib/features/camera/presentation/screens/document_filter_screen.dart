@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/utils/decode_size.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 import '../../services/image_filter_service.dart';
@@ -121,6 +122,8 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
                                   : (currentPage.filteredBytes ??
                                       currentPage.imageBytes!),
                               fit: BoxFit.contain,
+                              cacheWidth: decodeWidthFor(context,
+                                  MediaQuery.sizeOf(context).width),
                               errorBuilder: (_, __, ___) =>
                                   const Icon(Icons.broken_image, size: 48),
                             ),

@@ -10,7 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart' as pdfx;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion;
 
+import '../settings/app_settings.dart';
 import '../utils/file_type_detector.dart';
+import '../../shared/services/watermark_helper.dart';
 import 'pdf_compression_engine.dart';
 import 'pdf_ocr_service.dart';
 
@@ -59,7 +61,14 @@ class PdfService {
       final file = File(pdfPath);
       if (!await file.exists()) return null;
 
-      final cacheDir = await getTemporaryDirectory();
+      // Keep PDF previews inside the size-capped thumbnail cache so they are
+      // evicted along with every other preview instead of growing forever in
+      // the temp root.
+      final cacheDir = Directory(path.join(
+          (await getTemporaryDirectory()).path, 'pixeltools_thumbnails'));
+      if (!await cacheDir.exists()) {
+        await cacheDir.create(recursive: true);
+      }
       final stat = await file.stat();
       final thumbName =
           'pdf_thumb_${path.basenameWithoutExtension(pdfPath)}_${stat.modified.millisecondsSinceEpoch}.png';
@@ -296,9 +305,25 @@ class PdfService {
     }
   }
 
+
+/// Materialises a byte payload that crossed the isolate boundary with at most
+/// one copy.
+///
+/// `Uint8List.fromList(List<int>.from(x))` allocated two full buffers: the
+/// intermediate `List<int>` alone roughly doubled a 20 MB PDF before the byte
+/// copy even started.
+static Uint8List _workerBytes(Object? value) {
+  if (value is Uint8List) return value;
+  if (value is List<int>) return Uint8List.fromList(value);
+  if (value is List) {
+    return Uint8List.fromList(value.cast<dynamic>().cast<int>());
+  }
+  return Uint8List(0);
+}
+
   static Map<String, dynamic>? _rasterEncodeWorker(Map<String, dynamic> params) {
     var decoded =
-        img.decodeImage(Uint8List.fromList(List<int>.from(params['bytes'] as List)));
+        img.decodeImage(_workerBytes(params['bytes']));
     if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
       return null;
     }
@@ -1125,8 +1150,7 @@ class PdfService {
   /// Params: inputBytes (Uint8List) plus the standard watermark parameters.
   static Future<Uint8List> isolateWatermarkWorker(
       Map<String, dynamic> params) async {
-    final inputBytes =
-        Uint8List.fromList(List<int>.from(params['inputBytes'] as List));
+    final inputBytes = _workerBytes(params['inputBytes']);
     return _watermarkPdfBytes(inputBytes, params);
   }
 
@@ -1183,8 +1207,7 @@ class PdfService {
     if (inputPath != null && inputPath.isNotEmpty) {
       inputBytes = await File(inputPath).readAsBytes();
     } else {
-      inputBytes =
-          Uint8List.fromList(List<int>.from(params['inputBytes'] as List));
+      inputBytes = _workerBytes(params['inputBytes']);
     }
 
     final quality = (params['quality'] as num?)?.toDouble() ?? 0.5;
@@ -1295,7 +1318,7 @@ class PdfService {
   /// Returns: List of Uint8List — one per page
   static Future<List<Uint8List>> isolateSplitAllPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = _workerBytes(params['inputBytes']);
     final applyWatermark = _workerWatermarkEnabled(params);
     final iconBytes = _workerWatermarkIcon(params);
     final watermarkText = params['watermarkText'] as String? ?? 'PixelTools';
@@ -1346,7 +1369,7 @@ class PdfService {
   /// Params: inputBytes (Uint8List), pageNumbers (List of int) — 1-indexed
   static Future<Uint8List> isolateExtractPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = _workerBytes(params['inputBytes']);
     final pageNumbers = (params['pageNumbers'] as List<dynamic>).cast<int>();
     final applyWatermark = _workerWatermarkEnabled(params);
     final iconBytes = _workerWatermarkIcon(params);
@@ -1398,7 +1421,7 @@ class PdfService {
   /// Returns: List of Uint8List — one per chunk
   static Future<List<Uint8List>> isolateSplitByChunksWorker(
       Map<String, dynamic> params) async {
-    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = _workerBytes(params['inputBytes']);
     final pageSize = params['pageSize'] as int;
     final applyWatermark = _workerWatermarkEnabled(params);
     final iconBytes = _workerWatermarkIcon(params);
@@ -1457,7 +1480,7 @@ class PdfService {
   /// Returns: List of Uint8List — one per selected page
   static Future<List<Uint8List>> isolateSplitSelectedPagesWorker(
       Map<String, dynamic> params) async {
-    final inputBytes = Uint8List.fromList(List<int>.from(params['inputBytes']));
+    final inputBytes = _workerBytes(params['inputBytes']);
     final pageNumbers = (params['pageNumbers'] as List<dynamic>).cast<int>();
     final applyWatermark = _workerWatermarkEnabled(params);
     final iconBytes = _workerWatermarkIcon(params);
@@ -1507,24 +1530,38 @@ class PdfService {
 
   /// Convert to images worker for background isolate execution.
   /// Handles image encoding (JPEG/PNG) off the main thread.
-  /// Params: renderedPages (List of Uint8List), format (String)
+  ///
+  /// Params: renderedPages (List of Uint8List), format (String) plus the
+  /// optional `settings` / `iconBytes` pair. When `settings` is supplied the
+  /// global watermark is composited here, on the worker isolate, so neither
+  /// the watermark decode nor the re-encode ever runs on the UI isolate.
   static Future<List<Uint8List>> isolateEncodeImagesWorker(
       Map<String, dynamic> params) async {
     final renderedPages =
         (params['renderedPages'] as List<dynamic>).cast<Uint8List>();
     final format = params['format'] as String;
+    final settings = params['settings'] as AppSettingsState?;
+    final iconBytes = params['iconBytes'] as Uint8List?;
+    final applyWatermark =
+        settings != null && settings.enableGlobalWatermark;
+    if (applyWatermark && iconBytes != null && iconBytes.isNotEmpty) {
+      // Decode once for the whole batch instead of per page.
+      WatermarkHelper.setIconBytes(iconBytes);
+    }
+
     final results = <Uint8List>[];
 
     for (final pageBytes in renderedPages) {
       final decodedImage = img.decodeImage(pageBytes);
-      if (decodedImage != null) {
-        final solid = _flattenAlpha(decodedImage);
-        if (format == 'jpg') {
-          results.add(
-              Uint8List.fromList(img.encodeJpg(solid, quality: 95)));
-        } else {
-          results.add(Uint8List.fromList(img.encodePng(solid)));
-        }
+      if (decodedImage == null) continue;
+      final image = applyWatermark
+          ? WatermarkHelper.applyToImage(decodedImage, settings)
+          : decodedImage;
+      final solid = _flattenAlpha(image);
+      if (format == 'jpg') {
+        results.add(Uint8List.fromList(img.encodeJpg(solid, quality: 95)));
+      } else {
+        results.add(Uint8List.fromList(img.encodePng(solid)));
       }
     }
     return results;

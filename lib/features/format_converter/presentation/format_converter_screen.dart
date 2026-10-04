@@ -7,6 +7,7 @@ import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/services/operation_store_provider.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
@@ -25,13 +26,15 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
+  late final FormatConverterNotifier _formatConverterNotifier;
+
   @override
   void initState() {
     super.initState();
+    _formatConverterNotifier = ref.read(formatConverterProvider.notifier);
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(formatConverterProvider.notifier).clearAll();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
@@ -41,6 +44,14 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // Drop retained image bytes when the tool closes; deferred so listener
+    // notification never runs during tree teardown.
+    runDeferredClear(_formatConverterNotifier.clearAll);
+    super.dispose();
   }
 
   Future<void> _pickImages() async {

@@ -110,6 +110,20 @@ abstract final class ImageIsolateService {
     }
   }
 
+  /// Synchronous variant of [probe].
+  ///
+  /// Header parsing never materialises pixel data, so unlike
+  /// `img.decodeImage` this is cheap enough to run on the UI isolate. Use it
+  /// when only dimensions or the aspect ratio are needed.
+  static ImageProbeResult probeSync(Uint8List bytes) {
+    if (bytes.isEmpty) return const ImageProbeResult.invalid();
+    try {
+      return _probeWorker(bytes) ?? const ImageProbeResult.invalid();
+    } catch (_) {
+      return const ImageProbeResult.invalid();
+    }
+  }
+
   /// Probes many images with bounded concurrency, reporting real progress.
   static Future<List<ImageProbeResult>> probeAll(
     List<Uint8List> items, {

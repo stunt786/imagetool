@@ -149,9 +149,20 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
               : pdfDoc.pagesCount;
           final pageCount = endPage - startPage + 1;
           final scale = state.dpi.value / 72.0;
-          final renderedPages = <Uint8List>[];
+          final appSettings = ref.read(appSettingsProvider);
+          final outExt = state.outputFormat.extension;
+          entries = <OutputEntry>[];
+          // The worker isolate cannot reach rootBundle, so the logo must be
+          // resolved on this side and shipped across with the task.
+          final iconBytes = appSettings.enableGlobalWatermark
+              ? await WatermarkHelper.loadIconBytes()
+              : null;
           state = state.copyWith(progress: 0.1);
 
+          // Render, watermark and encode one page at a time. Holding every
+          // rendered PNG, a watermarked second copy of all of them, and then
+          // the encoded result meant a large document cost roughly three
+          // times its rendered size in RAM, all at once.
           for (int i = startPage; i <= endPage; i++) {
             final page = await pdfDoc.getPage(i);
             final pageImage = await page.render(
@@ -160,47 +171,34 @@ class PdfConvertNotifier extends Notifier<PdfConvertState> {
               format: pdfx.PdfPageImageFormat.png,
               backgroundColor: '#FFFFFF',
             );
-            if (pageImage != null) {
-              renderedPages.add(pageImage.bytes);
-            }
             await page.close();
+
+            if (pageImage != null) {
+              final encoded = await compute(
+                PdfService.isolateEncodeImagesWorker,
+                {
+                  'renderedPages': <Uint8List>[pageImage.bytes],
+                  'format': outExt,
+                  'settings': appSettings,
+                  'iconBytes': iconBytes,
+                },
+              );
+              if (encoded.isNotEmpty) {
+                entries.add(OutputEntry.bytes(
+                  bytes: encoded.first,
+                  fileName:
+                      'pixeltools_${baseName}_${timestamp}_page_$i.$outExt',
+                  publicKind: PublicFileKind.image,
+                ));
+              }
+            }
+
             state = state.copyWith(
-                progress: 0.1 + ((i - startPage + 1) / pageCount) * 0.4);
+                progress: 0.1 + ((i - startPage + 1) / pageCount) * 0.85);
           }
           await pdfDoc.close();
 
-          state = state.copyWith(progress: 0.6);
-
-          final appSettings = ref.read(appSettingsProvider);
-          final watermarkApplied = <Uint8List>[];
-          for (final pageBytes in renderedPages) {
-            watermarkApplied.add(
-              WatermarkHelper.applyGlobalWatermarkIfNeeded(
-                  pageBytes, appSettings),
-            );
-          }
-
-          final encodedResults = await compute(
-            PdfService.isolateEncodeImagesWorker,
-            {
-              'renderedPages': watermarkApplied,
-              'format': state.outputFormat.extension,
-            },
-          );
-
-          state = state.copyWith(progress: 0.9);
-
-          entries = [];
-          for (int i = 0; i < encodedResults.length; i++) {
-            final ext = state.outputFormat.extension;
-            final fileName =
-                'pixeltools_${baseName}_${timestamp}_page_${startPage + i}.$ext';
-            entries.add(OutputEntry.bytes(
-              bytes: encodedResults[i],
-              fileName: fileName,
-              publicKind: PublicFileKind.image,
-            ));
-          }
+          state = state.copyWith(progress: 0.95);
           break;
 
         case ConvertFormat.txt:

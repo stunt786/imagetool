@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/image_to_pdf_state.dart';
@@ -27,13 +28,15 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
+  late final ImageToPdfNotifier _imageToPdfNotifier;
+
   @override
   void initState() {
     super.initState();
+    _imageToPdfNotifier = ref.read(imageToPdfProvider.notifier);
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(imageToPdfProvider.notifier).clearAll();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
@@ -43,6 +46,14 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // Release retained file state when the tool closes; deferred so
+    // listener notification never runs during tree teardown.
+    runDeferredClear(_imageToPdfNotifier.clearAll);
+    super.dispose();
   }
 
   @override

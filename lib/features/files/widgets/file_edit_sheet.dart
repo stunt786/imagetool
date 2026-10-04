@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/utils/decode_size.dart';
 import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
@@ -70,8 +71,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _openCrop(BuildContext context) async {
-    final bytes = await _readBytes();
-    if (bytes == null) return;
+    // Only the path is used downstream, so check the file exists instead of
+    // buffering the whole image just to throw it away.
+    if (!await File(widget.item.path).exists()) return;
 
     await ref.read(documentBatchProvider.notifier).clearBatch();
     await ref.read(documentBatchProvider.notifier).startNewBatch();
@@ -83,8 +85,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   }
 
   Future<void> _openFilter(BuildContext context) async {
-    final bytes = await _readBytes();
-    if (bytes == null) return;
+    // Only the path is used downstream, so check the file exists instead of
+    // buffering the whole image just to throw it away.
+    if (!await File(widget.item.path).exists()) return;
 
     await ref.read(documentBatchProvider.notifier).clearBatch();
     await ref.read(documentBatchProvider.notifier).startNewBatch();
@@ -990,6 +993,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                                       child: Image.memory(
                                         snapshot.data!,
                                         fit: BoxFit.contain,
+                                        cacheWidth:
+                                            zoomDecodeWidthFor(context),
                                       ),
                                     ),
                                   ),
@@ -1059,6 +1064,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                           child: Image.file(
                             File(widget.item.path),
                             fit: BoxFit.contain,
+                            cacheWidth: zoomDecodeWidthFor(context),
                             errorBuilder: (_, __, ___) => const Center(
                               child: Icon(
                                 Icons.broken_image_rounded,

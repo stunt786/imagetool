@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/pdf_split_state.dart';
 
-class SplitSettingsPanel extends StatelessWidget {
+class SplitSettingsPanel extends StatefulWidget {
   const SplitSettingsPanel({
     super.key,
     required this.state,
@@ -21,7 +21,44 @@ class SplitSettingsPanel extends StatelessWidget {
   final VoidCallback onClearSelection;
 
   @override
+  State<SplitSettingsPanel> createState() => _SplitSettingsPanelState();
+}
+
+class _SplitSettingsPanelState extends State<SplitSettingsPanel> {
+  /// Owned by this state. Building it inline in [build] leaked one controller
+  /// per rebuild and reset the field's text whenever the panel rebuilt.
+  late final TextEditingController _chunkSizeController;
+
+  @override
+  void initState() {
+    super.initState();
+    _chunkSizeController = TextEditingController(
+      text: widget.state.chunkSize.toString(),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SplitSettingsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.chunkSize != widget.state.chunkSize) {
+      _chunkSizeController.text = widget.state.chunkSize.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _chunkSizeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final onModeChanged = widget.onModeChanged;
+    final onChunkSizeChanged = widget.onChunkSizeChanged;
+    final onTogglePage = widget.onTogglePage;
+    final onSelectAll = widget.onSelectAll;
+    final onClearSelection = widget.onClearSelection;
     final theme = Theme.of(context);
 
     return Container(
@@ -119,9 +156,7 @@ class SplitSettingsPanel extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    controller: TextEditingController(
-                      text: state.chunkSize.toString(),
-                    ),
+                    controller: _chunkSizeController,
                     onChanged: (value) {
                       final size = int.tryParse(value);
                       if (size != null && size >= 1) {

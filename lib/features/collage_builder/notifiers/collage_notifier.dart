@@ -20,6 +20,11 @@ final collageProvider = NotifierProvider<CollageNotifier, CollageState>(
 
 class CollageNotifier extends Notifier<CollageState> {
   static const int maxCollageImages = 9;
+
+  /// Upper bound on the offline slot cache used by [changeLayout] to restore
+  /// images that no longer fit the active layout.
+  static const int _maxCachedSlots = maxCollageImages;
+
   final List<CollageImageSlot> _cachedSlots = [];
   @override
   CollageState build() {
@@ -43,11 +48,27 @@ class CollageNotifier extends Notifier<CollageState> {
         final existingIdx =
             _cachedSlots.indexWhere((c) => c.imageName == slot.imageName);
         if (existingIdx != -1) {
-          _cachedSlots[existingIdx] = slot;
-        } else {
-          _cachedSlots.add(slot);
+          _cachedSlots.removeAt(existingIdx);
         }
+        // Appending on every touch keeps the list in least-recently-used
+        // order, so the bounded window below evicts stale entries first.
+        _cachedSlots.add(slot);
       }
+    }
+    _pruneCachedSlots();
+  }
+
+  /// Evicts least-recently-used entries until the offline cache fits its
+  /// budget.
+  ///
+  /// [changeLayout] only ever needs to refill at most [maxCollageImages]
+  /// slots, and active slots are re-synced (so re-touched) on every change:
+  /// keeping the most recent [maxCollageImages] entries is therefore always
+  /// enough to restore a full layout, while bounding the cache instead of
+  /// letting it grow by one full-resolution bitmap per photo replacement.
+  void _pruneCachedSlots() {
+    while (_cachedSlots.length > _maxCachedSlots) {
+      _cachedSlots.removeAt(0);
     }
   }
 
@@ -79,12 +100,13 @@ class CollageNotifier extends Notifier<CollageState> {
     int unsupportedCount = 0;
 
     for (final file in picked) {
-      if (file.bytes != null) {
-        if (!FileTypeDetector.isSupportedImage(file.bytes!)) {
+      final fileBytes = await file.resolveBytes();
+      if (fileBytes != null) {
+        if (!FileTypeDetector.isSupportedImage(fileBytes)) {
           unsupportedCount++;
           continue;
         }
-        bytesList.add(file.bytes!);
+        bytesList.add(fileBytes);
         names.add(file.name);
       }
     }
@@ -236,9 +258,12 @@ class CollageNotifier extends Notifier<CollageState> {
       allowMultiple: false,
     );
 
-    if (picked.isEmpty || picked.first.bytes == null) return;
+    if (picked.isEmpty) return;
 
-    if (!FileTypeDetector.isSupportedImage(picked.first.bytes!)) {
+    final bytes = await picked.first.resolveBytes();
+    if (bytes == null) return;
+
+    if (!FileTypeDetector.isSupportedImage(bytes)) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -249,8 +274,6 @@ class CollageNotifier extends Notifier<CollageState> {
       }
       return;
     }
-
-    final bytes = picked.first.bytes!;
 
     final newImages = List<CollageImageSlot>.from(state.images);
     newImages[slotIndex] = CollageImageSlot(

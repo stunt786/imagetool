@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../core/models/operation_folder.dart';
 import '../../../core/services/app_update_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/decode_size.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../camera/presentation/camera_screen.dart';
@@ -1463,6 +1464,7 @@ class _HistoryThumbnail extends StatelessWidget {
           width: 48,
           height: 48,
           fit: BoxFit.cover,
+          cacheWidth: decodeWidthFor(context, 48),
           errorBuilder: (_, __, ___) => _buildGradientFallback(),
         ),
       );

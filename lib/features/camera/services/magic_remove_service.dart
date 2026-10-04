@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
+import '../../../core/services/image_isolate_service.dart';
+
 /// Professional-grade object removal & inpainting service.
 ///
 /// Uses confidence-based fast marching with gradient-aware propagation
@@ -53,11 +55,13 @@ class MagicRemoveService {
     final raw = await Isolate.run(() =>
         _detectIntrusionsInternal(imageBytes: imageBytes));
     if (raw == null || raw.isEmpty) return const [];
-    final decoded = img.decodeImage(imageBytes);
-    final sw = decoded != null ? 240.0 : canvasWidth;
-    final sh = decoded != null
-        ? 240.0 * decoded.height / decoded.width
-        : canvasHeight;
+    // Header-only probe: the isolate above already decodes the bitmap, so
+    // decoding it a second time here just to read the aspect ratio wasted a
+    // full-resolution allocation on the UI isolate.
+    final probe = ImageIsolateService.probeSync(imageBytes);
+    final valid = probe.isValid && probe.width > 0 && probe.height > 0;
+    final sw = valid ? 240.0 : canvasWidth;
+    final sh = valid ? 240.0 * probe.height / probe.width : canvasHeight;
     return raw
         .map((comp) => comp
             .map((pt) => Offset(

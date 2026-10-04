@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/pdf_split_state.dart';
@@ -22,13 +23,15 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
+  late final PdfSplitNotifier _pdfSplitNotifier;
+
   @override
   void initState() {
     super.initState();
+    _pdfSplitNotifier = ref.read(pdfSplitProvider.notifier);
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(pdfSplitProvider.notifier).clear();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
@@ -38,6 +41,14 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // Release retained file state when the tool closes; deferred so
+    // listener notification never runs during tree teardown.
+    runDeferredClear(_pdfSplitNotifier.clear);
+    super.dispose();
   }
 
   @override

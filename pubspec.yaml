@@ -1,5 +1,5 @@
 name: pixeltools
-description: "PixelTools: Image & PDF Editor — Professional offline toolkit for privacy-focused processing."
+description: "PixelTools: PDF & Image — Resize, convert, scan, compress, merge and edit images & PDFs"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -38,7 +38,6 @@ dependencies:
   flutter_riverpod: ^2.6.1
   go_router: ^17.2.2
   image: ^4.10.1
-  image_cropper: ^11.0.0
 
   intl: ^0.20.2
   path: ^1.9.1

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/utils/decode_size.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../features/image_to_pdf/notifiers/image_to_pdf_notifier.dart';
@@ -254,45 +255,10 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
 
   Future<void> _renameCurrentFile() async {
     final item = _currentItem;
-    final controller = TextEditingController(text: item.fileName);
-    final formKey = GlobalKey<FormState>();
 
     final newName = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename File'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'File Name',
-              border: OutlineInputBorder(),
-            ),
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Please enter a valid file name';
-              }
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() == true) {
-                Navigator.of(ctx).pop(controller.text.trim());
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _RenameDialog(initialName: item.fileName),
     );
 
     if (newName != null && newName.isNotEmpty && newName != item.fileName) {
@@ -615,6 +581,7 @@ class _PreviewContentState extends State<_PreviewContent> {
                   child: Image.file(
                     File(imagePath),
                     fit: BoxFit.contain,
+                    cacheWidth: zoomDecodeWidthFor(context),
                     errorBuilder: (_, __, ___) => _buildPlaceholder(item, true),
                   ),
                 ),
@@ -647,6 +614,7 @@ class _PreviewContentState extends State<_PreviewContent> {
                     child: Image.file(
                       File(displayImage),
                       fit: BoxFit.contain,
+                      cacheWidth: zoomDecodeWidthFor(context),
                       errorBuilder: (_, __, ___) =>
                           _buildPlaceholder(item, false),
                     ),
@@ -832,6 +800,74 @@ class _ActionButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Rename prompt that owns its [TextEditingController].
+///
+/// Keeping the controller inside the dialog means it is disposed when the
+/// route leaves the tree, instead of leaking one controller per rename.
+class _RenameDialog extends StatefulWidget {
+  const _RenameDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameDialog> createState() => _RenameDialogState();
+}
+
+class _RenameDialogState extends State<_RenameDialog> {
+  late final TextEditingController _controller;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename File'),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'File Name',
+            border: OutlineInputBorder(),
+          ),
+          validator: (val) {
+            if (val == null || val.trim().isEmpty) {
+              return 'Please enter a valid file name';
+            }
+            return null;
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState?.validate() == true) {
+              Navigator.of(context).pop(_controller.text.trim());
+            }
+          },
+          child: const Text('Rename'),
+        ),
+      ],
     );
   }
 }

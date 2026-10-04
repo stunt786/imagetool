@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/app_settings.dart';
+import '../../../core/utils/deferred_clear.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
 import '../widgets/collage_toolbar.dart';
@@ -19,13 +20,15 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
+  late final CollageNotifier _collageNotifier;
+
   @override
   void initState() {
     super.initState();
+    _collageNotifier = ref.read(collageProvider.notifier);
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(collageProvider.notifier).reset();
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
         setState(() => _isOneClickOpening = false);
@@ -35,6 +38,14 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
         }
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // Release slot bytes and the secondary preview cache when the tool closes;
+    // deferred so listener notification never runs during tree teardown.
+    runDeferredClear(_collageNotifier.reset);
+    super.dispose();
   }
 
   @override

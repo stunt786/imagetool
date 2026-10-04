@@ -5,6 +5,7 @@ import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'dart:typed_data';
 
 import '../models/picked_file.dart';
+import '../../core/utils/file_type_detector.dart';
 
 enum PickTarget { images, pdfs }
 
@@ -13,6 +14,12 @@ final filePickerServiceProvider = Provider<FilePickerService>((ref) {
 });
 
 class FilePickerService {
+  /// Upper bound when a caller does not pass an explicit [maxAssets].
+  ///
+  /// Deliberately modest: every picked image used to be buffered at full
+  /// resolution, so a permissive default translated straight into peak RSS.
+  static const int _defaultMaxAssets = 20;
+
   Future<List<PickedFile>> pick({
     required BuildContext context,
     required PickTarget target,
@@ -96,7 +103,9 @@ class FilePickerService {
     }
     if (!context.mounted) return [];
 
-    final limit = maxAssets != null && maxAssets > 0 ? maxAssets : (allowMultiple ? 100 : 1);
+    final limit = maxAssets != null && maxAssets > 0
+        ? maxAssets
+        : (allowMultiple ? _defaultMaxAssets : 1);
     final List<AssetEntity>? result = await AssetPicker.pickAssets(
       context,
       pickerConfig: AssetPickerConfig(
@@ -109,21 +118,52 @@ class FilePickerService {
 
     final pickedFiles = <PickedFile>[];
     for (final entity in result) {
-      final bytes = await entity.originBytes;
-      if (bytes == null) continue;
-
       // Keep the native path when one is available. This lets an editor honour
       // an explicit replacement request instead of always creating an export.
       final originFile = await entity.originFile;
+      final originPath = originFile?.path;
+      final title = entity.title;
+      final name = title ?? 'image_${DateTime.now().millisecondsSinceEpoch}';
 
-      final ext = (entity.title?.split('.').last.toLowerCase()) ?? 'jpg';
+      final dot = title == null ? -1 : title.lastIndexOf('.');
+      final rawExt = (dot >= 0 && dot < title!.length - 1)
+          ? title.substring(dot + 1).toLowerCase()
+          : '';
+      final ext = rawExt.isNotEmpty ? rawExt : 'jpg';
+
+      // Defer the payload whenever a readable path exists: consumers read it
+      // back through PickedFile.resolveBytes(). Buffering every selected
+      // asset at full resolution here made the picker the largest single
+      // source of retained image memory.
+      //
+      // When the name does not already identify a supported image we still
+      // need the header bytes, because FileTypeDetector falls back to the
+      // extension once bytes are absent.
+      final pathIsReadable = originPath != null && originPath.isNotEmpty;
+      final canDefer =
+          pathIsReadable && FileTypeDetector.imageExtensions.contains(rawExt);
+
+      Uint8List? bytes;
+      var sizeBytes = 0;
+      if (canDefer) {
+        try {
+          sizeBytes = await originFile!.length();
+        } catch (_) {
+          bytes = await entity.originBytes;
+        }
+      } else {
+        bytes = await entity.originBytes;
+      }
+
+      if (bytes != null) sizeBytes = bytes.length;
+      if (bytes == null && !canDefer) continue;
+
       pickedFiles.add(
         PickedFile(
-          name:
-              entity.title ?? 'image_${DateTime.now().millisecondsSinceEpoch}',
-          sizeBytes: bytes.length,
+          name: name,
+          sizeBytes: sizeBytes,
           extension: ext,
-          path: originFile?.path,
+          path: pathIsReadable ? originPath : null,
           bytes: bytes,
         ),
       );

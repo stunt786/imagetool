@@ -1,8 +1,9 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 
+import '../../../../core/services/image_isolate_service.dart';
+import '../../../../core/utils/decode_size.dart';
 import '../../services/magic_remove_service.dart';
 
 /// Represents a single brush stroke drawn on the canvas.
@@ -76,10 +77,12 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
   }
 
   void _decodeDimensions() {
-    final decoded = img.decodeImage(_currentBytes);
-    if (decoded != null) {
-      _imgWidth = decoded.width;
-      _imgHeight = decoded.height;
+    // Header-only probe: decoding the full bitmap just to learn the aspect
+    // ratio cost tens of MB of transient allocation on the UI isolate.
+    final probe = ImageIsolateService.probeSync(_currentBytes);
+    if (probe.isValid && probe.width > 0 && probe.height > 0) {
+      _imgWidth = probe.width;
+      _imgHeight = probe.height;
     }
   }
 
@@ -325,6 +328,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
                   Image.memory(
                     _currentBytes,
                     fit: BoxFit.fill,
+                    cacheWidth: decodeWidthFor(context, constraints.maxWidth),
                   ),
 
                   // Comparison: original image with clip
@@ -334,6 +338,8 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
                       child: Image.memory(
                         _originalBytes,
                         fit: BoxFit.fill,
+                        cacheWidth:
+                            decodeWidthFor(context, constraints.maxWidth),
                       ),
                     ),
 
