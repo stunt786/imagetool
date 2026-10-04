@@ -112,7 +112,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   static const int _maxUndoDepth = 10;
 
   _EditorPanel _activePanel = _EditorPanel.resize;
-  _ResizeMode _mode = _ResizeMode.dimensions;
+  _ResizeMode _mode = _ResizeMode.smartCompress;
   _CropAspectPreset _cropPreset = _CropAspectPreset.free;
   OutputImageFormat _outputFormat = OutputImageFormat.jpg;
   _QualityOption _quality = _qualityOptions[1];
@@ -356,7 +356,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       _syncInputsFromImage(state.width, state.height);
       _undoStack = <Uint8List>[fileBytes];
       _undoIndex = 0;
-      setState(() => _mode = _ResizeMode.dimensions);
+      setState(() => _mode = _ResizeMode.smartCompress);
       await _refreshEstimate();
     } finally {
       if (mounted) {
@@ -739,6 +739,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     _undoStack.clear();
     _undoIndex = -1;
     _isBatchMode = false;
+    _mode = _ResizeMode.smartCompress;
     ref.read(imageEditProvider.notifier).clear();
     setState(() {});
   }

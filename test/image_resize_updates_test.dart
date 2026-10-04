@@ -209,6 +209,39 @@ void main() {
 
       expect(find.text('100%'), findsOneWidget);
     });
+
+    testWidgets('smart compress is the default mode when editor is loaded',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final sampleImage = _generateTestJpg(width: 400, height: 300);
+
+      final notifier = ImageEditNotifier();
+      notifier.replaceWithResult(
+        result: ResizeResult(
+          bytes: sampleImage,
+          width: 400,
+          height: 300,
+          fileSize: sampleImage.length,
+        ),
+        fileName: 'test.jpg',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageEditProvider.overrideWith((ref) => notifier),
+          ],
+          child: const MaterialApp(
+            home: ImageResizeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // In smart compression mode, "Target size" is shown by default
+      expect(find.text('Target size'), findsOneWidget);
+    });
   });
 }
+
 
