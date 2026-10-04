@@ -169,7 +169,8 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
     if (_selectedTargetId == null) return;
     final notifier = ref.read(operationLibraryProvider.notifier);
     if (_isCopy) {
-      final count = await notifier.copyFiles(widget.fileIds, _selectedTargetId!);
+      final count =
+          await notifier.copyFiles(widget.fileIds, _selectedTargetId!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -181,7 +182,8 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
         Navigator.pop(context, true);
       }
     } else {
-      final count = await notifier.moveFiles(widget.fileIds, _selectedTargetId!);
+      final count =
+          await notifier.moveFiles(widget.fileIds, _selectedTargetId!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -105,7 +105,8 @@ class _OperationTagsDialogState extends ConsumerState<OperationTagsDialog> {
                   FilterChip(
                     label: Text(tag),
                     selected: _tags.contains(tag),
-                    selectedColor: const Color(0xFF00E5FF).withValues(alpha: 0.25),
+                    selectedColor:
+                        const Color(0xFF00E5FF).withValues(alpha: 0.25),
                     checkmarkColor: const Color(0xFF00E5FF),
                     onSelected: (_) => _toggle(tag),
                   ),

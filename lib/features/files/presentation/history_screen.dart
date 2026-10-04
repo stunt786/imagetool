@@ -133,7 +133,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
+        content:
+            Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -215,7 +216,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final operations = _filterOperations(library.operations);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF16181D) : theme.colorScheme.surface,
+      backgroundColor:
+          isDark ? const Color(0xFF16181D) : theme.colorScheme.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -300,7 +302,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                           ),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
-                                  icon: const Icon(Icons.close_rounded, size: 18),
+                                  icon:
+                                      const Icon(Icons.close_rounded, size: 18),
                                   onPressed: () {
                                     _searchController.clear();
                                     _searchDebounce?.cancel();

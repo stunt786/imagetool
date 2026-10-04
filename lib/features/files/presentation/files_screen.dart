@@ -144,7 +144,8 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
+        content:
+            Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -383,7 +384,10 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   int _countFor(FileFilter filter) {
-    return ref.read(operationStoreProvider).queryOperations(filter: filter).length;
+    return ref
+        .read(operationStoreProvider)
+        .queryOperations(filter: filter)
+        .length;
   }
 
   Widget _buildSearchField(ThemeData theme) {
@@ -585,7 +589,8 @@ class _OperationRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dateLabel = DateFormat('MM/dd/yyyy HH:mm').format(operation.createdAt);
+    final dateLabel =
+        DateFormat('MM/dd/yyyy HH:mm').format(operation.createdAt);
 
     return InkWell(
       onTap: onTap,
@@ -743,9 +748,8 @@ class _OperationCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: selected
-                            ? scheme.secondary
-                            : scheme.outlineVariant,
+                        color:
+                            selected ? scheme.secondary : scheme.outlineVariant,
                         width: selected ? 3 : 1,
                       ),
                     ),
@@ -753,7 +757,8 @@ class _OperationCard extends StatelessWidget {
                       padding: const EdgeInsets.all(3),
                       child: FileThumbnail(
                         path: thumbnailPath ?? '',
-                        isPdf: _OperationRow.looksLikePdf(operation, thumbnailPath),
+                        isPdf: _OperationRow.looksLikePdf(
+                            operation, thumbnailPath),
                         size: 180,
                         borderRadius: 10,
                       ),

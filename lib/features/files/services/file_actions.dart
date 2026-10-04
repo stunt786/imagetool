@@ -250,7 +250,8 @@ abstract final class FileActions {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                   child: Row(
                     children: [
                       Icon(Icons.download_rounded, color: scheme.primary),
@@ -266,9 +267,11 @@ abstract final class FileActions {
                 ),
                 const Divider(),
                 ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_rounded, color: Colors.redAccent),
+                  leading: const Icon(Icons.picture_as_pdf_rounded,
+                      color: Colors.redAccent),
                   title: const Text('Save as Single PDF'),
-                  subtitle: const Text('Merge all pages and images into one document'),
+                  subtitle: const Text(
+                      'Merge all pages and images into one document'),
                   onTap: () {
                     Navigator.of(sheetContext).pop();
                     saveAsPdf(context, items, defaultName: defaultPdfName);
@@ -276,18 +279,22 @@ abstract final class FileActions {
                 ),
                 if (hasImages)
                   ListTile(
-                    leading: const Icon(Icons.photo_library_outlined, color: Colors.blueAccent),
+                    leading: const Icon(Icons.photo_library_outlined,
+                        color: Colors.blueAccent),
                     title: const Text('Save Images to Gallery'),
-                    subtitle: const Text('Save photos directly to device gallery'),
+                    subtitle:
+                        const Text('Save photos directly to device gallery'),
                     onTap: () {
                       Navigator.of(sheetContext).pop();
                       saveToGallery(context, items);
                     },
                   ),
                 ListTile(
-                  leading: const Icon(Icons.drive_folder_upload_outlined, color: Colors.amber),
+                  leading: const Icon(Icons.drive_folder_upload_outlined,
+                      color: Colors.amber),
                   title: const Text('Export Files to Folder'),
-                  subtitle: const Text('Choose a folder to save all files once'),
+                  subtitle:
+                      const Text('Choose a folder to save all files once'),
                   onTap: () async {
                     Navigator.of(sheetContext).pop();
                     if (hasPdfs) {

@@ -218,7 +218,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
         bottom: MediaQuery.of(context).padding.bottom + 10,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : scheme.surfaceContainerHighest,
+        color:
+            isDark ? const Color(0xFF1A1A1A) : scheme.surfaceContainerHighest,
         border: Border(
           top: BorderSide(
             color: isDark

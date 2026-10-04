@@ -166,6 +166,36 @@ abstract final class ImageIsolateService {
     }
   }
 
+  /// Decodes [bytes] and keeps only [x], [y], [width], [height] (in original
+  /// image pixels), then re-encodes to [targetExtension].
+  ///
+  /// The rectangle is clamped to the decoded image, so a stale crop from a
+  /// scaled preview can never throw.
+  static Future<Uint8List?> crop(
+    Uint8List bytes, {
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    String targetExtension = 'jpg',
+    int quality = 95,
+  }) async {
+    if (bytes.isEmpty || width <= 0 || height <= 0) return null;
+    try {
+      return await compute(_cropWorker, <String, Object?>{
+        'bytes': bytes,
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+        'target': targetExtension,
+        'quality': quality,
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Produces a small preview for list/grid rendering.
   ///
   /// Never upscales and always flattens transparency so it can be encoded as
@@ -225,8 +255,7 @@ abstract final class ImageIsolateService {
 
     var nextIndex = 0;
     var completed = 0;
-    final workerCount =
-        concurrency.clamp(1, items.isEmpty ? 1 : items.length);
+    final workerCount = concurrency.clamp(1, items.isEmpty ? 1 : items.length);
 
     Future<void> worker() async {
       while (true) {
@@ -243,7 +272,8 @@ abstract final class ImageIsolateService {
       }
     }
 
-    await Future.wait(List<Future<void>>.generate(workerCount, (_) => worker()));
+    await Future.wait(
+        List<Future<void>>.generate(workerCount, (_) => worker()));
     return results;
   }
 }
@@ -297,6 +327,35 @@ Uint8List? _transformWorker(Map<String, Object?> params) {
       (target == 'jpg' || target == 'jpeg' || target == 'bmp')) {
     image = _flattenAlpha(image, background);
   }
+
+  final encoded = _encode(image, target, quality);
+  return encoded == null ? null : Uint8List.fromList(encoded);
+}
+
+Uint8List? _cropWorker(Map<String, Object?> params) {
+  final bytes = params['bytes'] as Uint8List;
+  final x = (params['x'] as num).toInt();
+  final y = (params['y'] as num).toInt();
+  final width = (params['width'] as num).toInt();
+  final height = (params['height'] as num).toInt();
+  final target = (params['target'] as String).toLowerCase();
+  final quality = (params['quality'] as num?)?.toInt() ?? 95;
+
+  var image = img.decodeImage(bytes);
+  if (image == null) return null;
+
+  final left = x.clamp(0, image.width - 1).toInt();
+  final top = y.clamp(0, image.height - 1).toInt();
+  final cropWidth = width.clamp(1, image.width - left).toInt();
+  final cropHeight = height.clamp(1, image.height - top).toInt();
+
+  image = img.copyCrop(
+    image,
+    x: left,
+    y: top,
+    width: cropWidth,
+    height: cropHeight,
+  );
 
   final encoded = _encode(image, target, quality);
   return encoded == null ? null : Uint8List.fromList(encoded);

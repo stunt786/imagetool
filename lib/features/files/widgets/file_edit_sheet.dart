@@ -1,10 +1,9 @@
 // ignore_for_file: deprecated_member_use
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -16,14 +15,16 @@ import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/platform_image_encoder.dart';
 import '../../../core/services/public_storage.dart';
-import '../../camera/notifiers/document_batch_notifier.dart';
+import '../../camera/presentation/screens/magic_remove_screen.dart';
 import '../../format_converter/notifiers/format_converter_notifier.dart'
     show ConvertFormat;
 import '../../pdf_compress/models/pdf_compress_state.dart'
     show CompressionLevel;
 import '../notifiers/operation_library_notifier.dart';
+import '../presentation/file_crop_screen.dart';
 import '../services/file_actions.dart';
 import '../services/file_open_service.dart';
+import 'file_filter_sheet.dart';
 
 /// Modal bottom sheet / dialog displaying full interactive image preview
 /// and quick-action tools to modify or export the image.
@@ -70,41 +71,116 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     return null;
   }
 
-  Future<void> _openCrop(BuildContext context) async {
-    // Only the path is used downstream, so check the file exists instead of
-    // buffering the whole image just to throw it away.
-    if (!await File(widget.item.path).exists()) return;
-
-    await ref.read(documentBatchProvider.notifier).clearBatch();
-    await ref.read(documentBatchProvider.notifier).startNewBatch();
-    await ref.read(documentBatchProvider.notifier).addPageFromPath(widget.item.path);
-    if (context.mounted) {
-      Navigator.pop(context);
-      context.push('/camera/crop', extra: 0);
-    }
+  /// Closes the sheet, so callers must have finished their work first.
+  void _closeAndNotify(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
-  Future<void> _openFilter(BuildContext context) async {
-    // Only the path is used downstream, so check the file exists instead of
-    // buffering the whole image just to throw it away.
+  Future<void> _openCrop() async {
+    if (_isBusy) return;
     if (!await File(widget.item.path).exists()) return;
+    if (!mounted) return;
 
-    await ref.read(documentBatchProvider.notifier).clearBatch();
-    await ref.read(documentBatchProvider.notifier).startNewBatch();
-    await ref.read(documentBatchProvider.notifier).addPageFromPath(widget.item.path);
-    if (context.mounted) {
-      Navigator.pop(context);
-      context.push('/camera/filter', extra: 0);
-    }
+    final savedName = await Navigator.of(context).push<String?>(
+      MaterialPageRoute(
+        builder: (_) => FileCropScreen(item: widget.item),
+      ),
+    );
+    if (savedName == null || !mounted) return;
+    _closeAndNotify('Cropped image saved to this folder');
   }
 
-  Future<void> _openMagicRemove(BuildContext context) async {
+  Future<void> _openFilter() async {
+    if (_isBusy) return;
+    if (!await File(widget.item.path).exists()) return;
+    if (!mounted) return;
+
+    final saved = await FileFilterSheet.show(context, item: widget.item);
+    if (!saved || !mounted) return;
+    _closeAndNotify('Filtered image saved to this folder');
+  }
+
+  Future<void> _openMagicRemove() async {
+    if (_isBusy) return;
     final bytes = await _readBytes();
-    if (bytes == null) return;
-    if (context.mounted) {
-      Navigator.pop(context);
-      context.push('/camera/magic-remove', extra: bytes);
+    if (bytes == null || !mounted) return;
+
+    // The sheet stays open underneath so cancelling returns the user to the
+    // preview instead of dumping them back on the folder grid.
+    final cleaned = await Navigator.of(context).push<Uint8List?>(
+      MaterialPageRoute(
+        builder: (_) => MagicRemoveScreen(imageBytes: bytes),
+      ),
+    );
+    if (cleaned == null || !mounted) return;
+    if (_sameBytes(cleaned, bytes)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Nothing was cleaned in this image'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
     }
+
+    setState(() {
+      _isBusy = true;
+      _busyLabel = 'Saving cleaned image...';
+    });
+    try {
+      final base = widget.item.baseName;
+      final fileName =
+          'pixeltools_${base}_cleaned_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      await saveToolOutputs(
+        ref.read(operationStoreProvider),
+        kind: OperationKind.imageEdit,
+        entries: [
+          OutputEntry.bytes(
+            bytes: cleaned,
+            fileName: fileName,
+            publicKind: PublicFileKind.image,
+          ),
+        ],
+        intoOperationId: widget.item.operationId,
+      );
+
+      await ref.read(operationLibraryProvider.notifier).reload();
+      if (!mounted) return;
+      _closeAndNotify('Magic clean saved to this folder');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Magic clean failed: $e'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _busyLabel = null;
+        });
+      }
+    }
+  }
+
+  static bool _sameBytes(Uint8List a, Uint8List b) {
+    if (a.lengthInBytes != b.lengthInBytes) return false;
+    return listEquals(a, b);
   }
 
   Future<void> _resizeImage() async {
@@ -134,28 +210,38 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded, color: Color(0xFF29B6F6)),
-                title: const Text('75% Scale', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.aspect_ratio_rounded,
+                    color: Color(0xFF29B6F6)),
+                title: const Text('75% Scale',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, '75%'),
               ),
               ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded, color: Color(0xFF00E676)),
-                title: const Text('50% Scale (Half Size)', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.aspect_ratio_rounded,
+                    color: Color(0xFF00E676)),
+                title: const Text('50% Scale (Half Size)',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, '50%'),
               ),
               ListTile(
-                leading: const Icon(Icons.aspect_ratio_rounded, color: Color(0xFFFFA726)),
-                title: const Text('25% Scale (Quarter Size)', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.aspect_ratio_rounded,
+                    color: Color(0xFFFFA726)),
+                title: const Text('25% Scale (Quarter Size)',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, '25%'),
               ),
               ListTile(
-                leading: const Icon(Icons.hd_outlined, color: Color(0xFFAB47BC)),
-                title: const Text('Full HD (Max 1920x1080)', style: TextStyle(color: Colors.white)),
+                leading:
+                    const Icon(Icons.hd_outlined, color: Color(0xFFAB47BC)),
+                title: const Text('Full HD (Max 1920x1080)',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, '1080p'),
               ),
               ListTile(
-                leading: const Icon(Icons.compress_rounded, color: Color(0xFFFF7043)),
-                title: const Text('Smart Compression (Best Quality / Size)', style: TextStyle(color: Colors.white)),
+                leading: const Icon(Icons.compress_rounded,
+                    color: Color(0xFFFF7043)),
+                title: const Text('Smart Compression (Best Quality / Size)',
+                    style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, 'smart'),
               ),
             ],
@@ -203,7 +289,10 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
 
       final ext = widget.item.extension.toLowerCase();
-      final targetExt = (ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp') ? ext : 'jpg';
+      final targetExt =
+          (ext == 'png' || ext == 'jpg' || ext == 'jpeg' || ext == 'webp')
+              ? ext
+              : 'jpg';
 
       Uint8List? resized;
       if (targetExt == 'webp') {
@@ -230,7 +319,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
 
       final base = p.basenameWithoutExtension(widget.item.fileName);
-      final fileName = 'pixeltools_${base}_resized_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
+      final fileName =
+          'pixeltools_${base}_resized_${DateTime.now().millisecondsSinceEpoch}.$targetExt';
 
       final saved = await saveToolOutputs(
         ref.read(operationStoreProvider),
@@ -242,6 +332,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
             publicKind: PublicFileKind.image,
           ),
         ],
+        intoOperationId: widget.item.operationId,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
@@ -372,7 +463,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
 
       final base = p.basenameWithoutExtension(widget.item.fileName);
-      final fileName = 'pixeltools_${base}_${DateTime.now().millisecondsSinceEpoch}.${selectedFormat.extension}';
+      final fileName =
+          'pixeltools_${base}_${DateTime.now().millisecondsSinceEpoch}.${selectedFormat.extension}';
 
       await saveToolOutputs(
         ref.read(operationStoreProvider),
@@ -384,6 +476,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
             publicKind: PublicFileKind.image,
           ),
         ],
+        intoOperationId: widget.item.operationId,
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
@@ -393,7 +486,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Converted to ${selectedFormat.label} successfully'),
+          content: Text(
+              'Converted to ${selectedFormat.label} and saved to this folder'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
         ),
@@ -797,7 +891,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
   void _openPdfViewer(BuildContext context) {
     Navigator.pop(context);
-    FileOpenService.open(context, path: widget.item.path, name: widget.item.fileName);
+    FileOpenService.open(context,
+        path: widget.item.path, name: widget.item.fileName);
   }
 
   Future<void> _save(BuildContext context) async {
@@ -884,10 +979,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final confirmed = await FileActions.confirmDelete(
       context,
       title: 'Delete "${widget.item.fileName}"?',
-      message: 'This will remove the file from this folder. Gallery copies are not affected.',
+      message:
+          'This will remove the file from this folder. Gallery copies are not affected.',
     );
     if (!confirmed) return;
-    await ref.read(operationLibraryProvider.notifier).deleteFiles([widget.item.id]);
+    await ref
+        .read(operationLibraryProvider.notifier)
+        .deleteFiles([widget.item.id]);
     widget.onDeleted();
     if (context.mounted) Navigator.pop(context);
   }
@@ -943,7 +1041,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                         Text(
                           '${_formatSize(widget.item.sizeBytes)} · ${_formatDate(widget.item.createdAt)}',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark ? Colors.white60 : scheme.onSurfaceVariant,
+                            color: isDark
+                                ? Colors.white60
+                                : scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -993,8 +1093,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                                       child: Image.memory(
                                         snapshot.data!,
                                         fit: BoxFit.contain,
-                                        cacheWidth:
-                                            zoomDecodeWidthFor(context),
+                                        cacheWidth: zoomDecodeWidthFor(context),
                                       ),
                                     ),
                                   ),
@@ -1113,8 +1212,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                         color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color:
-                              const Color(0xFF00E5FF).withValues(alpha: 0.3),
+                          color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -1153,108 +1251,88 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                   ),
                   const SizedBox(height: 10),
                   if (widget.item.isPdf)
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _ToolPill(
-                            icon: Icons.photo_library_outlined,
-                            label: 'Save Pages as Images',
-                            color: const Color(0xFF00E676),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _savePdfPagesAsImages(),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.visibility_outlined,
-                            label: 'Open PDF',
-                            color: const Color(0xFF29B6F6),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _openPdfViewer(context),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.compress_rounded,
-                            label: 'Compress',
-                            color: const Color(0xFFFFA726),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _compressPdf(),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.call_split_rounded,
-                            label: 'Split',
-                            color: const Color(0xFFFF7043),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _splitPdf(),
-                          ),
-                        ],
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _ToolPill(
+                          icon: Icons.photo_library_outlined,
+                          label: 'Save Pages as Images',
+                          color: const Color(0xFF00E676),
+                          enabled: !_isBusy,
+                          onTap: () => _savePdfPagesAsImages(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.visibility_outlined,
+                          label: 'Open PDF',
+                          color: const Color(0xFF29B6F6),
+                          enabled: !_isBusy,
+                          onTap: () => _openPdfViewer(context),
+                        ),
+                        _ToolPill(
+                          icon: Icons.compress_rounded,
+                          label: 'Compress',
+                          color: const Color(0xFFFFA726),
+                          enabled: !_isBusy,
+                          onTap: () => _compressPdf(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.call_split_rounded,
+                          label: 'Split',
+                          color: const Color(0xFFFF7043),
+                          enabled: !_isBusy,
+                          onTap: () => _splitPdf(),
+                        ),
+                      ],
                     )
                   else
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _ToolPill(
-                            icon: Icons.crop_rotate_rounded,
-                            label: 'Crop',
-                            color: const Color(0xFF29B6F6),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _openCrop(context),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.tune_rounded,
-                            label: 'Filters',
-                            color: const Color(0xFFAB47BC),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _openFilter(context),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.auto_fix_high_rounded,
-                            label: 'Magic Clean',
-                            color: const Color(0xFF00E676),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _openMagicRemove(context),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.photo_size_select_large_rounded,
-                            label: 'Resize',
-                            color: const Color(0xFFFFA726),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _resizeImage(),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.swap_horiz_rounded,
-                            label: 'Convert',
-                            color: const Color(0xFFFF7043),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _convertFormat(),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolPill(
-                            icon: Icons.picture_as_pdf_outlined,
-                            label: 'To PDF',
-                            color: const Color(0xFFEF5350),
-                            onTap: _isBusy
-                                ? () {}
-                                : () => _createPdf(),
-                          ),
-                        ],
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _ToolPill(
+                          icon: Icons.crop_rotate_rounded,
+                          label: 'Crop',
+                          color: const Color(0xFF29B6F6),
+                          enabled: !_isBusy,
+                          onTap: () => _openCrop(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.tune_rounded,
+                          label: 'Filters',
+                          color: const Color(0xFFAB47BC),
+                          enabled: !_isBusy,
+                          onTap: () => _openFilter(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.auto_fix_high_rounded,
+                          label: 'Magic Clean',
+                          color: const Color(0xFF00E676),
+                          enabled: !_isBusy,
+                          onTap: () => _openMagicRemove(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.photo_size_select_large_rounded,
+                          label: 'Resize',
+                          color: const Color(0xFFFFA726),
+                          enabled: !_isBusy,
+                          onTap: () => _resizeImage(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.swap_horiz_rounded,
+                          label: 'Convert',
+                          color: const Color(0xFFFF7043),
+                          enabled: !_isBusy,
+                          onTap: () => _convertFormat(),
+                        ),
+                        _ToolPill(
+                          icon: Icons.picture_as_pdf_outlined,
+                          label: 'To PDF',
+                          color: const Color(0xFFEF5350),
+                          enabled: !_isBusy,
+                          onTap: () => _createPdf(),
+                        ),
+                      ],
                     ),
                   const SizedBox(height: 14),
                   Divider(
@@ -1318,39 +1396,44 @@ class _ToolPill extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: enabled ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1547,7 +1630,8 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
               title: const Text('Custom Page Range',
                   style: TextStyle(
                       color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Extract a specific range of pages into one PDF',
+              subtitle: const Text(
+                  'Extract a specific range of pages into one PDF',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
               onChanged: (val) {
                 if (val != null) setState(() => _mode = val);
@@ -1925,4 +2009,3 @@ class _CompressOptionsSheetState extends State<_CompressOptionsSheet> {
     );
   }
 }
-

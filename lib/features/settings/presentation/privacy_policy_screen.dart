@@ -96,7 +96,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               icon: Icons.smart_toy_outlined,
               title: '2. On-Device Machine Learning (ML Kit)',
               body:
-                  'Document edge detection, perspective correction, and text recognition (OCR) features run solely via on-device Google ML Kit models. Image data and recognized text never leave your smartphone and are processed solely in temporary volatile device memory.',
+                  'Document edge detection, perspective correction, and text recognition (OCR) features run solely via on-device Machine Learning models. Image data and recognized text never leave your smartphone and are processed solely in temporary volatile device memory.',
             ),
             const SizedBox(height: 20),
 

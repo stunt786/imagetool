@@ -60,48 +60,69 @@ String ensurePixelToolsPrefix(String fileName) {
 ///    is unavailable),
 /// 2. every output is published to public storage — MediaStore or the SAF
 ///    folder chosen in Settings — the scoped-storage friendly way.
+///
+/// When [intoOperationId] points at an existing operation, the outputs are
+/// appended to that folder instead of opening a new one. Tools launched from
+/// an open Files folder use this so the result shows up right where the user
+/// is looking.
 Future<List<SavedOutput>> saveToolOutputs(
   OperationStore store, {
   required OperationKind kind,
   required List<OutputEntry> entries,
   Directory? stagingDirectory,
+  String? intoOperationId,
 }) async {
   if (entries.isEmpty) return const [];
 
   final placed = List<String?>.filled(entries.length, null);
   OperationSession? session;
+  final appendTo = await _existingOperation(store, intoOperationId);
 
-  try {
-    final started = await OperationRecorder(store)
-        .start(kind, expectedItems: entries.length);
-    session = started;
-    for (var i = 0; i < entries.length; i++) {
-      final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
-      final target = await store.resolveOutputPath(
-        Directory(started.directoryPath),
-        sanitizedName,
-      );
-      await _materialize(entries[i], target);
-      await started.recordFile(target);
-      placed[i] = target;
-    }
-    await started.complete();
-  } catch (error) {
+  if (appendTo != null) {
     try {
-      await session?.fail('Saving outputs failed: $error');
+      final directory = Directory(appendTo.directoryPath);
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      for (var i = 0; i < entries.length; i++) {
+        final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
+        final target = await store.resolveOutputPath(directory, sanitizedName);
+        await _materialize(entries[i], target);
+        final item = await store.addOutputFile(
+          operationId: appendTo.id,
+          filePath: target,
+        );
+        if (item == null) {
+          throw StateError('"$sanitizedName" could not be indexed.');
+        }
+        placed[i] = target;
+      }
     } catch (_) {
-      // Best effort; the fallback below still keeps the files.
+      await _fallbackToStaging(store, entries, placed, stagingDirectory);
     }
-    // A metadata failure must never lose the tool's output: anything not
-    // written yet lands in the plain staging directory instead.
-    final staging = stagingDirectory ?? await _defaultStagingDirectory();
-    await staging.create(recursive: true);
-    for (var i = 0; i < entries.length; i++) {
-      if (placed[i] != null) continue;
-      final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
-      final target = path.join(staging.path, sanitizedName);
-      await _materialize(entries[i], target);
-      placed[i] = target;
+  } else {
+    try {
+      final started = await OperationRecorder(store)
+          .start(kind, expectedItems: entries.length);
+      session = started;
+      for (var i = 0; i < entries.length; i++) {
+        final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
+        final target = await store.resolveOutputPath(
+          Directory(started.directoryPath),
+          sanitizedName,
+        );
+        await _materialize(entries[i], target);
+        await started.recordFile(target);
+        placed[i] = target;
+      }
+      await started.complete();
+    } catch (error) {
+      try {
+        await session?.fail('Saving outputs failed: $error');
+      } catch (_) {
+        // Best effort; the fallback below still keeps the files.
+      }
+      await _fallbackToStaging(store, entries, placed, stagingDirectory);
     }
   }
 
@@ -129,6 +150,34 @@ Future<List<SavedOutput>> saveToolOutputs(
   }
 
   return outputs;
+}
+
+Future<OperationFolder?> _existingOperation(
+  OperationStore store,
+  String? operationId,
+) async {
+  if (operationId == null || operationId.isEmpty) return null;
+  await store.load();
+  return store.operationById(operationId);
+}
+
+/// Writes anything the primary path could not place into the plain staging
+/// directory so a metadata failure never loses the tool's output.
+Future<void> _fallbackToStaging(
+  OperationStore store,
+  List<OutputEntry> entries,
+  List<String?> placed,
+  Directory? stagingDirectory,
+) async {
+  final staging = stagingDirectory ?? await _defaultStagingDirectory();
+  await staging.create(recursive: true);
+  for (var i = 0; i < entries.length; i++) {
+    if (placed[i] != null) continue;
+    final sanitizedName = ensurePixelToolsPrefix(entries[i].fileName);
+    final target = path.join(staging.path, sanitizedName);
+    await _materialize(entries[i], target);
+    placed[i] = target;
+  }
 }
 
 Future<void> _materialize(OutputEntry entry, String target) async {

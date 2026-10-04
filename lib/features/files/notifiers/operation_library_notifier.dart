@@ -25,8 +25,7 @@ class OperationLibrary {
 
   bool get isEmpty => operations.isEmpty && files.isEmpty;
 
-  int get totalSize =>
-      files.fold<int>(0, (sum, item) => sum + item.sizeBytes);
+  int get totalSize => files.fold<int>(0, (sum, item) => sum + item.sizeBytes);
 
   OperationLibrary copyWith({
     bool? isLoading,
@@ -119,24 +118,28 @@ class OperationLibraryNotifier extends Notifier<OperationLibrary> {
     return ok;
   }
 
-  Future<bool> updateOperationTags(String operationId, List<String> tags) async {
+  Future<bool> updateOperationTags(
+      String operationId, List<String> tags) async {
     final ok = await _store.updateOperationTags(operationId, tags);
     _emit();
     return ok;
   }
 
-  Future<void> reorderFiles(String operationId, List<String> orderedFileIds) async {
+  Future<void> reorderFiles(
+      String operationId, List<String> orderedFileIds) async {
     await _store.reorderFiles(operationId, orderedFileIds);
     _emit();
   }
 
-  Future<int> moveFiles(Iterable<String> fileIds, String targetOperationId) async {
+  Future<int> moveFiles(
+      Iterable<String> fileIds, String targetOperationId) async {
     final moved = await _store.moveFiles(fileIds, targetOperationId);
     _emit();
     return moved;
   }
 
-  Future<int> copyFiles(Iterable<String> fileIds, String targetOperationId) async {
+  Future<int> copyFiles(
+      Iterable<String> fileIds, String targetOperationId) async {
     final copied = await _store.copyFiles(fileIds, targetOperationId);
     _emit();
     return copied;

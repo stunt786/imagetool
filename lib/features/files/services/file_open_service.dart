@@ -55,7 +55,8 @@ abstract final class FileOpenService {
             : 0;
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => FilePreviewScreen(items: items, initialIndex: index),
+            builder: (_) =>
+                FilePreviewScreen(items: items, initialIndex: index),
           ),
         );
         break;

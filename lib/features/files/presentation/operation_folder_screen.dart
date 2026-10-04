@@ -135,7 +135,9 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           'file(s) from the app. Copies saved to the gallery are not affected.',
     );
     if (!confirmed) return;
-    await ref.read(operationLibraryProvider.notifier).deleteOperation(operation.id);
+    await ref
+        .read(operationLibraryProvider.notifier)
+        .deleteOperation(operation.id);
     if (mounted) Navigator.of(context).maybePop();
   }
 
@@ -362,7 +364,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141414) : theme.colorScheme.surface,
+      backgroundColor:
+          isDark ? const Color(0xFF141414) : theme.colorScheme.surface,
       appBar: _isSelecting
           ? _buildSelectionAppBar(files)
           : _buildNormalAppBar(operation, files),
@@ -383,7 +386,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
                 ],
               ),
       ),
-      bottomNavigationBar: _isSelecting ? _buildSelectionBottomBar(files) : null,
+      bottomNavigationBar:
+          _isSelecting ? _buildSelectionBottomBar(files) : null,
     );
   }
 
@@ -425,7 +429,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.edit_outlined, size: 16, color: Colors.white70),
+                    const Icon(Icons.edit_outlined,
+                        size: 16, color: Colors.white70),
                   ],
                 ),
               ),
@@ -436,7 +441,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           // Tags + Button chip (as seen in prev.jpg)
           InkWell(
             borderRadius: BorderRadius.circular(8),
-            onTap: () => OperationTagsDialog.show(context, operation: operation),
+            onTap: () =>
+                OperationTagsDialog.show(context, operation: operation),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -685,8 +691,6 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
     );
   }
 
-
-
   Widget _buildSelectionBottomBar(List<AppFileItem> files) {
     final selectedCount = _selected.length;
     final theme = Theme.of(context);
@@ -698,7 +702,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF181B20) : scheme.surfaceContainerHighest,
+          color:
+              isDark ? const Color(0xFF181B20) : scheme.surfaceContainerHighest,
           border: Border(
             top: BorderSide(
               color: isDark
@@ -715,14 +720,16 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
               label: 'Share',
               onTap: _busy
                   ? null
-                  : () => _run((items) => FileActions.share(context, items), files),
+                  : () =>
+                      _run((items) => FileActions.share(context, items), files),
             ),
             _SelectionBarItem(
               icon: Icons.download_outlined,
               label: 'Save',
               onTap: _busy
                   ? null
-                  : () => _run((items) => FileActions.save(context, items), files),
+                  : () =>
+                      _run((items) => FileActions.save(context, items), files),
             ),
             _SelectionBarItem(
               icon: Icons.drive_file_move_outlined,
@@ -733,12 +740,16 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
               icon: Icons.dashboard_customize_outlined,
               label: 'Collage',
               badge: true,
-              onTap: _busy ? null : () => _makeCollageFromItems(_selectedItems(files)),
+              onTap: _busy
+                  ? null
+                  : () => _makeCollageFromItems(_selectedItems(files)),
             ),
             _SelectionBarItem(
               icon: Icons.picture_as_pdf_outlined,
               label: 'Create PDF',
-              onTap: _busy ? null : () => _createPdfFromItems(_selectedItems(files)),
+              onTap: _busy
+                  ? null
+                  : () => _createPdfFromItems(_selectedItems(files)),
             ),
             if (selectedCount == 1)
               _SelectionBarItem(
@@ -1051,7 +1062,8 @@ class _CollagePromoTile extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Center(
-            child: SizedBox(height: 20), // Placeholder to match page number spacing
+            child: SizedBox(
+                height: 20), // Placeholder to match page number spacing
           ),
         ],
       ),

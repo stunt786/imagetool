@@ -144,7 +144,8 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
 
   void _shareText() {
     if (_fullText.isEmpty) return;
-    Share.share(_fullText, subject: '${widget.operation.displayName} - Extracted Text');
+    Share.share(_fullText,
+        subject: '${widget.operation.displayName} - Extracted Text');
   }
 
   Map<String, List<String>> _analyzeSummary() {
@@ -152,9 +153,13 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
     final emails = <String>{};
     final amounts = <String>{};
 
-    final dateRegex = RegExp(r'\b(?:\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4})\b', caseSensitive: false);
-    final emailRegex = RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}');
-    final amountRegex = RegExp(r'(?:Rs\.?|\$|€|£|INR)\s?[\d,]+(?:\.\d{2})?|\b[\d,]+(?:\.\d{2})?\s?(?:USD|EUR|GBP|NPR|INR)\b');
+    final dateRegex = RegExp(
+        r'\b(?:\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4})\b',
+        caseSensitive: false);
+    final emailRegex =
+        RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}');
+    final amountRegex = RegExp(
+        r'(?:Rs\.?|\$|€|£|INR)\s?[\d,]+(?:\.\d{2})?|\b[\d,]+(?:\.\d{2})?\s?(?:USD|EUR|GBP|NPR|INR)\b');
 
     for (final match in dateRegex.allMatches(_fullText)) {
       if (match.group(0) != null) dates.add(match.group(0)!);
@@ -295,7 +300,9 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF171A21) : scheme.surfaceContainerHighest,
+              color: isDark
+                  ? const Color(0xFF171A21)
+                  : scheme.surfaceContainerHighest,
               border: const Border(top: BorderSide(color: Colors.white12)),
             ),
             child: Row(
@@ -419,7 +426,8 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
@@ -468,7 +476,8 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
 
   Widget _buildSummaryTab(ThemeData theme, ColorScheme scheme) {
     final insights = _analyzeSummary();
-    final wordCount = _fullText.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final wordCount =
+        _fullText.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -519,7 +528,8 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
                     Expanded(
                       child: Text(
                         item,
-                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
                       ),
                     ),
                   ],
@@ -576,10 +586,12 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
             decoration: InputDecoration(
               hintText: 'Search keyword across pages...',
               hintStyle: const TextStyle(color: Colors.white38),
-              prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF00E5FF)),
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: Color(0xFF00E5FF)),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.white54),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white54),
                       onPressed: () {
                         _searchController.clear();
                         setState(() => _searchQuery = '');

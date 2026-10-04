@@ -98,7 +98,9 @@ class _FileThumbnailState extends State<FileThumbnail> {
 
   Widget _placeholder(ColorScheme scheme) {
     final lower = widget.path.toLowerCase();
-    if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || lower.endsWith('.csv')) {
+    if (lower.endsWith('.xlsx') ||
+        lower.endsWith('.xls') ||
+        lower.endsWith('.csv')) {
       return Container(
         color: const Color(0xFF1B3D2F),
         child: Center(
