@@ -33,12 +33,6 @@ enum WatermarkTextSize {
   final double scaleFactor;
 }
 
-img.Image? _decodeNormalizedImage(Uint8List bytes) {
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return null;
-  return img.bakeOrientation(decoded);
-}
-
 Map<String, int>? _isolateDecodeDimensions(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
   if (decoded == null) return null;
@@ -111,191 +105,6 @@ class ResizeResult {
   final int fileSize;
 }
 
-ResizeResult? _isolateResize(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final int width = params['width'] as int;
-  final int height = params['height'] as int;
-  final OutputImageFormat format = params['format'] as OutputImageFormat;
-  final int quality = params['quality'] as int;
-
-  final image = img.decodeImage(sourceBytes);
-  if (image == null) return null;
-
-  img.Image processed = image;
-
-  if (width > 0 && height > 0) {
-    final safeWidth = width.clamp(1, 12000);
-    final safeHeight = height.clamp(1, 12000);
-    processed = img.copyResize(
-      image,
-      width: safeWidth,
-      height: safeHeight,
-      interpolation: img.Interpolation.average,
-    );
-  }
-
-  final bytes = Uint8List.fromList(
-    _encodeImage(processed, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: processed.width,
-    height: processed.height,
-    fileSize: bytes.length,
-  );
-}
-
-ResizeResult? _isolateCrop(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final int x = params['x'] as int;
-  final int y = params['y'] as int;
-  final int width = params['width'] as int;
-  final int height = params['height'] as int;
-
-  final image = _decodeNormalizedImage(sourceBytes);
-  if (image == null) return null;
-
-  final safeX = x.clamp(0, math.max(0, image.width - 1)).toInt();
-  final safeY = y.clamp(0, math.max(0, image.height - 1)).toInt();
-  final safeWidth = width.clamp(1, image.width - safeX).toInt();
-  final safeHeight = height.clamp(1, image.height - safeY).toInt();
-  final cropped = img.copyCrop(
-    image,
-    x: safeX,
-    y: safeY,
-    width: safeWidth,
-    height: safeHeight,
-  );
-  final format =
-      params['format'] as OutputImageFormat? ?? OutputImageFormat.jpg;
-  final quality = params['quality'] as int? ?? 95;
-  final bytes = Uint8List.fromList(
-    _encodeImage(cropped, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: cropped.width,
-    height: cropped.height,
-    fileSize: bytes.length,
-  );
-}
-
-ResizeResult? _isolateRotate(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final double angle = params['angle'] as double;
-  final OutputImageFormat format = params['format'] as OutputImageFormat;
-  final int quality = params['quality'] as int;
-
-  final image = _decodeNormalizedImage(sourceBytes);
-  if (image == null) return null;
-
-  final rotated = img.copyRotate(image, angle: angle);
-  final bytes = Uint8List.fromList(
-    _encodeImage(rotated, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: rotated.width,
-    height: rotated.height,
-    fileSize: bytes.length,
-  );
-}
-
-ResizeResult? _isolateFlip(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final bool horizontal = params['horizontal'] as bool;
-  final bool vertical = params['vertical'] as bool;
-  final OutputImageFormat format = params['format'] as OutputImageFormat;
-  final int quality = params['quality'] as int;
-
-  final image = _decodeNormalizedImage(sourceBytes);
-  if (image == null) return null;
-
-  img.Image flipped = image;
-  if (horizontal) {
-    flipped = img.flipHorizontal(flipped);
-  }
-  if (vertical) {
-    flipped = img.flipVertical(flipped);
-  }
-
-  final bytes = Uint8List.fromList(
-    _encodeImage(flipped, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: flipped.width,
-    height: flipped.height,
-    fileSize: bytes.length,
-  );
-}
-
-ResizeResult? _isolateResizeToPreset(Map<String, dynamic> params) {
-  final Uint8List sourceBytes = params['bytes'] as Uint8List;
-  final int targetWidth = params['targetWidth'] as int;
-  final int targetHeight = params['targetHeight'] as int;
-  final OutputImageFormat format = params['format'] as OutputImageFormat;
-  final int quality = params['quality'] as int;
-
-  final image = _decodeNormalizedImage(sourceBytes);
-  if (image == null) return null;
-
-  final sourceAspect = image.width / image.height;
-  final targetAspect = targetWidth / targetHeight;
-
-  img.Image resized;
-  if (sourceAspect > targetAspect) {
-    final scaledHeight = targetHeight;
-    final scaledWidth = (scaledHeight * sourceAspect).round();
-    resized = img.copyResize(
-      image,
-      width: scaledWidth,
-      height: scaledHeight,
-      interpolation: img.Interpolation.average,
-    );
-    final cropX = ((resized.width - targetWidth) / 2).round();
-    resized = img.copyCrop(
-      resized,
-      x: cropX.clamp(0, math.max(0, resized.width - targetWidth)),
-      y: 0,
-      width: targetWidth,
-      height: targetHeight,
-    );
-  } else {
-    final scaledWidth = targetWidth;
-    final scaledHeight = (scaledWidth * image.height / image.width).round();
-    resized = img.copyResize(
-      image,
-      width: scaledWidth,
-      height: scaledHeight,
-      interpolation: img.Interpolation.average,
-    );
-    final cropY = ((resized.height - targetHeight) / 2).round();
-    resized = img.copyCrop(
-      resized,
-      x: 0,
-      y: cropY.clamp(0, math.max(0, resized.height - targetHeight)),
-      width: targetWidth,
-      height: targetHeight,
-    );
-  }
-
-  final bytes = Uint8List.fromList(
-    _encodeImage(resized, format: format, quality: quality),
-  );
-
-  return ResizeResult(
-    bytes: bytes,
-    width: resized.width,
-    height: resized.height,
-    fileSize: bytes.length,
-  );
-}
-
 List<int> _encodeImage(
   img.Image image, {
   required OutputImageFormat format,
@@ -307,7 +116,7 @@ List<int> _encodeImage(
         quality: clampedQuality,
       ).encode(image),
     OutputImageFormat.png => img.PngEncoder(
-        level: ((100 - clampedQuality) / 11).round().clamp(0, 9),
+        level: ((100 - clampedQuality) / 16).round().clamp(0, 6),
       ).encode(image),
     OutputImageFormat.webp => img.encodeWebP(
         image,
@@ -368,21 +177,31 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     required int height,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
+    bool preserveAspectRatio = true,
+    void Function(double progress)? onProgress,
   }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateResize(<String, dynamic>{
-          'bytes': sourceBytes,
-          'width': width,
-          'height': height,
-          'format': format,
-          'quality': quality,
-        }),
+      final result = await ImageProcessorService.resize(
+        bytes: sourceBytes,
+        width: width,
+        height: height,
+        format: format,
+        quality: quality,
+        settings: settings,
+        preserveAspectRatio: preserveAspectRatio,
+        onProgress: onProgress,
       );
-      return result;
+      if (result == null) return null;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
       return null;
@@ -437,29 +256,27 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     int targetBytes,
     OutputImageFormat format, {
     AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      state = state.copyWith(isLoading: true, clearError: true);
-
       final result = await ImageProcessorService.compressToTargetSize(
         bytes: sourceBytes,
         targetBytes: targetBytes,
         format: format,
         settings: settings,
+        onProgress: onProgress,
       );
 
       if (result == null) {
         state = state.copyWith(
-          isLoading: false,
           errorMessage: 'Could not compress to target size.',
         );
         return null;
       }
 
-      state = state.copyWith(isLoading: false, clearError: true);
       return ResizeResult(
         bytes: result.bytes,
         width: result.width,
@@ -467,7 +284,7 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
         fileSize: result.fileSize,
       );
     } catch (error) {
-      state = state.copyWith(isLoading: false, errorMessage: error.toString());
+      state = state.copyWith(errorMessage: error.toString());
       return null;
     }
   }
@@ -479,34 +296,47 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     required int height,
     OutputImageFormat format = OutputImageFormat.jpg,
     int quality = 95,
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateCrop(<String, dynamic>{
-          'bytes': sourceBytes,
-          'x': x,
-          'y': y,
-          'width': width,
-          'height': height,
-          'format': format,
-          'quality': quality,
-        }),
+      final result = await ImageProcessorService.crop(
+        bytes: sourceBytes,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        format: format,
+        quality: quality,
+        settings: settings,
+        onProgress: onProgress,
       );
-      return result;
+      if (result == null) return null;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
       return null;
     }
   }
 
-  Future<ResizeResult?> generateRotate90() async {
+  Future<ResizeResult?> generateRotate90({
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
+  }) async {
     return generateRotate(
       angleDegrees: 90,
       format: OutputImageFormat.jpg,
       quality: 95,
+      settings: settings,
+      onProgress: onProgress,
     );
   }
 
@@ -514,31 +344,44 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     required double angleDegrees,
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateRotate(<String, dynamic>{
-          'bytes': sourceBytes,
-          'angle': angleDegrees,
-          'format': format,
-          'quality': quality,
-        }),
+      final result = await ImageProcessorService.rotate(
+        bytes: sourceBytes,
+        angle: angleDegrees,
+        format: format,
+        quality: quality,
+        settings: settings,
+        onProgress: onProgress,
       );
-      return result;
+      if (result == null) return null;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
       return null;
     }
   }
 
-  Future<ResizeResult?> generateRotateLeft90() async {
+  Future<ResizeResult?> generateRotateLeft90({
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
+  }) async {
     return generateRotate(
       angleDegrees: -90,
       format: OutputImageFormat.jpg,
       quality: 95,
+      settings: settings,
+      onProgress: onProgress,
     );
   }
 
@@ -547,21 +390,29 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     bool vertical, {
     required OutputImageFormat format,
     required int quality,
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateFlip(<String, dynamic>{
-          'bytes': sourceBytes,
-          'horizontal': horizontal,
-          'vertical': vertical,
-          'format': format,
-          'quality': quality,
-        }),
+      final result = await ImageProcessorService.flip(
+        bytes: sourceBytes,
+        horizontal: horizontal,
+        vertical: vertical,
+        format: format,
+        quality: quality,
+        settings: settings,
+        onProgress: onProgress,
       );
-      return result;
+      if (result == null) return null;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
       return null;
@@ -572,22 +423,33 @@ class ImageEditNotifier extends StateNotifier<ImageEditState> {
     int targetWidth,
     int targetHeight,
     OutputImageFormat format,
-    int quality,
-  ) async {
+    int quality, {
+    AppSettingsState? settings,
+    void Function(double progress)? onProgress,
+  }) async {
     final sourceBytes = state.currentBytes;
     if (sourceBytes == null) return null;
 
     try {
-      final result = await Isolate.run<ResizeResult?>(
-        () => _isolateResizeToPreset(<String, dynamic>{
-          'bytes': sourceBytes,
-          'targetWidth': targetWidth,
-          'targetHeight': targetHeight,
-          'format': format,
-          'quality': quality,
-        }),
+      final result = await ImageProcessorService.resizeToPreset(
+        bytes: sourceBytes,
+        preset: SocialPreset(
+          name: '',
+          width: targetWidth,
+          height: targetHeight,
+        ),
+        format: format,
+        quality: quality,
+        settings: settings,
+        onProgress: onProgress,
       );
-      return result;
+      if (result == null) return null;
+      return ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
       return null;

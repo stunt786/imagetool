@@ -51,6 +51,24 @@ enum _CropAspectPreset {
   final double? ratio;
 }
 
+class _SingleImageProgressState extends ChangeNotifier {
+  _SingleImageProgressState({
+    required this.title,
+    required this.status,
+    this.progress = 0.0,
+  });
+
+  String title;
+  String status;
+  double progress;
+
+  void update({required double progress, required String status}) {
+    this.progress = progress.clamp(0.0, 1.0);
+    this.status = status;
+    notifyListeners();
+  }
+}
+
 class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   static const List<_PresetSize> _presetSizes = <_PresetSize>[
     _PresetSize('Instagram', 1080, 1080),
@@ -128,6 +146,105 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   bool _isCropDragging = false;
 
   late final ImageEditNotifier _imageEditNotifier;
+  bool _isProgressDialogOpen = false;
+
+  void _showProgressDialog(_SingleImageProgressState progressState) {
+    _isProgressDialogOpen = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: AnimatedBuilder(
+            animation: progressState,
+            builder: (context, _) {
+              final percent = (progressState.progress * 100).round();
+              final theme = Theme.of(context);
+              final scheme = theme.colorScheme;
+
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.auto_fix_high_rounded,
+                            color: scheme.primary,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              progressState.title,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        progressState.status,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: LinearProgressIndicator(
+                                value: progressState.progress,
+                                minHeight: 8,
+                                backgroundColor: scheme.surfaceContainerHighest,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  scheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '$percent%',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.primary,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _dismissProgressDialog() {
+    if (_isProgressDialogOpen && mounted) {
+      _isProgressDialogOpen = false;
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
 
   @override
   void initState() {
@@ -371,18 +488,74 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         child: ValueListenableBuilder<({int current, int total})>(
           valueListenable: progressNotifier,
           builder: (context, val, _) {
+            final fraction = val.total > 0
+                ? (val.current / val.total).clamp(0.0, 1.0)
+                : 0.0;
+            final percent = (fraction * 100).round();
+            final theme = Theme.of(context);
+            final scheme = theme.colorScheme;
             return AlertDialog(
-              content: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Row(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Text(
-                        'Resizing image ${val.current} of ${val.total}...',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.photo_library_rounded,
+                          color: scheme.primary,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Batch Resizing',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Resizing image ${val.current} of ${val.total}...',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 8,
+                              backgroundColor: scheme.surfaceContainerHighest,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                scheme.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '$percent%',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -916,47 +1089,86 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     if (replaceOriginal == null || !mounted) return;
     _replaceOriginal = replaceOriginal;
 
-    ref.read(imageEditProvider.notifier).setLoading(true);
-
-    final result = _selectedSocialPreset != null && _mode == _ResizeMode.preset
-        ? await ref.read(imageEditProvider.notifier).resizeToPreset(
-              _selectedSocialPreset!.width,
-              _selectedSocialPreset!.height,
-              _outputFormat,
-              _quality.value,
-            )
-        : await ref.read(imageEditProvider.notifier).generateResize(
-              width: target.width,
-              height: target.height,
-              format: _outputFormat,
-              quality: _quality.value,
-            );
-
-    if (!mounted) return;
-
-    if (result == null) {
-      ref.read(imageEditProvider.notifier).setLoading(false);
-      _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Resize failed.');
-      return;
-    }
-
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: _replaceOriginal,
+    final progressState = _SingleImageProgressState(
+      title: 'Resizing Image',
+      status: 'Preparing image...',
+      progress: 0.08,
     );
-
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(result: result, fileName: fileName);
-
-    _rememberRecentSize(
-      Size(target.width.toDouble(), target.height.toDouble()),
-    );
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
+    _showProgressDialog(progressState);
 
     try {
+      final appSettings = ref.read(appSettingsProvider);
+      final result = _selectedSocialPreset != null && _mode == _ResizeMode.preset
+          ? await ImageProcessorService.resizeToPreset(
+                bytes: state.currentBytes!,
+                preset: _selectedSocialPreset!,
+                format: _outputFormat,
+                quality: _quality.value,
+                settings: appSettings,
+                onProgress: (p) {
+                  progressState.update(
+                    progress: p * 0.88,
+                    status: p < 0.3
+                        ? 'Decoding image...'
+                        : p < 0.7
+                            ? 'Resizing to preset ${_selectedSocialPreset!.name}...'
+                            : 'Encoding ${_outputFormat.name.toUpperCase()}...',
+                  );
+                },
+              )
+          : await ImageProcessorService.resize(
+                bytes: state.currentBytes!,
+                width: target.width,
+                height: target.height,
+                format: _outputFormat,
+                quality: _quality.value,
+                settings: appSettings,
+                preserveAspectRatio: _lockAspectRatio,
+                onProgress: (p) {
+                  progressState.update(
+                    progress: p * 0.88,
+                    status: p < 0.3
+                        ? 'Decoding image...'
+                        : p < 0.7
+                            ? 'Resizing to ${target.width} × ${target.height}...'
+                            : 'Encoding ${_outputFormat.name.toUpperCase()}...',
+                  );
+                },
+              );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _dismissProgressDialog();
+        _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Resize failed.');
+        return;
+      }
+
+      progressState.update(progress: 0.94, status: 'Saving image...');
+
+      final fileName = _buildSaveFileName(
+        baseName: state.fileName ?? 'image',
+        format: _outputFormat,
+        replaceOriginal: _replaceOriginal,
+      );
+
+      final resizeResult = ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
+
+      ref
+          .read(imageEditProvider.notifier)
+          .replaceWithResult(result: resizeResult, fileName: fileName);
+
+      _rememberRecentSize(
+        Size(target.width.toDouble(), target.height.toDouble()),
+      );
+      _syncInputsFromImage(result.width, result.height);
+      _pushUndoState(result.bytes);
+
       final savedPath = await _saveAndRecordEditedOutput(
         bytes: result.bytes,
         fileName: fileName,
@@ -964,6 +1176,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         replaceOriginal: _replaceOriginal,
         replacePath: _replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
+
+      progressState.update(progress: 1.0, status: 'Saved!');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      _dismissProgressDialog();
+
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -979,6 +1196,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       AppReviewService.instance.notifyOperationCompleted(context);
       _resetScreen();
     } catch (error) {
+      _dismissProgressDialog();
       _showSnack('Resized image is ready, but saving failed: $error');
     }
   }
@@ -1005,62 +1223,84 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
     if (replaceOriginal == null || !mounted) return;
 
-    ref.read(imageEditProvider.notifier).setLoading(true);
+    final progressState = _SingleImageProgressState(
+      title: 'Rotating Image',
+      status: 'Preparing rotation...',
+      progress: 0.1,
+    );
+    _showProgressDialog(progressState);
 
-    // Apply rotation first, then flip if needed.
-    var result = await ref.read(imageEditProvider.notifier).generateRotate(
-          angleDegrees: _normalizedRotationDegrees,
+    try {
+      final appSettings = ref.read(appSettingsProvider);
+      var result = await ImageProcessorService.rotate(
+        bytes: state.currentBytes!,
+        angle: _normalizedRotationDegrees,
+        format: _outputFormat,
+        quality: _quality.value,
+        settings: appSettings,
+        onProgress: (p) {
+          progressState.update(
+            progress: p * 0.85,
+            status: p < 0.4
+                ? 'Decoding image...'
+                : p < 0.7
+                    ? 'Applying rotation...'
+                    : 'Encoding ${_outputFormat.name.toUpperCase()}...',
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _dismissProgressDialog();
+        _showSnack(
+          ref.read(imageEditProvider).errorMessage ?? 'Rotation failed.',
+        );
+        return;
+      }
+
+      if (_flipPreviewH || _flipPreviewV) {
+        progressState.update(progress: 0.75, status: 'Applying flip...');
+        final flipResult = await ImageProcessorService.flip(
+          bytes: result.bytes,
+          horizontal: _flipPreviewH,
+          vertical: _flipPreviewV,
           format: _outputFormat,
           quality: _quality.value,
+          settings: appSettings,
         );
+        if (!mounted) return;
+        result = flipResult ?? result;
+      }
 
-    if (!mounted) return;
+      progressState.update(progress: 0.92, status: 'Saving rotated image...');
 
-    if (result == null) {
-      ref.read(imageEditProvider.notifier).setLoading(false);
-      _showSnack(
-        ref.read(imageEditProvider).errorMessage ?? 'Rotation failed.',
+      final fileName = _buildSaveFileName(
+        baseName: state.fileName ?? 'image',
+        format: _outputFormat,
+        replaceOriginal: replaceOriginal,
       );
-      return;
-    }
 
-    if (_flipPreviewH || _flipPreviewV) {
-      // Load rotated result temporarily, then flip. Preserve the original
-      // source path so Replace Original stays available after rotate+flip.
-      await ref.read(imageEditProvider.notifier).loadImage(
-            result.bytes,
-            state.fileName ?? 'image.jpg',
-            sourcePath: _sourcePathFor(state.fileName),
-          );
-      final flipResult =
-          await ref.read(imageEditProvider.notifier).generateFlip(
-                _flipPreviewH,
-                _flipPreviewV,
-                format: _outputFormat,
-                quality: _quality.value,
-              );
-      if (!mounted) return;
-      result = flipResult ?? result;
-    }
+      final resizeResult = ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
 
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: replaceOriginal,
-    );
+      ref
+          .read(imageEditProvider.notifier)
+          .replaceWithResult(result: resizeResult, fileName: fileName);
 
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(result: result, fileName: fileName);
+      _syncInputsFromImage(result.width, result.height);
+      _pushUndoState(result.bytes);
+      setState(() {
+        _rotationPreviewDegrees = 0;
+        _flipPreviewH = false;
+        _flipPreviewV = false;
+      });
 
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
-    setState(() {
-      _rotationPreviewDegrees = 0;
-      _flipPreviewH = false;
-      _flipPreviewV = false;
-    });
-    try {
       final savedPath = await _saveAndRecordEditedOutput(
         bytes: result.bytes,
         fileName: fileName,
@@ -1068,6 +1308,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         replaceOriginal: replaceOriginal,
         replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
+
+      progressState.update(progress: 1.0, status: 'Saved!');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      _dismissProgressDialog();
+
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -1083,6 +1328,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           replaceOriginal ? 'Replaced original' : 'Rotation applied & saved.');
       _resetScreen();
     } catch (error) {
+      _dismissProgressDialog();
       _showSnack('Rotation applied, but saving failed: $error');
     }
   }
@@ -1103,35 +1349,64 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
     if (replaceOriginal == null || !mounted) return;
 
-    ref.read(imageEditProvider.notifier).setLoading(true);
-    final result = await ref.read(imageEditProvider.notifier).generateFlip(
-          horizontal,
-          vertical,
-          format: _outputFormat,
-          quality: _quality.value,
-        );
-
-    if (!mounted) return;
-
-    if (result == null) {
-      ref.read(imageEditProvider.notifier).setLoading(false);
-      _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Flip failed.');
-      return;
-    }
-
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: replaceOriginal,
+    final progressState = _SingleImageProgressState(
+      title: '$label Image',
+      status: 'Preparing $label...',
+      progress: 0.1,
     );
+    _showProgressDialog(progressState);
 
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(result: result, fileName: fileName);
-
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
     try {
+      final appSettings = ref.read(appSettingsProvider);
+      final result = await ImageProcessorService.flip(
+        bytes: state.currentBytes!,
+        horizontal: horizontal,
+        vertical: vertical,
+        format: _outputFormat,
+        quality: _quality.value,
+        settings: appSettings,
+        onProgress: (p) {
+          progressState.update(
+            progress: p * 0.85,
+            status: p < 0.4
+                ? 'Decoding image...'
+                : p < 0.7
+                    ? 'Applying $label...'
+                    : 'Encoding ${_outputFormat.name.toUpperCase()}...',
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _dismissProgressDialog();
+        _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Flip failed.');
+        return;
+      }
+
+      progressState.update(progress: 0.92, status: 'Saving image...');
+
+      final fileName = _buildSaveFileName(
+        baseName: state.fileName ?? 'image',
+        format: _outputFormat,
+        replaceOriginal: replaceOriginal,
+      );
+
+      final resizeResult = ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
+
+      ref
+          .read(imageEditProvider.notifier)
+          .replaceWithResult(result: resizeResult, fileName: fileName);
+
+      _syncInputsFromImage(result.width, result.height);
+      _pushUndoState(result.bytes);
+
       final savedPath = await _saveAndRecordEditedOutput(
         bytes: result.bytes,
         fileName: fileName,
@@ -1139,6 +1414,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         replaceOriginal: replaceOriginal,
         replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
+
+      progressState.update(progress: 1.0, status: 'Saved!');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      _dismissProgressDialog();
+
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -1154,6 +1434,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           replaceOriginal ? 'Replaced original' : '$label applied & saved.');
       _resetScreen();
     } catch (error) {
+      _dismissProgressDialog();
       _showSnack('$label applied, but saving failed: $error');
     }
   }
@@ -1165,8 +1446,6 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       return;
     }
 
-    // Compression is an export operation. Ask once up front, then process and
-    // save in the same action so users never need to apply and save twice.
     final replaceOriginal = await _showSaveDialog(
       canReplace: _sourcePathFor(state.fileName) != null,
     );
@@ -1174,35 +1453,66 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
     final targetBytes = math.min(_targetSizeKB * 1000, _targetSizeKB * 1024);
     final appSettings = ref.read(appSettingsProvider);
-    final result = await ref
-        .read(imageEditProvider.notifier)
-        .compressToTargetSize(targetBytes, _outputFormat,
-            settings: appSettings);
 
-    if (!mounted) return;
-
-    if (result == null) {
-      _showSnack(
-        ref.read(imageEditProvider).errorMessage ?? 'Compression failed.',
-      );
-      return;
-    }
-
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: replaceOriginal,
+    final progressState = _SingleImageProgressState(
+      title: 'Compressing Image',
+      status: 'Analyzing image...',
+      progress: 0.08,
     );
-    ref
-        .read(imageEditProvider.notifier)
-        .replaceWithResult(result: result, fileName: fileName);
-    _rememberRecentSize(
-      Size(result.width.toDouble(), result.height.toDouble()),
-    );
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
+    _showProgressDialog(progressState);
 
     try {
+      final result = await ImageProcessorService.compressToTargetSize(
+        bytes: state.currentBytes!,
+        targetBytes: targetBytes,
+        format: _outputFormat,
+        settings: appSettings,
+        onProgress: (p) {
+          progressState.update(
+            progress: p * 0.88,
+            status: p < 0.25
+                ? 'Analyzing dimensions and quality...'
+                : p < 0.85
+                    ? 'Optimizing to target size ($_targetSizeKB KB)...'
+                    : 'Finalizing compression...',
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _dismissProgressDialog();
+        _showSnack(
+          ref.read(imageEditProvider).errorMessage ?? 'Compression failed.',
+        );
+        return;
+      }
+
+      progressState.update(progress: 0.94, status: 'Saving image...');
+
+      final fileName = _buildSaveFileName(
+        baseName: state.fileName ?? 'image',
+        format: _outputFormat,
+        replaceOriginal: replaceOriginal,
+      );
+
+      final resizeResult = ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
+
+      ref
+          .read(imageEditProvider.notifier)
+          .replaceWithResult(result: resizeResult, fileName: fileName);
+      _rememberRecentSize(
+        Size(result.width.toDouble(), result.height.toDouble()),
+      );
+      _syncInputsFromImage(result.width, result.height);
+      _pushUndoState(result.bytes);
+
       final savedPath = await _saveAndRecordEditedOutput(
         bytes: result.bytes,
         fileName: fileName,
@@ -1210,6 +1520,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         replaceOriginal: replaceOriginal,
         replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
+
+      progressState.update(progress: 1.0, status: 'Saved!');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      _dismissProgressDialog();
+
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -1232,6 +1547,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
       }
       _resetScreen();
     } catch (error) {
+      _dismissProgressDialog();
       _showSnack('Compression applied, but saving failed: $error');
     }
   }
@@ -1445,37 +1761,67 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
     );
     if (replaceOriginal == null || !mounted) return;
 
-    ref.read(imageEditProvider.notifier).setLoading(true);
-    final result = await ref.read(imageEditProvider.notifier).generateCrop(
-          x: x,
-          y: y,
-          width: width,
-          height: height,
-          format: _outputFormat,
-          quality: _quality.value,
-        );
-
-    if (!mounted) return;
-
-    if (result == null) {
-      ref.read(imageEditProvider.notifier).setLoading(false);
-      _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Crop failed.');
-      return;
-    }
-
-    final fileName = _buildSaveFileName(
-      baseName: state.fileName ?? 'image',
-      format: _outputFormat,
-      replaceOriginal: replaceOriginal,
+    final progressState = _SingleImageProgressState(
+      title: 'Cropping Image',
+      status: 'Preparing crop...',
+      progress: 0.1,
     );
-    ref.read(imageEditProvider.notifier).replaceWithResult(
-          result: result,
-          fileName: fileName,
-        );
-    _syncInputsFromImage(result.width, result.height);
-    _pushUndoState(result.bytes);
-    setState(() {});
+    _showProgressDialog(progressState);
+
     try {
+      final appSettings = ref.read(appSettingsProvider);
+      final result = await ImageProcessorService.crop(
+        bytes: state.currentBytes!,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        format: _outputFormat,
+        quality: _quality.value,
+        settings: appSettings,
+        onProgress: (p) {
+          progressState.update(
+            progress: p * 0.85,
+            status: p < 0.4
+                ? 'Decoding image...'
+                : p < 0.75
+                    ? 'Cropping selected area...'
+                    : 'Encoding ${_outputFormat.name.toUpperCase()}...',
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result == null) {
+        _dismissProgressDialog();
+        _showSnack(ref.read(imageEditProvider).errorMessage ?? 'Crop failed.');
+        return;
+      }
+
+      progressState.update(progress: 0.92, status: 'Saving cropped image...');
+
+      final fileName = _buildSaveFileName(
+        baseName: state.fileName ?? 'image',
+        format: _outputFormat,
+        replaceOriginal: replaceOriginal,
+      );
+
+      final resizeResult = ResizeResult(
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        fileSize: result.fileSize,
+      );
+
+      ref.read(imageEditProvider.notifier).replaceWithResult(
+            result: resizeResult,
+            fileName: fileName,
+          );
+      _syncInputsFromImage(result.width, result.height);
+      _pushUndoState(result.bytes);
+      setState(() {});
+
       final savedPath = await _saveAndRecordEditedOutput(
         bytes: result.bytes,
         fileName: fileName,
@@ -1483,6 +1829,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
         replaceOriginal: replaceOriginal,
         replacePath: replaceOriginal ? _sourcePathFor(state.fileName) : null,
       );
+
+      progressState.update(progress: 1.0, status: 'Saved!');
+      await Future<void>.delayed(const Duration(milliseconds: 180));
+      _dismissProgressDialog();
+
       if (!mounted) return;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -1498,6 +1849,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           replaceOriginal ? 'Replaced original' : 'Crop applied & saved.');
       _resetScreen();
     } catch (error) {
+      _dismissProgressDialog();
       _showSnack('Crop applied, but saving failed: $error');
     }
   }
@@ -1955,13 +2307,11 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
           ],
         ],
       ),
-      body: state.isLoading
+      body: (state.isLoading && !state.hasImage) || _isOneClickOpening
           ? const Center(child: CircularProgressIndicator())
           : state.hasImage
               ? _buildEditorView(state, target)
-              : _isOneClickOpening
-                  ? const Center(child: CircularProgressIndicator())
-                  : _buildSelectPhotosScreen(),
+              : _buildSelectPhotosScreen(),
       bottomNavigationBar: state.hasImage
           ? SafeArea(
               top: false,

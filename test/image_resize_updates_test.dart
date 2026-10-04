@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:pixeltools/features/image_resize/models/social_presets.dart';
 import 'package:pixeltools/features/image_resize/presentation/image_resize_screen.dart';
 import 'package:pixeltools/features/image_resize/services/image_processor_service.dart';
+import 'package:pixeltools/shared/notifiers/image_edit_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Uint8List _generateTestJpg({int width = 1200, int height = 900}) {
@@ -109,4 +110,105 @@ void main() {
       expect(loaded, contains('500x500'));
     });
   });
+
+  group('Single Image Progress Bar & Screen Behavior Tests', () {
+    testWidgets(
+        'editor view remains rendered when image is present even if isLoading is true',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final sampleImage = _generateTestJpg(width: 400, height: 300);
+
+      final notifier = ImageEditNotifier();
+      notifier.replaceWithResult(
+        result: ResizeResult(
+          bytes: sampleImage,
+          width: 400,
+          height: 300,
+          fileSize: sampleImage.length,
+        ),
+        fileName: 'test.jpg',
+      );
+      notifier.setLoading(true);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            imageEditProvider.overrideWith((ref) => notifier),
+          ],
+          child: const MaterialApp(
+            home: ImageResizeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Undo button is in AppBar only when state.hasImage is true
+      expect(find.byTooltip('Undo'), findsOneWidget);
+      // Full-screen blank CircularProgressIndicator must NOT be shown
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets(
+        'single image progress dialog renders LinearProgressIndicator and updates percentage',
+        (tester) async {
+      final progressNotifier = ValueNotifier<double>(0.0);
+      const status = 'Resizing image...';
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (dialogContext) {
+                        return ValueListenableBuilder<double>(
+                          valueListenable: progressNotifier,
+                          builder: (context, value, _) {
+                            final percent = (value * 100).round();
+                            return AlertDialog(
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(status),
+                                  LinearProgressIndicator(value: value),
+                                  Text('$percent%'),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                  child: const Text('Open Dialog'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pump();
+
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('Resizing image...'), findsOneWidget);
+
+      progressNotifier.value = 0.55;
+      await tester.pump();
+
+      expect(find.text('55%'), findsOneWidget);
+
+      progressNotifier.value = 1.0;
+      await tester.pump();
+
+      expect(find.text('100%'), findsOneWidget);
+    });
+  });
 }
+

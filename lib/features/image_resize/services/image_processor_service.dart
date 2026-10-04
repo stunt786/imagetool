@@ -32,9 +32,13 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
   final bool preserveAspectRatio =
       params['preserveAspectRatio'] as bool? ?? true;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
 
-  final image = img.decodeImage(bytes);
+  sendPort?.send(0.12);
+  var image = img.decodeImage(bytes);
   if (image == null) return null;
+  image = img.bakeOrientation(image);
+  sendPort?.send(0.35);
 
   img.Image processed = image;
 
@@ -54,17 +58,24 @@ ImageProcessResult? _isolateResize(Map<String, dynamic> params) {
       }
     }
 
-    processed = img.copyResize(
-      image,
-      width: newWidth,
-      height: newHeight,
-      interpolation: img.Interpolation.average,
-    );
+    if (newWidth != image.width || newHeight != image.height) {
+      processed = img.copyResize(
+        image,
+        width: newWidth,
+        height: newHeight,
+        interpolation: img.Interpolation.linear,
+      );
+    }
   }
+
+  sendPort?.send(0.70);
 
   final encoded = _encodeImage(processed,
       format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
+
+  sendPort?.send(1.0);
+  sendPort?.send('done');
 
   return ImageProcessResult(
     bytes: resultBytes,
@@ -83,9 +94,13 @@ ImageProcessResult? _isolateCrop(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
 
-  final image = img.decodeImage(bytes);
+  sendPort?.send(0.12);
+  var image = img.decodeImage(bytes);
   if (image == null) return null;
+  image = img.bakeOrientation(image);
+  sendPort?.send(0.40);
 
   final safeX = x.clamp(0, math.max(0, image.width - 1)).toInt();
   final safeY = y.clamp(0, math.max(0, image.height - 1)).toInt();
@@ -100,9 +115,14 @@ ImageProcessResult? _isolateCrop(Map<String, dynamic> params) {
     height: safeHeight,
   );
 
+  sendPort?.send(0.70);
+
   final encoded = _encodeImage(cropped,
       format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
+
+  sendPort?.send(1.0);
+  sendPort?.send('done');
 
   return ImageProcessResult(
     bytes: resultBytes,
@@ -118,15 +138,24 @@ ImageProcessResult? _isolateRotate(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
 
-  final image = img.decodeImage(bytes);
+  sendPort?.send(0.12);
+  var image = img.decodeImage(bytes);
   if (image == null) return null;
+  image = img.bakeOrientation(image);
+  sendPort?.send(0.40);
 
   final rotated = img.copyRotate(image, angle: angle);
+
+  sendPort?.send(0.70);
 
   final encoded = _encodeImage(rotated,
       format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
+
+  sendPort?.send(1.0);
+  sendPort?.send('done');
 
   return ImageProcessResult(
     bytes: resultBytes,
@@ -143,9 +172,13 @@ ImageProcessResult? _isolateFlip(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
 
-  final image = img.decodeImage(bytes);
+  sendPort?.send(0.12);
+  var image = img.decodeImage(bytes);
   if (image == null) return null;
+  image = img.bakeOrientation(image);
+  sendPort?.send(0.40);
 
   img.Image flipped = image;
   if (horizontal) {
@@ -155,9 +188,14 @@ ImageProcessResult? _isolateFlip(Map<String, dynamic> params) {
     flipped = img.flipVertical(flipped);
   }
 
+  sendPort?.send(0.70);
+
   final encoded = _encodeImage(flipped,
       format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
+
+  sendPort?.send(1.0);
+  sendPort?.send('done');
 
   return ImageProcessResult(
     bytes: resultBytes,
@@ -174,9 +212,13 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
   final OutputImageFormat format = params['format'] as OutputImageFormat;
   final int quality = params['quality'] as int;
   final AppSettingsState? settings = params['settings'] as AppSettingsState?;
+  final SendPort? sendPort = params['sendPort'] as SendPort?;
 
-  final image = img.decodeImage(bytes);
+  sendPort?.send(0.12);
+  var image = img.decodeImage(bytes);
   if (image == null) return null;
+  image = img.bakeOrientation(image);
+  sendPort?.send(0.35);
 
   final sourceAspect = image.width / image.height;
   final targetAspect = targetWidth / targetHeight;
@@ -190,7 +232,7 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
       image,
       width: newWidth,
       height: newHeight,
-      interpolation: img.Interpolation.average,
+      interpolation: img.Interpolation.linear,
     );
     final cropX = (newWidth - targetWidth) ~/ 2;
     processed = img.copyCrop(
@@ -207,7 +249,7 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
       image,
       width: newWidth,
       height: newHeight,
-      interpolation: img.Interpolation.average,
+      interpolation: img.Interpolation.linear,
     );
     final cropY = (newHeight - targetHeight) ~/ 2;
     processed = img.copyCrop(
@@ -219,9 +261,14 @@ ImageProcessResult? _isolateResizeToPreset(Map<String, dynamic> params) {
     );
   }
 
+  sendPort?.send(0.70);
+
   final encoded = _encodeImage(processed,
       format: format, quality: quality, settings: settings);
   final resultBytes = Uint8List.fromList(encoded);
+
+  sendPort?.send(1.0);
+  sendPort?.send('done');
 
   return ImageProcessResult(
     bytes: resultBytes,
@@ -250,6 +297,21 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
   final origH = image.height;
 
   final Map<String, ImageProcessResult> cache = <String, ImageProcessResult>{};
+  final Map<String, img.Image> resizedCache = <String, img.Image>{};
+
+  img.Image getResized(int w, int h) {
+    if (w == origW && h == origH) return image;
+    final key = '$w:$h';
+    return resizedCache.putIfAbsent(
+      key,
+      () => img.copyResize(
+        image,
+        width: w,
+        height: h,
+        interpolation: img.Interpolation.linear,
+      ),
+    );
+  }
 
   ImageProcessResult encodeAt(int targetWidth, int targetHeight, int quality) {
     final w = targetWidth.clamp(1, 12000);
@@ -259,14 +321,7 @@ ImageProcessResult? _isolateCompressToTargetSize(Map<String, dynamic> params) {
     final cached = cache[cacheKey];
     if (cached != null) return cached;
 
-    final processed = (w == image.width && h == image.height)
-        ? image
-        : img.copyResize(
-            image,
-            width: w,
-            height: h,
-            interpolation: img.Interpolation.average,
-          );
+    final processed = getResized(w, h);
     final encoded = _encodeImage(processed,
         format: format, quality: q, settings: settings);
     final result = ImageProcessResult(
@@ -526,7 +581,7 @@ List<int> _encodeImage(
     OutputImageFormat.jpg =>
       img.JpegEncoder(quality: clampedQuality).encode(processed),
     OutputImageFormat.png =>
-      img.PngEncoder(level: ((100 - clampedQuality) / 11).round().clamp(0, 9))
+      img.PngEncoder(level: ((100 - clampedQuality) / 16).round().clamp(0, 6))
           .encode(processed),
     OutputImageFormat.webp => img.encodeWebP(
         processed,
@@ -537,6 +592,48 @@ List<int> _encodeImage(
 }
 
 class ImageProcessorService {
+  static Future<ImageProcessResult?> _dispatchToIsolate(
+    ImageProcessResult? Function(Map<String, dynamic>) isolateFn,
+    Map<String, dynamic> params,
+  ) {
+    return Isolate.run<ImageProcessResult?>(() => isolateFn(params));
+  }
+
+  static Future<ImageProcessResult?> _runWithProgress(
+    Map<String, dynamic> params,
+    ImageProcessResult? Function(Map<String, dynamic>) isolateFn,
+    void Function(double progress)? onProgress,
+  ) async {
+    if (onProgress == null) {
+      return _dispatchToIsolate(isolateFn, params);
+    }
+    final receivePort = ReceivePort();
+    final sendPort = receivePort.sendPort;
+    final progressCompleter = Completer<void>();
+    final progressSub = receivePort.listen((message) {
+      if (message is double) {
+        onProgress(message);
+      } else if (message == 'done') {
+        if (!progressCompleter.isCompleted) {
+          progressCompleter.complete();
+        }
+      }
+    });
+    try {
+      final updatedParams = Map<String, dynamic>.from(params);
+      updatedParams['sendPort'] = sendPort;
+      final result = await _dispatchToIsolate(isolateFn, updatedParams);
+      return result;
+    } finally {
+      await progressCompleter.future.timeout(
+        const Duration(milliseconds: 50),
+        onTimeout: () {},
+      );
+      await progressSub.cancel();
+      receivePort.close();
+    }
+  }
+
   static Future<ImageProcessResult?> resize({
     required Uint8List bytes,
     required int width,
@@ -545,9 +642,10 @@ class ImageProcessorService {
     required int quality,
     AppSettingsState? settings,
     bool preserveAspectRatio = true,
+    void Function(double progress)? onProgress,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateResize(<String, dynamic>{
+    return _runWithProgress(
+      <String, dynamic>{
         'bytes': bytes,
         'width': width,
         'height': height,
@@ -555,7 +653,9 @@ class ImageProcessorService {
         'quality': quality,
         'settings': settings,
         'preserveAspectRatio': preserveAspectRatio,
-      }),
+      },
+      _isolateResize,
+      onProgress,
     );
   }
 
@@ -568,9 +668,10 @@ class ImageProcessorService {
     required OutputImageFormat format,
     required int quality,
     AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateCrop(<String, dynamic>{
+    return _runWithProgress(
+      <String, dynamic>{
         'bytes': bytes,
         'x': x,
         'y': y,
@@ -579,7 +680,9 @@ class ImageProcessorService {
         'format': format,
         'quality': quality,
         'settings': settings,
-      }),
+      },
+      _isolateCrop,
+      onProgress,
     );
   }
 
@@ -589,15 +692,18 @@ class ImageProcessorService {
     required OutputImageFormat format,
     required int quality,
     AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateRotate(<String, dynamic>{
+    return _runWithProgress(
+      <String, dynamic>{
         'bytes': bytes,
         'angle': angle,
         'format': format,
         'quality': quality,
         'settings': settings,
-      }),
+      },
+      _isolateRotate,
+      onProgress,
     );
   }
 
@@ -608,16 +714,19 @@ class ImageProcessorService {
     required OutputImageFormat format,
     required int quality,
     AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateFlip(<String, dynamic>{
+    return _runWithProgress(
+      <String, dynamic>{
         'bytes': bytes,
         'horizontal': horizontal,
         'vertical': vertical,
         'format': format,
         'quality': quality,
         'settings': settings,
-      }),
+      },
+      _isolateFlip,
+      onProgress,
     );
   }
 
@@ -628,45 +737,16 @@ class ImageProcessorService {
     void Function(double progress)? onProgress,
     AppSettingsState? settings,
   }) async {
-    if (onProgress == null) {
-      return Isolate.run<ImageProcessResult?>(
-        () => _isolateCompressToTargetSize(<String, dynamic>{
-          'bytes': bytes,
-          'targetBytes': targetBytes,
-          'format': format,
-          'settings': settings,
-        }),
-      );
-    }
-    final receivePort = ReceivePort();
-    final sendPort = receivePort.sendPort;
-    final progressCompleter = Completer<void>();
-    final progressSub = receivePort.listen((message) {
-      if (message is double) {
-        onProgress(message);
-      } else if (message == 'done') {
-        progressCompleter.complete();
-      }
-    });
-    try {
-      final result = await Isolate.run<ImageProcessResult?>(
-        () => _isolateCompressToTargetSize(<String, dynamic>{
-          'bytes': bytes,
-          'targetBytes': targetBytes,
-          'format': format,
-          'sendPort': sendPort,
-          'settings': settings,
-        }),
-      );
-      return result;
-    } finally {
-      await progressCompleter.future.timeout(
-        const Duration(milliseconds: 50),
-        onTimeout: () {},
-      );
-      await progressSub.cancel();
-      receivePort.close();
-    }
+    return _runWithProgress(
+      <String, dynamic>{
+        'bytes': bytes,
+        'targetBytes': targetBytes,
+        'format': format,
+        'settings': settings,
+      },
+      _isolateCompressToTargetSize,
+      onProgress,
+    );
   }
 
   static Future<ImageProcessResult?> resizeToPreset({
@@ -675,16 +755,19 @@ class ImageProcessorService {
     required OutputImageFormat format,
     required int quality,
     AppSettingsState? settings,
+    void Function(double progress)? onProgress,
   }) async {
-    return Isolate.run<ImageProcessResult?>(
-      () => _isolateResizeToPreset(<String, dynamic>{
+    return _runWithProgress(
+      <String, dynamic>{
         'bytes': bytes,
         'targetWidth': preset.width,
         'targetHeight': preset.height,
         'format': format,
         'quality': quality,
         'settings': settings,
-      }),
+      },
+      _isolateResizeToPreset,
+      onProgress,
     );
   }
 
