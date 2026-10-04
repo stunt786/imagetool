@@ -1204,20 +1204,23 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                           return InkWell(
                             onTap: () => _openPdfViewer(context),
                             child: const Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.picture_as_pdf_rounded,
-                                    size: 64,
-                                    color: Color(0xFFE53935),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'PDF Document · Tap to View',
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                ],
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.picture_as_pdf_rounded,
+                                      size: 64,
+                                      color: Color(0xFFE53935),
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'PDF Document · Tap to View',
+                                      style: TextStyle(color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -1451,28 +1454,35 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
                   const SizedBox(height: 10),
                   // File operations row
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _ActionButton(
-                        icon: Icons.share_outlined,
-                        label: 'Share',
-                        onTap: () => _share(context),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.share_outlined,
+                          label: 'Share',
+                          onTap: () => _share(context),
+                        ),
                       ),
-                      _ActionButton(
-                        icon: Icons.download_outlined,
-                        label: (_item.isPdf || isTiff) ? 'Export' : 'Save',
-                        onTap: () => _save(context),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.download_outlined,
+                          label: (_item.isPdf || isTiff) ? 'Export' : 'Save',
+                          onTap: () => _save(context),
+                        ),
                       ),
-                      _ActionButton(
-                        icon: Icons.drive_file_rename_outline,
-                        label: 'Rename',
-                        onTap: () => _rename(context),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.drive_file_rename_outline,
+                          label: 'Rename',
+                          onTap: () => _rename(context),
+                        ),
                       ),
-                      _ActionButton(
-                        icon: Icons.delete_outline,
-                        label: 'Delete',
-                        isDestructive: true,
-                        onTap: () => _delete(context),
+                      Expanded(
+                        child: _ActionButton(
+                          icon: Icons.delete_outline,
+                          label: 'Delete',
+                          isDestructive: true,
+                          onTap: () => _delete(context),
+                        ),
                       ),
                     ],
                   ),
@@ -1525,20 +1535,23 @@ class _ToolPill extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.35)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: color,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1573,21 +1586,24 @@ class _ActionButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 22, color: color),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1659,15 +1675,19 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Split PDF Options',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    Expanded(
+                      child: Text(
+                        'Split PDF Options',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),

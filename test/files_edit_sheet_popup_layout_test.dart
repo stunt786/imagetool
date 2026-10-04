@@ -103,10 +103,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  /// The edit sheet itself reports layout issues of its own on very narrow
-  /// viewports; they are unrelated to the popups under test.
-  void drainReportedIssues(WidgetTester tester) {
-    while (tester.takeException() != null) {}
+  /// Drains every layout exception the edit sheet or one of its popups
+  /// reported: on these viewports the sheet must lay out without errors.
+  void expectNoLayoutErrors(WidgetTester tester) {
+    final errors = <Object>[];
+    while (true) {
+      final error = tester.takeException();
+      if (error == null) break;
+      errors.add(error);
+    }
+    expect(errors, isEmpty, reason: 'layout errors: $errors');
+  }
+
+  /// Fails only on the class of bug the file-operations row used to have -
+  /// children that are wider than the viewport. The sheet being taller than
+  /// a very short screen is a separate, pre-existing limitation.
+  void expectNoHorizontalOverflow(WidgetTester tester, String where) {
+    final errors = <Object>[];
+    while (true) {
+      final error = tester.takeException();
+      if (error == null) break;
+      final message = error.toString();
+      if (message.contains('on the right') || message.contains('on the left')) {
+        errors.add(error);
+      }
+    }
+    expect(errors, isEmpty, reason: '[$where] horizontal overflow: $errors');
   }
 
   /// Opens [tool], checks the popup scrolls instead of overflowing and that
@@ -154,7 +176,7 @@ void main() {
 
     await tester.runAsync(() async {
       await pumpHost(tester, FileEditSheet(item: imageItem, onDeleted: () {}));
-      drainReportedIssues(tester);
+      expectNoLayoutErrors(tester);
 
       await expectPopupFits(tester,
           tool: 'Resize',
@@ -167,7 +189,7 @@ void main() {
           lastControl: 'BMP');
     });
 
-    drainReportedIssues(tester);
+    expectNoLayoutErrors(tester);
   });
 
   testWidgets('pdf tool popups stay on screen', (tester) async {
@@ -176,7 +198,7 @@ void main() {
     await tester.runAsync(() async {
       await pumpHost(tester, FileEditSheet(item: pdfItem, onDeleted: () {}));
       await tester.pump(const Duration(milliseconds: 400));
-      drainReportedIssues(tester);
+      expectNoLayoutErrors(tester);
 
       await expectPopupFits(tester,
           tool: 'Compress',
@@ -189,6 +211,59 @@ void main() {
           lastControl: 'Split PDF');
     });
 
-    drainReportedIssues(tester);
+    expectNoLayoutErrors(tester);
+  });
+
+  /// Share / Save / Rename / Delete used to overflow the row horizontally:
+  /// 24px on a 360px-wide image sheet, 47px when the label became "Export"
+  /// for a PDF. Each button now owns an [Expanded] slot and scales itself
+  /// down, so no width or text scale can make the row overflow.
+  testWidgets('file operations row fits a narrow screen', (tester) async {
+    for (final (size, scale) in <(Size, double)>[
+      (const Size(360, 640), 1.0),
+      (const Size(360, 640), 1.3),
+      (const Size(320, 480), 1.0),
+      (const Size(320, 480), 1.3),
+    ]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 48);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 48);
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPadding();
+        tester.view.resetViewPadding();
+        tester.platformDispatcher.clearAllTestValues();
+      });
+
+      for (final (item, labels) in <(AppFileItem, List<String>)>[
+        (imageItem, const ['Share', 'Save', 'Rename', 'Delete']),
+        (pdfItem, const ['Share', 'Export', 'Rename', 'Delete']),
+      ]) {
+        await tester.runAsync(() async {
+          await pumpHost(tester, FileEditSheet(item: item, onDeleted: () {}));
+        });
+        expectNoHorizontalOverflow(
+            tester, '${size.width}x${size.height}@$scale ${item.fileName}');
+
+        for (final label in labels) {
+          final button = find
+              .ancestor(of: find.text(label), matching: find.byType(InkWell))
+              .first;
+          final rect = tester.getRect(button);
+          expect(rect.left, greaterThanOrEqualTo(0),
+              reason: '"$label" at ${size.width}w@$scale escapes left');
+          expect(rect.right, lessThanOrEqualTo(size.width),
+              reason: '"$label" at ${size.width}w@$scale escapes right');
+          expect(rect.width, greaterThan(0),
+              reason: '"$label" has no hit target');
+        }
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    }
   });
 }
