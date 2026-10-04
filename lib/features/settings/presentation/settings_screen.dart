@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/app_info_service.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/services/app_update_service.dart';
 import '../../../core/services/public_storage.dart';
@@ -28,6 +29,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final canPop = Navigator.of(context).canPop();
     final topPadding = MediaQuery.of(context).padding.top + (canPop ? 14 : 24);
     final settings = ref.watch(appSettingsProvider);
+    final appInfoAsync = ref.watch(appInfoProvider);
+    final versionText = appInfoAsync.maybeWhen(
+      data: (info) => info.versionWithBuild,
+      orElse: () => AppInfoService.instance.cachedInfo.versionWithBuild,
+    );
 
     return Scaffold(
       body: DecoratedBox(
@@ -508,10 +514,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         onTap: () => context.push('/settings/about'),
                       ),
                       const Divider(height: 1),
-                      const ListTile(
-                        leading: Icon(Icons.tag_outlined),
-                        title: Text('Version'),
-                        subtitle: Text(AppUpdateService.currentAppVersion),
+                      ListTile(
+                        leading: const Icon(Icons.tag_outlined),
+                        title: const Text('Version'),
+                        subtitle: Text(versionText),
                       ),
                     ],
                   ),

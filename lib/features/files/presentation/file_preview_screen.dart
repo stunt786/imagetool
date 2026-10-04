@@ -336,17 +336,29 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
           if (mounted) _showSnack('Exported PDF to ${saveDir.path}');
         }
       } else {
+        final ext = item.fileName.toLowerCase().split('.').last;
+        final isTiff = ext == 'tiff' || ext == 'tif';
         if (Platform.isAndroid) {
           final destination = await PublicStorage.publishFile(
             sourcePath: file.path,
             fileName: item.fileName,
-            kind: PublicFileKind.image,
+            kind: isTiff ? PublicFileKind.document : PublicFileKind.image,
           );
           if (mounted) _showSnack('Saved to $destination');
         } else {
-          final bytes = await file.readAsBytes();
-          await saveImageBytes(bytes, fileName: item.fileName);
-          if (mounted) _showSnack('Saved to gallery');
+          if (isTiff) {
+            final saveDir =
+                await ref.read(appSettingsProvider.notifier).getSaveDirectory();
+            final destPath = '${saveDir.path}/${item.fileName}';
+            if (file.path != destPath) {
+              await file.copy(destPath);
+            }
+            if (mounted) _showSnack('Saved to ${saveDir.path}');
+          } else {
+            final bytes = await file.readAsBytes();
+            await saveImageBytes(bytes, fileName: item.fileName);
+            if (mounted) _showSnack('Saved to gallery');
+          }
         }
       }
     } catch (e) {

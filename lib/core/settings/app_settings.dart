@@ -301,9 +301,13 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
 
   Future<void> _load() async {
     state = state.copyWith(isLoading: true);
-    final prefs = await SharedPreferences.getInstance();
-    final loaded = await AppSettingsState.loadInitial(prefs);
-    state = loaded;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loaded = await AppSettingsState.loadInitial(prefs);
+      state = loaded;
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   Future<void> setSavePath(String savePath) async {

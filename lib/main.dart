@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app/pixeltools_app.dart';
+import 'core/services/app_info_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/app_theme.dart';
 import 'splash_screen.dart';
@@ -31,8 +32,9 @@ class _AppEntryState extends ConsumerState<AppEntry> {
   @override
   void initState() {
     super.initState();
-    // Warm up settings notifier immediately upon app startup in parallel with splash animation
+    // Warm up settings and app version info immediately upon startup
     ref.read(appSettingsProvider.notifier);
+    AppInfoService.instance.getAppInfo();
   }
 
   void _onSplashComplete() {

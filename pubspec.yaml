@@ -57,6 +57,7 @@ dependencies:
   wechat_assets_picker: ^9.1.0
   photo_manager: ^3.6.0
   url_launcher: ^6.3.2
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

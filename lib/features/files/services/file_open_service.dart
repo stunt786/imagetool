@@ -40,7 +40,7 @@ abstract final class FileOpenService {
 
     switch (resolvedKind) {
       case AppFileKind.pdf:
-        await Navigator.of(context).push(
+        await Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute<void>(
             builder: (_) => PdfViewerScreen(filePath: path, title: name),
           ),
@@ -53,7 +53,7 @@ abstract final class FileOpenService {
         final index = galleryItems != null && galleryItems.isNotEmpty
             ? galleryIndex.clamp(0, items.length - 1)
             : 0;
-        await Navigator.of(context).push(
+        await Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute<void>(
             builder: (_) =>
                 FilePreviewScreen(items: items, initialIndex: index),

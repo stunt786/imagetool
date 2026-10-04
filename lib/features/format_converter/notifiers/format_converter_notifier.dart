@@ -686,7 +686,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         );
       }
 
-      converted ??= await compute(_convertWorker, <String, Object?>{
+      converted ??= await compute(convertFormatWorker, <String, Object?>{
         'source': source,
         'target': format.codec,
         'quality': state.quality,
@@ -807,7 +807,7 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
 /// Decodes, optionally watermarks, and encodes one image. Runs off the UI
 /// isolate so multi-image conversion never freezes the app.
-Future<Uint8List?> _convertWorker(Map<String, Object?> params) async {
+Future<Uint8List?> convertFormatWorker(Map<String, Object?> params) async {
   final source = params['source'] as Uint8List;
   final target = (params['target'] as String).toLowerCase();
   final quality = (params['quality'] as num?)?.toInt() ?? 90;

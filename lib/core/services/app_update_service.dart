@@ -22,11 +22,12 @@ class AppUpdateInfo {
     this.releaseNotes = const [],
   });
 
-  factory AppUpdateInfo.upToDate({String currentVersion = '1.0.0'}) {
+  factory AppUpdateInfo.upToDate({String? currentVersion}) {
+    final ver = currentVersion ?? AppUpdateService.currentAppVersion;
     return AppUpdateInfo(
       hasUpdate: false,
-      currentVersion: currentVersion,
-      latestVersion: currentVersion,
+      currentVersion: ver,
+      latestVersion: ver,
       downloadUrl: AppStrings.playStoreUrl,
     );
   }
@@ -40,7 +41,8 @@ class AppUpdateService {
 
   static const String keyPostponedTime = 'app_update_postponed_time_ms';
   static const Duration postponeDuration = Duration(days: 2);
-  static const String currentAppVersion = '1.0.0';
+  static String currentAppVersion = '1.0.1';
+  static String currentBuildNumber = '2';
 
   /// Optional remote manifest URL if hosting an update JSON manifest.
   String? remoteManifestUrl;

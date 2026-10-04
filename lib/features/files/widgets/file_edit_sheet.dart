@@ -1,14 +1,17 @@
 // ignore_for_file: deprecated_member_use
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/decode_size.dart';
 import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/output_saver.dart';
@@ -16,9 +19,10 @@ import '../../../core/services/pdf_service.dart';
 import '../../../core/services/platform_image_encoder.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/services/thumbnail_service.dart';
+import '../../../shared/services/watermark_helper.dart';
 import '../../camera/presentation/screens/magic_remove_screen.dart';
 import '../../format_converter/notifiers/format_converter_notifier.dart'
-    show ConvertFormat;
+    show ConvertFormat, convertFormatWorker;
 import '../../pdf_compress/models/pdf_compress_state.dart'
     show CompressionLevel;
 import '../notifiers/operation_library_notifier.dart';
@@ -215,6 +219,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     if (_isBusy) return;
     final choice = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       backgroundColor: const Color(0xFF1E2129),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -387,6 +392,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     if (_isBusy) return;
     final selectedFormat = await showModalBottomSheet<ConvertFormat>(
       context: context,
+      useRootNavigator: true,
       backgroundColor: const Color(0xFF1E2129),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -456,21 +462,46 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         throw Exception('Could not read image file');
       }
 
+      AppSettingsState settings;
+      try {
+        settings = ref.read(appSettingsProvider);
+      } catch (_) {
+        settings = const AppSettingsState(savePath: '');
+      }
+      if (WatermarkHelper.cachedIconBytes == null) {
+        try {
+          await WatermarkHelper.loadIconBytes();
+        } catch (_) {}
+      }
+
       Uint8List? converted;
-      if (selectedFormat == ConvertFormat.webp) {
+      if (selectedFormat == ConvertFormat.webp && Platform.isAndroid) {
+        var imageToEncode = bytes;
+        final enableWatermark = settings.enableGlobalWatermark;
+        if (enableWatermark) {
+          var decoded = img.decodeImage(bytes);
+          if (decoded != null) {
+            decoded = WatermarkHelper.applyToImage(
+              decoded,
+              settings,
+              iconBytes: WatermarkHelper.cachedIconBytes,
+            );
+            imageToEncode = Uint8List.fromList(img.encodePng(decoded));
+          }
+        }
         converted = await PlatformImageEncoder.encodeWebP(
-          bytes,
+          imageToEncode,
           quality: 90,
         );
-      } else {
-        converted = await ImageIsolateService.transform(
-          bytes,
-          ImageTransformRequest(
-            targetExtension: selectedFormat.extension,
-            quality: 90,
-          ),
-        );
       }
+
+      converted ??= await compute(convertFormatWorker, <String, Object?>{
+        'source': bytes,
+        'target': selectedFormat.codec,
+        'quality': 90,
+        'settings': settings,
+        'iconBytes': WatermarkHelper.cachedIconBytes,
+      });
 
       if (converted == null || converted.isEmpty) {
         throw Exception('Image conversion failed');
@@ -586,6 +617,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   Future<void> _compressPdf() async {
     final selectedLevel = await showModalBottomSheet<CompressionLevel>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF22252D),
       shape: const RoundedRectangleBorder(
@@ -686,6 +718,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
     final result = await showModalBottomSheet<_SplitOptionsResult>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF22252D),
       shape: const RoundedRectangleBorder(
@@ -803,6 +836,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
     final result = await showModalBottomSheet<_PdfToImagesOptionsResult>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: const Color(0xFF22252D),
       shape: const RoundedRectangleBorder(
@@ -918,6 +952,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     if (_item.isPdf) {
       final choice = await showModalBottomSheet<String>(
         context: context,
+        useRootNavigator: true,
         backgroundColor: const Color(0xFF22252D),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -979,6 +1014,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     } else if (isTiff) {
       final choice = await showModalBottomSheet<String>(
         context: context,
+        useRootNavigator: true,
         backgroundColor: const Color(0xFF22252D),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1075,23 +1111,39 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    // Bottom menu bar height in AppShell: 84.0 + math.max(10.0, bottomPadding)
+    final bottomMenuHeight = 84.0 + math.max(10.0, bottomPadding);
+    final topPadding = MediaQuery.paddingOf(context).top;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    // Available height strictly above the bottom menu bar and below the top status bar:
+    final maxAvailableHeight = math.max(
+      200.0,
+      screenHeight - bottomMenuHeight - topPadding - 16,
+    );
     final ext = _item.extension.toLowerCase();
     final isTiff =
         ext == 'tiff' || ext == 'tif' || _item.mimeType == 'image/tiff';
 
     return Container(
+      margin: EdgeInsets.fromLTRB(10, 0, 10, bottomMenuHeight + 8),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
+        maxHeight: maxAvailableHeight,
       ),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF181B22) : scheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.25),
+            blurRadius: 18,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
             // Drag handle
             Container(
               margin: const EdgeInsets.only(top: 10, bottom: 6),
@@ -1314,12 +1366,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
             // Tools and Actions section
             Container(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                12,
-                16,
-                bottomInset > 0 ? bottomInset + 10 : 20,
-              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               decoration: BoxDecoration(
                 color: isDark
                     ? const Color(0xFF14161C)
@@ -1509,8 +1556,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 
   static String _formatSize(int bytes) {
