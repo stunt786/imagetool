@@ -87,9 +87,12 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     }
 
     var pagesExceeded = false;
+    var sizeTotalExceeded = false;
     final validFilesToAdd = <MergePdfItem>[];
     var currentTotalPages =
         state.files.fold<int>(0, (sum, f) => sum + (f.pageCount ?? 0));
+    var currentTotalBytes =
+        state.files.fold<int>(0, (sum, f) => sum + f.sizeBytes);
 
     for (final item in newFiles) {
       int? pageCount;
@@ -106,7 +109,17 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
         continue;
       }
 
+      if (currentTotalBytes + item.sizeBytes >
+          FileTypeDetector.maxMergeCombinedBytes) {
+        sizeTotalExceeded = true;
+        try {
+          await File(item.path).delete();
+        } catch (_) {}
+        continue;
+      }
+
       currentTotalPages += pages;
+      currentTotalBytes += item.sizeBytes;
       validFilesToAdd.add(item.copyWith(pageCount: pageCount));
     }
 
@@ -121,13 +134,18 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
     if (sizeExceededCount > 0) {
       notices.add(
         sizeExceededCount == 1
-            ? '1 PDF exceeded the 20 MB size limit and was skipped.'
-            : '$sizeExceededCount PDFs exceeded the 20 MB size limit and were skipped.',
+            ? '1 PDF exceeded the ${FileTypeDetector.maxPdfSizeLabel} size limit and was skipped.'
+            : '$sizeExceededCount PDFs exceeded the ${FileTypeDetector.maxPdfSizeLabel} size limit and were skipped.',
       );
     }
     if (pagesExceeded) {
       notices.add(
         'Some files could not be added because combined pages cannot exceed ${FileTypeDetector.maxMergeCombinedPages} pages.',
+      );
+    }
+    if (sizeTotalExceeded) {
+      notices.add(
+        'Some files could not be added because the combined size cannot exceed ${FileTypeDetector.maxMergeCombinedBytes ~/ (1024 * 1024)} MB.',
       );
     }
     if (countCapped) {
@@ -190,13 +208,24 @@ class PdfMergeNotifier extends Notifier<PdfMergeState> {
       return null;
     }
 
+    var totalBytes = 0;
     for (final file in state.files) {
       if (file.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
         state = state.copyWith(
-          errorMessage: 'File "${file.name}" exceeds the 20 MB size limit.',
+          errorMessage:
+              'File "${file.name}" exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.',
         );
         return null;
       }
+      totalBytes += file.sizeBytes;
+    }
+
+    if (totalBytes > FileTypeDetector.maxMergeCombinedBytes) {
+      state = state.copyWith(
+        errorMessage:
+            'Combined size exceeds the limit of ${FileTypeDetector.maxMergeCombinedBytes ~/ (1024 * 1024)} MB.',
+      );
+      return null;
     }
 
     final totalPages =

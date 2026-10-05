@@ -41,14 +41,28 @@ class DetectedFileType {
 /// some pickers return files without an extension), so signature bytes win
 /// whenever they are available.
 abstract final class FileTypeDetector {
-  /// Maximum PDF size allowed across all PDF modules (20 MB).
-  static const int maxPdfSizeBytes = 20 * 1024 * 1024;
+  /// Maximum PDF size allowed across all PDF modules (50 MB).
+  static const int maxPdfSizeBytes = 50 * 1024 * 1024;
+
+  /// Human-readable form of [maxPdfSizeBytes] ("50 MB").
+  ///
+  /// User-facing messages must interpolate this instead of hardcoding the
+  /// number, so the limit and its wording can never drift apart.
+  static String get maxPdfSizeLabel =>
+      '${maxPdfSizeBytes ~/ (1024 * 1024)} MB';
 
   /// Maximum number of PDFs allowed in PDF Merge (3 files).
   static const int maxMergePdfCount = 3;
 
   /// Maximum combined pages allowed in PDF Merge (1200 pages).
   static const int maxMergeCombinedPages = 1200;
+
+  /// Maximum combined size allowed in PDF Merge (100 MB).
+  ///
+  /// Merging buffers every input document in memory at once, so the per-file
+  /// limit alone is not a safe bound: three 50 MB files would still need well
+  /// over twice that in RAM. This caps the total instead.
+  static const int maxMergeCombinedBytes = 100 * 1024 * 1024;
 
   /// Maximum number of images allowed for Image Resize at a time (25 images).
   static const int maxResizeImageCount = 25;

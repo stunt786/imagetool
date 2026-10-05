@@ -187,6 +187,28 @@ class PdfCompressionPreset {
     );
   }
 
+  /// Returns a copy of this preset with a different [timeBudget].
+  ///
+  /// The engine derives the budget from the input size, so a preset that
+  /// crossed the isolate boundary without one still gets a size-appropriate
+  /// value while every other setting is preserved.
+  PdfCompressionPreset withTimeBudget(Duration budget) => PdfCompressionPreset(
+        jpegQuality: jpegQuality,
+        colorImageQuality: colorImageQuality,
+        greyImageQuality: greyImageQuality,
+        monoImageQuality: monoImageQuality,
+        maxImageLongSide: maxImageLongSide,
+        maxDecodePixels: maxDecodePixels,
+        jpegSkipBytesPerPixel: jpegSkipBytesPerPixel,
+        minImageBytes: minImageBytes,
+        deflateStreams: deflateStreams,
+        timeBudget: budget,
+        unembedSimpleFonts: unembedSimpleFonts,
+        unembedComplexFonts: unembedComplexFonts,
+        unembedUnusualFonts: unembedUnusualFonts,
+        flatten: flatten,
+      );
+
   Map<String, Object?> toMap() => <String, Object?>{
         'jpegQuality': jpegQuality,
         'colorImageQuality': colorImageQuality,
@@ -317,21 +339,74 @@ class PdfCompressionEngine {
   PdfCompressionEngine._();
 
   /// Refuse to load absurdly large files into memory.
-  static const int maxInputBytes = 320 * 1024 * 1024;
+  ///
+  /// This is an engine backstop, not the user-facing upload limit (see
+  /// `FileTypeDetector.maxPdfSizeBytes`). It sits above that limit so a file
+  /// the picker accepted is never rejected here.
+  static const int maxInputBytes = 64 * 1024 * 1024;
+
+  /// Budget applied to a document of one [_budgetScaleStep] or less.
+  static const Duration _baseTimeBudget = Duration(minutes: 3);
+
+  /// Each step of this many input bytes adds [_budgetStepBudget].
+  ///
+  /// The step divides the 50 MB upload limit evenly, so the budget increases
+  /// monotonically right up to the limit rather than flat-lining partway
+  /// through the accepted range.
+  static const int _budgetScaleStep = 6 * 1024 * 1024;
+  static const Duration _budgetStepBudget = Duration(seconds: 15);
+
+  /// Ceiling for the scaled time budget, so the UI can never wait forever.
+  static const Duration _maxTimeBudget = Duration(minutes: 5);
+
+  /// Scales the image re-encoding budget with the input size.
+  ///
+  /// A flat budget that comfortably covers a small scan would abandon a large
+  /// document before touching most of its images, silently producing a weak
+  /// result. Larger inputs get proportionally more time instead, up to a cap
+  /// so a pathological document still terminates.
+  static Duration timeBudgetForInputBytes(int inputBytes) {
+    if (inputBytes <= _budgetScaleStep) return _baseTimeBudget;
+    final steps = inputBytes ~/ _budgetScaleStep;
+    final scaled = _baseTimeBudget + _budgetStepBudget * steps;
+    return scaled > _maxTimeBudget ? _maxTimeBudget : scaled;
+  }
+
+  /// Wall-clock ceiling for a compression run.
+  ///
+  /// Must comfortably exceed the scaled time budget because the budget only
+  /// governs image re-encoding, while the remaining parse, rewrite and disk
+  /// flush phases are unbounded by it.
+  static Duration timeoutForInputBytes(int inputBytes) =>
+      timeBudgetForInputBytes(inputBytes) * 2 + const Duration(minutes: 2);
 
   /// Compresses [inputPath] into [outputPath] on a background isolate while
   /// reporting progress in the 0.0-1.0 range.
   ///
   /// [outputPath] is always written: either the compressed document or a copy
   /// of the original when no reduction was possible.
+  ///
+  /// When [timeout] is omitted it is derived from the input size via
+  /// [timeoutForInputBytes], so large documents are not killed mid-run.
   static Future<PdfCompressionOutcome> compressFileInIsolate({
     required String inputPath,
     required String outputPath,
     required double qualityFactor,
     PdfCompressionPreset? preset,
     void Function(double progress)? onProgress,
-    Duration timeout = const Duration(minutes: 10),
+    Duration? timeout,
   }) async {
+    var effectiveTimeout = timeout;
+    if (effectiveTimeout == null) {
+      var inputBytes = 0;
+      try {
+        inputBytes = await File(inputPath).length();
+      } catch (_) {
+        // An unreadable input fails inside the isolate with a real message.
+      }
+      effectiveTimeout = timeoutForInputBytes(inputBytes);
+    }
+
     final receivePort = ReceivePort();
     final errorPort = ReceivePort();
     final exitPort = ReceivePort();
@@ -403,9 +478,12 @@ class PdfCompressionEngine {
       );
 
       return await completer.future.timeout(
-        timeout,
+        effectiveTimeout,
         onTimeout: () {
-          throw TimeoutException('PDF compression timed out.', timeout);
+          throw TimeoutException(
+            'PDF compression timed out.',
+            effectiveTimeout,
+          );
         },
       );
     } finally {
@@ -443,11 +521,19 @@ class PdfCompressionEngine {
       );
     }
 
+    // The re-encoding budget is derived from the input size rather than taken
+    // verbatim from the preset, so a preset that crossed the isolate boundary
+    // still gets a budget appropriate for the document it is about.
+    final budget = timeBudgetForInputBytes(inputSize);
+    final effectivePreset = budget == preset.timeBudget
+        ? preset
+        : preset.withTimeBudget(budget);
+
     onProgress?.call(0.02);
     final input = await inputFile.readAsBytes();
 
     var effectiveInput = input;
-    if (preset.flatten) {
+    if (effectivePreset.flatten) {
       try {
         final syncDoc = syncfusion.PdfDocument(inputBytes: input);
         try {
@@ -467,7 +553,7 @@ class PdfCompressionEngine {
       }
     }
 
-    final rewriter = _PdfRewriter(effectiveInput, preset);
+    final rewriter = _PdfRewriter(effectiveInput, effectivePreset);
     final rewritten = await rewriter.run(outputPath, onProgress: onProgress);
 
     final improved = rewritten.improved || (rewritten.outputBytes < inputSize);

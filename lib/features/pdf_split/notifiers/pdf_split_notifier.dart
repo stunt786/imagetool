@@ -51,7 +51,8 @@ class PdfSplitNotifier extends Notifier<PdfSplitState> {
             : (file.bytes?.length ?? 0));
     if (fileSize > FileTypeDetector.maxPdfSizeBytes) {
       state = state.copyWith(
-        errorMessage: 'Selected PDF exceeds the 20 MB size limit.',
+        errorMessage:
+            'Selected PDF exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.',
       );
       return;
     }

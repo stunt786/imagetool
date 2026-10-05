@@ -310,8 +310,8 @@ class PdfService {
 /// one copy.
 ///
 /// `Uint8List.fromList(List<int>.from(x))` allocated two full buffers: the
-/// intermediate `List<int>` alone roughly doubled a 20 MB PDF before the byte
-/// copy even started.
+/// intermediate `List<int>` alone roughly doubled the payload before the byte
+/// copy even started, which at the current upload limit is hundreds of MB.
 static Uint8List _workerBytes(Object? value) {
   if (value is Uint8List) return value;
   if (value is List<int>) return Uint8List.fromList(value);
@@ -881,12 +881,26 @@ static Uint8List _workerBytes(Object? value) {
   }
 
   /// Gets the number of pages in a PDF file.
+  ///
+  /// Runs on a background isolate: the document is read and parsed in full, and
+  /// with the upload limit at 300 MB that parse is far too heavy for the UI
+  /// thread. `compute` is bypassed under `flutter test`, matching the rest of
+  /// this service.
   Future<int> getPageCount(String inputPath) async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return _pageCountWorker(inputPath);
+    }
+    return compute(_pageCountWorker, inputPath);
+  }
+
+  static int _pageCountWorker(String inputPath) {
     final syncDoc =
         syncfusion.PdfDocument(inputBytes: File(inputPath).readAsBytesSync());
-    final count = syncDoc.pages.count;
-    syncDoc.dispose();
-    return count;
+    try {
+      return syncDoc.pages.count;
+    } finally {
+      syncDoc.dispose();
+    }
   }
 
   /// Renders a specific page as a PNG image for thumbnail preview.

@@ -70,7 +70,8 @@ class PrivateToPublicPdfManager {
   Future<String> importPickedFile(PickedFile file) async {
     if (file.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
       throw StateError(
-        'File "${file.name}" exceeds the 20 MB size limit.',
+        'File "${file.name}" exceeds the '
+        '${FileTypeDetector.maxPdfSizeLabel} size limit.',
       );
     }
 
@@ -82,7 +83,8 @@ class PrivateToPublicPdfManager {
           final len = await srcFile.length();
           if (len > FileTypeDetector.maxPdfSizeBytes) {
             throw StateError(
-              'File "${file.name}" exceeds the 20 MB size limit.',
+              'File "${file.name}" exceeds the '
+              '${FileTypeDetector.maxPdfSizeLabel} size limit.',
             );
           }
           return copyToSandbox(sourcePath);
@@ -106,7 +108,8 @@ class PrivateToPublicPdfManager {
     }
     if (bytes.length > FileTypeDetector.maxPdfSizeBytes) {
       throw StateError(
-        'File "${file.name}" exceeds the 20 MB size limit.',
+        'File "${file.name}" exceeds the '
+        '${FileTypeDetector.maxPdfSizeLabel} size limit.',
       );
     }
     return writeToSandbox(bytes, file.name);

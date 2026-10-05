@@ -6,6 +6,7 @@ import '../../../core/services/app_review_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/pdf_compress_state.dart';
@@ -148,6 +149,15 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
                     'Select a PDF file to compress',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Up to ${FileTypeDetector.maxPdfSizeLabel}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.7),
                     ),
                     textAlign: TextAlign.center,
                   ),

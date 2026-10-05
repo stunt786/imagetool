@@ -30,11 +30,20 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
   /// compressed, the watermark is skipped and the reason is surfaced in the UI.
   static const int _watermarkPageLimit = 400;
 
+  /// Byte ceiling for the watermark pass, applied to the *compressed* file it
+  /// has to read back. Page count alone is not a memory bound: a 300-page
+  /// document of scanned images can weigh tens of megabytes, and Syncfusion
+  /// expands that several times over while stamping.
+  static const int _watermarkInputLimit = 32 * 1024 * 1024;
+
   /// The raster fallback renders every page and loses the text layer, so it is
   /// reserved for small documents whose embedded images cannot be decoded by
   /// the compression engine (JPEG 2000 / JBIG2 / CCITT).
   static const int _rasterPageLimit = 24;
-  static const int _rasterInputLimit = 25 * 1024 * 1024;
+
+  /// Byte ceiling for the raster fallback. It buffers every rendered page in
+  /// memory at once, so it stays well below the upload limit by design.
+  static const int _rasterInputLimit = 24 * 1024 * 1024;
 
   @override
   PdfCompressState build() => const PdfCompressState();
@@ -63,7 +72,8 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
             : (file.bytes?.length ?? 0));
     if (fileSize > FileTypeDetector.maxPdfSizeBytes) {
       state = state.copyWith(
-        errorMessage: 'Selected PDF exceeds the 20 MB size limit.',
+        errorMessage:
+            'Selected PDF exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.',
       );
       return;
     }
@@ -252,8 +262,16 @@ class PdfCompressNotifier extends Notifier<PdfCompressState> {
 
       // 3) Optional global watermark, applied to the already compressed file.
       if (applyWatermark && didImprove) {
+        var compressedSize = outcome.outputBytes;
+        try {
+          compressedSize = await File(workingPath).length();
+        } catch (_) {}
+
         if (outcome.pageCount > _watermarkPageLimit) {
           note = 'Watermark skipped for this very large document.';
+        } else if (compressedSize > _watermarkInputLimit) {
+          note = 'Watermark skipped: it would need to hold the whole '
+              '${PdfService.formatFileSize(compressedSize)} file in memory.';
         } else {
           state = state.copyWith(progress: 0.9);
           try {

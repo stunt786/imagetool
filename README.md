@@ -34,6 +34,7 @@
 * **100% Offline & Privacy-First:** No accounts, no cloud uploads, and zero tracking. Every byte is processed strictly on your device.
 * **Isolate-Powered Performance:** Heavy operations (JPEG/PNG/WEBP encoding, projective homography perspective warping, ML Kit OCR, and PDF stream compression) execute inside background Dart Isolates (`Isolate.run` and `compute`), keeping the UI silky smooth at 60+ FPS.
 * **Sandbox-to-Public Clean Storage:** Two-phase pipeline (`PrivateToPublicPdfManager` & `OutputSaver`) safely processes files in temporary sandbox caches before saving to user-designated public directories (Pictures, Downloads, Documents) with a guaranteed 0 MB orphaned cache cleanup.
+* **50 MB PDF Upload Limit:** PDF tools accept documents up to 50 MB (`FileTypeDetector.maxPdfSizeBytes`), enforced uniformly across Compress, Merge, Split, Convert and the viewer. The compression engine scales its time budget with the input size, and memory-heavy steps (watermarking, raster fallback, merging) keep their own tighter internal caps so a large file degrades gracefully instead of crashing.
 * **Modern Material 3 Design:** Fully responsive interface supporting dynamic light and dark themes, gesture-driven controls, and fluid navigation.
 
 ---
@@ -104,6 +105,7 @@
   - *Extreme (0.15x):* Aggressive reduction for strict portal upload caps.
 - **Isolate-Powered Engine:** Optimizes PDF stream dictionaries, deduplicates embedded fonts, and recompresses raster XObjects via `syncfusion_flutter_pdf`.
 - **Metrics & Safety Fallback:** Live before/after file size comparison and percentage reduction; preserves original file if compressed output is larger.
+- **Up to 50 MB per PDF:** The image re-encoding budget scales with the input size (3 min base, +15 s per 6 MB, capped at 5 min), so a large document is not abandoned halfway. Watermarking and the lossy raster fallback stay gated on their own size and page caps and report why they were skipped.
 
 #### 🔗 PDF Merger (`/pdfs/merge`)
 - **Combine Multiple Documents:** Merge disparate PDF documents into a single unified file.

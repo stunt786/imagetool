@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/models/operation_folder.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/decode_size.dart';
+import '../../../core/utils/file_type_detector.dart';
 import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
@@ -569,6 +570,22 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     if (selectedLevel == null || !mounted) return;
 
     if (_isBusy) return;
+
+    if (_item.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'This PDF exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.',
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+
     setState(() {
       _isBusy = true;
       _busyLabel = 'Compressing PDF in background...';

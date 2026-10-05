@@ -61,7 +61,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     if (file.lengthSync() > FileTypeDetector.maxPdfSizeBytes) {
       setState(() {
         _isLoading = false;
-        _error = 'This PDF exceeds the 20 MB size limit.';
+        _error =
+            'This PDF exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.';
       });
       return;
     }
