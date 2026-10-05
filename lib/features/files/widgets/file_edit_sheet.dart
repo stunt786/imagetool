@@ -68,6 +68,14 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
   int _imageVersion = 0;
   bool _isBusy = false;
   String? _busyLabel;
+  // Handle, header and tool sections are measured after the first frame so
+  // the preview can take exactly what is left of the sheet's height.
+  final _handleKey = GlobalKey();
+  final _headerKey = GlobalKey();
+  final _tailKey = GlobalKey();
+  double? _handleHeight;
+  double? _headerHeight;
+  double? _tailHeight;
 
   @override
   void initState() {
@@ -1057,6 +1065,36 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final isTiff =
         ext == 'tiff' || ext == 'tif' || _item.mimeType == 'image/tiff';
 
+    // Measure the fixed blocks once they have a real height: the preview
+    // then takes exactly the space that is left, and when the blocks do not
+    // fit the sheet body scrolls instead of overflowing.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final handle = _handleKey.currentContext?.size?.height;
+      final header = _headerKey.currentContext?.size?.height;
+      final tail = _tailKey.currentContext?.size?.height;
+      if (handle == null || header == null || tail == null) return;
+      if (handle == _handleHeight &&
+          header == _headerHeight &&
+          tail == _tailHeight) {
+        return;
+      }
+      setState(() {
+        _handleHeight = handle;
+        _headerHeight = header;
+        _tailHeight = tail;
+      });
+    });
+
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final handleHeight = _handleHeight ?? 20.0;
+    final headerHeight = _headerHeight ?? 72.0 * textScale;
+    final tailHeight = _tailHeight ?? 251.0 * textScale;
+    final previewHeight = math.max(
+      120.0,
+      maxAvailableHeight - handleHeight - headerHeight - tailHeight,
+    );
+
     return Container(
       margin: EdgeInsets.fromLTRB(10, 0, 10, bottomMenuHeight + 8),
       constraints: BoxConstraints(
@@ -1074,424 +1112,438 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-            // Drag handle
-            Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 6),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _item.fileName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : scheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          '${_formatSize(_item.sizeBytes)} · ${_formatDate(_item.createdAt)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark
-                                ? Colors.white60
-                                : scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: Icon(
-                      Icons.close_rounded,
-                      color: isDark ? Colors.white70 : scheme.onSurfaceVariant,
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-
-            // Preview Area
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+              // Drag handle
+              Container(
+                key: _handleKey,
+                margin: const EdgeInsets.only(top: 10, bottom: 6),
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white10),
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: _item.isPdf
-                    ? FutureBuilder<Uint8List?>(
-                        future: PdfService.instance.renderPageThumbnail(
-                          inputPath: _item.path,
-                          pageNumber: 1,
-                          maxWidth: 600,
-                        ),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData && snapshot.data != null) {
-                            return InkWell(
-                              onTap: () => _openPdfViewer(context),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                alignment: Alignment.center,
-                                children: [
-                                  InteractiveViewer(
-                                    minScale: 0.8,
-                                    maxScale: 4.0,
-                                    child: Center(
-                                      child: Image.memory(
-                                        snapshot.data!,
-                                        fit: BoxFit.contain,
-                                        cacheWidth: zoomDecodeWidthFor(context),
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    bottom: 12,
-                                    right: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black87,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.visibility_outlined,
-                                            size: 14,
-                                            color: Colors.white,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'Tap to view PDF',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }
-                          return InkWell(
-                            onTap: () => _openPdfViewer(context),
-                            child: const Center(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.picture_as_pdf_rounded,
-                                      size: 64,
-                                      color: Color(0xFFE53935),
-                                    ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'PDF Document · Tap to View',
-                                      style: TextStyle(color: Colors.white70),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : isTiff
-                        ? FutureBuilder<String?>(
-                            key: ValueKey('${_item.path}_$_imageVersion'),
-                            future: ThumbnailService.instance.thumbnailFor(
-                              _item.path,
-                              maxSide: 2048,
-                            ),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF00E5FF),
-                                  ),
-                                );
-                              }
-                              final thumbPath = snapshot.data;
-                              if (thumbPath != null &&
-                                  File(thumbPath).existsSync()) {
-                                return InteractiveViewer(
-                                  minScale: 0.8,
-                                  maxScale: 4.0,
-                                  child: Center(
-                                    child: Image.file(
-                                      File(thumbPath),
-                                      key: ValueKey(
-                                          '${thumbPath}_$_imageVersion'),
-                                      fit: BoxFit.contain,
-                                      cacheWidth: zoomDecodeWidthFor(context),
-                                      errorBuilder: (_, __, ___) =>
-                                          const Center(
-                                        child: Icon(
-                                          Icons.broken_image_rounded,
-                                          size: 48,
-                                          color: Colors.white38,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }
-                              return const Center(
-                                child: Icon(
-                                  Icons.broken_image_rounded,
-                                  size: 48,
-                                  color: Colors.white38,
-                                ),
-                              );
-                            },
-                          )
-                        : InteractiveViewer(
-                            minScale: 0.8,
-                            maxScale: 4.0,
-                            child: Center(
-                              child: Image.file(
-                                File(_item.path),
-                                key: ValueKey('${_item.path}_$_imageVersion'),
-                                fit: BoxFit.contain,
-                                cacheWidth: zoomDecodeWidthFor(context),
-                                errorBuilder: (_, __, ___) => const Center(
-                                  child: Icon(
-                                    Icons.broken_image_rounded,
-                                    size: 48,
-                                    color: Colors.white38,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
               ),
-            ),
 
-            // Tools and Actions section
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF14161C)
-                    : scheme.surfaceContainerHighest,
-                border: Border(
-                  top: BorderSide(
-                    color: isDark
-                        ? Colors.white10
-                        : scheme.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_isBusy) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
+              // Header
+              Padding(
+                key: _headerKey,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF00E5FF),
+                          Text(
+                            _item.fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : scheme.onSurface,
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _busyLabel ?? 'Processing...',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF00E5FF),
-                                fontWeight: FontWeight.w600,
-                              ),
+                          Text(
+                            '${_formatSize(_item.sizeBytes)} · ${_formatDate(_item.createdAt)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isDark
+                                  ? Colors.white60
+                                  : scheme.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Close',
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: isDark
+                            ? Colors.white70
+                            : scheme.onSurfaceVariant,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
-                  const Text(
-                    'MODIFY WITH TOOLS',
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.8,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF00E5FF),
+                ),
+              ),
+
+              // Preview Area
+              SizedBox(
+                height: previewHeight,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _item.isPdf
+                      ? FutureBuilder<Uint8List?>(
+                          future: PdfService.instance.renderPageThumbnail(
+                            inputPath: _item.path,
+                            pageNumber: 1,
+                            maxWidth: 600,
+                          ),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData && snapshot.data != null) {
+                              return InkWell(
+                                onTap: () => _openPdfViewer(context),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  alignment: Alignment.center,
+                                  children: [
+                                    InteractiveViewer(
+                                      minScale: 0.8,
+                                      maxScale: 4.0,
+                                      child: Center(
+                                        child: Image.memory(
+                                          snapshot.data!,
+                                          fit: BoxFit.contain,
+                                          cacheWidth:
+                                              zoomDecodeWidthFor(context),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 12,
+                                      right: 12,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black87,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.visibility_outlined,
+                                              size: 14,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Tap to view PDF',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            return InkWell(
+                              onTap: () => _openPdfViewer(context),
+                              child: const Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.picture_as_pdf_rounded,
+                                        size: 64,
+                                        color: Color(0xFFE53935),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'PDF Document · Tap to View',
+                                        style: TextStyle(color: Colors.white70),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : isTiff
+                          ? FutureBuilder<String?>(
+                              key: ValueKey('${_item.path}_$_imageVersion'),
+                              future: ThumbnailService.instance.thumbnailFor(
+                                _item.path,
+                                maxSide: 2048,
+                              ),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF00E5FF),
+                                    ),
+                                  );
+                                }
+                                final thumbPath = snapshot.data;
+                                if (thumbPath != null &&
+                                    File(thumbPath).existsSync()) {
+                                  return InteractiveViewer(
+                                    minScale: 0.8,
+                                    maxScale: 4.0,
+                                    child: Center(
+                                      child: Image.file(
+                                        File(thumbPath),
+                                        key: ValueKey(
+                                            '${thumbPath}_$_imageVersion'),
+                                        fit: BoxFit.contain,
+                                        cacheWidth: zoomDecodeWidthFor(context),
+                                        errorBuilder: (_, __, ___) =>
+                                            const Center(
+                                          child: Icon(
+                                            Icons.broken_image_rounded,
+                                            size: 48,
+                                            color: Colors.white38,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return const Center(
+                                  child: Icon(
+                                    Icons.broken_image_rounded,
+                                    size: 48,
+                                    color: Colors.white38,
+                                  ),
+                                );
+                              },
+                            )
+                          : InteractiveViewer(
+                              minScale: 0.8,
+                              maxScale: 4.0,
+                              child: Center(
+                                child: Image.file(
+                                  File(_item.path),
+                                  key: ValueKey('${_item.path}_$_imageVersion'),
+                                  fit: BoxFit.contain,
+                                  cacheWidth: zoomDecodeWidthFor(context),
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(
+                                      Icons.broken_image_rounded,
+                                      size: 48,
+                                      color: Colors.white38,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                ),
+              ),
+
+              // Tools and Actions section
+              Container(
+                key: _tailKey,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF14161C)
+                      : scheme.surfaceContainerHighest,
+                  border: Border(
+                    top: BorderSide(
+                      color: isDark
+                          ? Colors.white10
+                          : scheme.outlineVariant.withValues(alpha: 0.3),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  if (_item.isPdf)
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _ToolPill(
-                          icon: Icons.photo_library_outlined,
-                          label: 'Save Pages as Images',
-                          color: const Color(0xFF00E676),
-                          enabled: !_isBusy,
-                          onTap: () => _savePdfPagesAsImages(),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isBusy) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
                         ),
-                        _ToolPill(
-                          icon: Icons.visibility_outlined,
-                          label: 'Open PDF',
-                          color: const Color(0xFF29B6F6),
-                          enabled: !_isBusy,
-                          onTap: () => _openPdfViewer(context),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color:
+                                const Color(0xFF00E5FF).withValues(alpha: 0.3),
+                          ),
                         ),
-                        _ToolPill(
-                          icon: Icons.compress_rounded,
-                          label: 'Compress',
-                          color: const Color(0xFFFFA726),
-                          enabled: !_isBusy,
-                          onTap: () => _compressPdf(),
-                        ),
-                        _ToolPill(
-                          icon: Icons.call_split_rounded,
-                          label: 'Split',
-                          color: const Color(0xFFFF7043),
-                          enabled: !_isBusy,
-                          onTap: () => _splitPdf(),
-                        ),
-                      ],
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _ToolPill(
-                          icon: Icons.crop_rotate_rounded,
-                          label: 'Crop',
-                          color: const Color(0xFF29B6F6),
-                          enabled: !_isBusy,
-                          onTap: () => _openCrop(),
-                        ),
-                        _ToolPill(
-                          icon: Icons.tune_rounded,
-                          label: 'Filters',
-                          color: const Color(0xFFAB47BC),
-                          enabled: !_isBusy,
-                          onTap: () => _openFilter(),
-                        ),
-                        _ToolPill(
-                          icon: Icons.auto_fix_high_rounded,
-                          label: 'Magic Clean',
-                          color: const Color(0xFF00E676),
-                          enabled: !_isBusy,
-                          onTap: () => _openMagicRemove(),
-                        ),
-                        _ToolPill(
-                          icon: Icons.photo_size_select_large_rounded,
-                          label: 'Resize',
-                          color: const Color(0xFFFFA726),
-                          enabled: !_isBusy,
-                          onTap: () => _resizeImage(),
-                        ),
-                        _ToolPill(
-                          icon: Icons.swap_horiz_rounded,
-                          label: 'Convert',
-                          color: const Color(0xFFFF7043),
-                          enabled: !_isBusy,
-                          onTap: () => _convertFormat(),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 14),
-                  Divider(
-                    height: 1,
-                    color: isDark
-                        ? Colors.white12
-                        : scheme.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 10),
-                  // File operations row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.share_outlined,
-                          label: 'Share',
-                          onTap: () => _share(context),
-                        ),
-                      ),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.download_outlined,
-                          label: (_item.isPdf || isTiff) ? 'Export' : 'Save',
-                          onTap: () => _save(context),
-                        ),
-                      ),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.drive_file_rename_outline,
-                          label: 'Rename',
-                          onTap: () => _rename(context),
-                        ),
-                      ),
-                      Expanded(
-                        child: _ActionButton(
-                          icon: Icons.delete_outline,
-                          label: 'Delete',
-                          isDestructive: true,
-                          onTap: () => _delete(context),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF00E5FF),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _busyLabel ?? 'Processing...',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF00E5FF),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                ],
+                    const Text(
+                      'MODIFY WITH TOOLS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00E5FF),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_item.isPdf)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _ToolPill(
+                            icon: Icons.photo_library_outlined,
+                            label: 'Save Pages as Images',
+                            color: const Color(0xFF00E676),
+                            enabled: !_isBusy,
+                            onTap: () => _savePdfPagesAsImages(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.visibility_outlined,
+                            label: 'Open PDF',
+                            color: const Color(0xFF29B6F6),
+                            enabled: !_isBusy,
+                            onTap: () => _openPdfViewer(context),
+                          ),
+                          _ToolPill(
+                            icon: Icons.compress_rounded,
+                            label: 'Compress',
+                            color: const Color(0xFFFFA726),
+                            enabled: !_isBusy,
+                            onTap: () => _compressPdf(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.call_split_rounded,
+                            label: 'Split',
+                            color: const Color(0xFFFF7043),
+                            enabled: !_isBusy,
+                            onTap: () => _splitPdf(),
+                          ),
+                        ],
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _ToolPill(
+                            icon: Icons.crop_rotate_rounded,
+                            label: 'Crop',
+                            color: const Color(0xFF29B6F6),
+                            enabled: !_isBusy,
+                            onTap: () => _openCrop(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.tune_rounded,
+                            label: 'Filters',
+                            color: const Color(0xFFAB47BC),
+                            enabled: !_isBusy,
+                            onTap: () => _openFilter(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.auto_fix_high_rounded,
+                            label: 'Magic Clean',
+                            color: const Color(0xFF00E676),
+                            enabled: !_isBusy,
+                            onTap: () => _openMagicRemove(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.photo_size_select_large_rounded,
+                            label: 'Resize',
+                            color: const Color(0xFFFFA726),
+                            enabled: !_isBusy,
+                            onTap: () => _resizeImage(),
+                          ),
+                          _ToolPill(
+                            icon: Icons.swap_horiz_rounded,
+                            label: 'Convert',
+                            color: const Color(0xFFFF7043),
+                            enabled: !_isBusy,
+                            onTap: () => _convertFormat(),
+                          ),
+                        ],
+                      ),
+                    const SizedBox(height: 14),
+                    Divider(
+                      height: 1,
+                      color: isDark
+                          ? Colors.white12
+                          : scheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(height: 10),
+                    // File operations row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.share_outlined,
+                            label: 'Share',
+                            onTap: () => _share(context),
+                          ),
+                        ),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.download_outlined,
+                            label: (_item.isPdf || isTiff) ? 'Export' : 'Save',
+                            onTap: () => _save(context),
+                          ),
+                        ),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.drive_file_rename_outline,
+                            label: 'Rename',
+                            onTap: () => _rename(context),
+                          ),
+                        ),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: Icons.delete_outline,
+                            label: 'Delete',
+                            isDestructive: true,
+                            onTap: () => _delete(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
-      );
+      ),
+    );
   }
 
   static String _formatSize(int bytes) {
@@ -1738,21 +1790,20 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
                 if (_mode == _SplitModeType.byChunks) ...[
                   Padding(
                     padding: const EdgeInsets.only(left: 36, bottom: 8),
-                    child: Row(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 8,
                       children: [
                         const Text('Pages per chunk: ',
                             style:
                                 TextStyle(color: Colors.white70, fontSize: 13)),
                         for (final s in [2, 3, 5, 10])
                           if (s <= maxPages || s == 2)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 6),
-                              child: ChoiceChip(
-                                label: Text('$s'),
-                                selected: _chunkSize == s,
-                                onSelected: (_) =>
-                                    setState(() => _chunkSize = s),
-                              ),
+                            ChoiceChip(
+                              label: Text('$s'),
+                              selected: _chunkSize == s,
+                              onSelected: (_) =>
+                                  setState(() => _chunkSize = s),
                             ),
                       ],
                     ),
@@ -1775,7 +1826,9 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
                 if (_mode == _SplitModeType.pageRange) ...[
                   Padding(
                     padding: const EdgeInsets.only(left: 36, bottom: 8),
-                    child: Row(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         const Text('From: ',
                             style:
@@ -1796,7 +1849,6 @@ class _SplitOptionsSheetState extends State<_SplitOptionsSheet> {
                             },
                           ),
                         ),
-                        const SizedBox(width: 16),
                         const Text('To: ',
                             style:
                                 TextStyle(color: Colors.white70, fontSize: 13)),
@@ -1894,183 +1946,201 @@ class _PdfToImagesOptionsSheetState extends State<_PdfToImagesOptionsSheet> {
     final maxPages = widget.totalPages > 0 ? widget.totalPages : 1;
 
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          24 + MediaQuery.viewInsetsOf(context).bottom,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height -
+              MediaQuery.viewPaddingOf(context).top -
+              16,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            24 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Save Pages as Images',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${widget.totalPages} pages',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Save Pages as Images',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text('Image Format',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('JPG (Recommended)'),
-                  selected: _format == 'jpg',
-                  onSelected: (_) => setState(() => _format = 'jpg'),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('PNG (Lossless)'),
-                  selected: _format == 'png',
-                  onSelected: (_) => setState(() => _format = 'png'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text('Resolution / Quality',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('150 DPI'),
-                  selected: _dpi == 150,
-                  onSelected: (_) => setState(() => _dpi = 150),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('200 DPI'),
-                  selected: _dpi == 200,
-                  onSelected: (_) => setState(() => _dpi = 200),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('300 DPI'),
-                  selected: _dpi == 300,
-                  onSelected: (_) => setState(() => _dpi = 300),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text('Pages to Save',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                ChoiceChip(
-                  label: Text('All Pages (1-$maxPages)'),
-                  selected: _isAllPages,
-                  onSelected: (_) => setState(() => _isAllPages = true),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('Custom Range'),
-                  selected: !_isAllPages,
-                  onSelected: (_) => setState(() => _isAllPages = false),
-                ),
-              ],
-            ),
-            if (!_isAllPages) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('From: ',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  SizedBox(
-                    width: 60,
-                    child: DropdownButton<int>(
-                      value: _startPage,
-                      dropdownColor: const Color(0xFF232730),
-                      style: const TextStyle(color: Colors.white),
-                      underline: const SizedBox(),
-                      items: [
-                        for (var i = 1; i <= _endPage; i++)
-                          DropdownMenuItem(value: i, child: Text('$i')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _startPage = v);
-                      },
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white12,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${widget.totalPages} pages',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text('To: ',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  SizedBox(
-                    width: 60,
-                    child: DropdownButton<int>(
-                      value: _endPage,
-                      dropdownColor: const Color(0xFF232730),
-                      style: const TextStyle(color: Colors.white),
-                      underline: const SizedBox(),
-                      items: [
-                        for (var i = _startPage; i <= maxPages; i++)
-                          DropdownMenuItem(value: i, child: Text('$i')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _endPage = v);
-                      },
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text('Image Format',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('JPG (Recommended)'),
+                      selected: _format == 'jpg',
+                      onSelected: (_) => setState(() => _format = 'jpg'),
                     ),
+                    ChoiceChip(
+                      label: const Text('PNG (Lossless)'),
+                      selected: _format == 'png',
+                      onSelected: (_) => setState(() => _format = 'png'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Text('Resolution / Quality',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('150 DPI'),
+                      selected: _dpi == 150,
+                      onSelected: (_) => setState(() => _dpi = 150),
+                    ),
+                    ChoiceChip(
+                      label: const Text('200 DPI'),
+                      selected: _dpi == 200,
+                      onSelected: (_) => setState(() => _dpi = 200),
+                    ),
+                    ChoiceChip(
+                      label: const Text('300 DPI'),
+                      selected: _dpi == 300,
+                      onSelected: (_) => setState(() => _dpi = 300),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Text('Pages to Save',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: Text('All Pages (1-$maxPages)'),
+                      selected: _isAllPages,
+                      onSelected: (_) => setState(() => _isAllPages = true),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Custom Range'),
+                      selected: !_isAllPages,
+                      onSelected: (_) => setState(() => _isAllPages = false),
+                    ),
+                  ],
+                ),
+                if (!_isAllPages) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      const Text('From: ',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 13)),
+                      SizedBox(
+                        width: 60,
+                        child: DropdownButton<int>(
+                          value: _startPage,
+                          dropdownColor: const Color(0xFF232730),
+                          style: const TextStyle(color: Colors.white),
+                          underline: const SizedBox(),
+                          items: [
+                            for (var i = 1; i <= _endPage; i++)
+                              DropdownMenuItem(value: i, child: Text('$i')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _startPage = v);
+                          },
+                        ),
+                      ),
+                      const Text('To: ',
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 13)),
+                      SizedBox(
+                        width: 60,
+                        child: DropdownButton<int>(
+                          value: _endPage,
+                          dropdownColor: const Color(0xFF232730),
+                          style: const TextStyle(color: Colors.white),
+                          underline: const SizedBox(),
+                          items: [
+                            for (var i = _startPage; i <= maxPages; i++)
+                              DropdownMenuItem(value: i, child: Text('$i')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) setState(() => _endPage = v);
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: () {
-                  Navigator.pop(
-                    context,
-                    _PdfToImagesOptionsResult(
-                      format: _format,
-                      dpi: _dpi,
-                      isAllPages: _isAllPages,
-                      startPage: _startPage,
-                      endPage: _endPage,
-                    ),
-                  );
-                },
-                child: const Text('Convert & Save Images',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.pop(
+                        context,
+                        _PdfToImagesOptionsResult(
+                          format: _format,
+                          dpi: _dpi,
+                          isAllPages: _isAllPages,
+                          startPage: _startPage,
+                          endPage: _endPage,
+                        ),
+                      );
+                    },
+                    child: const Text('Convert & Save Images',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

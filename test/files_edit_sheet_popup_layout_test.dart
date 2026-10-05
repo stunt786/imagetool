@@ -105,30 +105,14 @@ void main() {
 
   /// Drains every layout exception the edit sheet or one of its popups
   /// reported: on these viewports the sheet must lay out without errors.
-  void expectNoLayoutErrors(WidgetTester tester) {
+  void expectNoLayoutErrors(WidgetTester tester, [String where = '']) {
     final errors = <Object>[];
     while (true) {
       final error = tester.takeException();
       if (error == null) break;
       errors.add(error);
     }
-    expect(errors, isEmpty, reason: 'layout errors: $errors');
-  }
-
-  /// Fails only on the class of bug the file-operations row used to have -
-  /// children that are wider than the viewport. The sheet being taller than
-  /// a very short screen is a separate, pre-existing limitation.
-  void expectNoHorizontalOverflow(WidgetTester tester, String where) {
-    final errors = <Object>[];
-    while (true) {
-      final error = tester.takeException();
-      if (error == null) break;
-      final message = error.toString();
-      if (message.contains('on the right') || message.contains('on the left')) {
-        errors.add(error);
-      }
-    }
-    expect(errors, isEmpty, reason: '[$where] horizontal overflow: $errors');
+    expect(errors, isEmpty, reason: '[$where] layout errors: $errors');
   }
 
   /// Opens [tool], checks the popup scrolls instead of overflowing and that
@@ -245,8 +229,7 @@ void main() {
         await tester.runAsync(() async {
           await pumpHost(tester, FileEditSheet(item: item, onDeleted: () {}));
         });
-        expectNoHorizontalOverflow(
-            tester, '${size.width}x${size.height}@$scale ${item.fileName}');
+        expectNoLayoutErrors(tester);
 
         for (final label in labels) {
           final button = find
@@ -266,4 +249,144 @@ void main() {
       }
     }
   });
+
+  /// The sheet body used to overflow its own column vertically on short
+  /// (and landscape) screens: the preview shrank to nothing and the tool
+  /// buttons spilled past the bottom edge. It scrolls instead now.
+  testWidgets('sheet body fits short and landscape screens', (tester) async {
+    for (final (size, scale) in <(Size, double)>[
+      (const Size(320, 480), 1.0),
+      (const Size(320, 480), 1.3),
+      (const Size(640, 360), 1.0),
+      (const Size(360, 640), 1.3),
+    ]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 48);
+      tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 48);
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPadding();
+        tester.view.resetViewPadding();
+        tester.platformDispatcher.clearAllTestValues();
+      });
+
+      for (final item in [imageItem, pdfItem]) {
+        final where =
+            '${size.width}x${size.height}@$scale ${item.fileName}';
+
+        await tester.runAsync(() async {
+          await pumpHost(tester, FileEditSheet(item: item, onDeleted: () {}));
+        });
+        await tester.pump(const Duration(milliseconds: 300));
+        expectNoLayoutErrors(tester, where);
+
+        // Scrolling the body must bring the file-operations row on screen.
+        final body = find
+            .descendant(
+                of: find.byType(FileEditSheet),
+                matching: find.byType(SingleChildScrollView))
+            .first;
+        await tester.drag(body, const Offset(0, -600));
+        await tester.pumpAndSettle();
+
+        final delete = tester.getRect(find.text('Delete'));
+        expect(delete.bottom, lessThanOrEqualTo(size.height),
+            reason: '[$where] Delete is not reachable by scrolling');
+        expect(delete.top, greaterThanOrEqualTo(0),
+            reason: '[$where] Delete scrolled past the top');
+        expectNoLayoutErrors(tester, where);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    }
+  });
+
+
+  /// The "Save Pages as Images" sheet had no scroll container at all and its
+  /// header/chip rows could run past the sheet on the right.
+  testWidgets('pdf to images popup stays on screen', (tester) async {
+    setUpShortPhone(tester);
+
+    await tester.runAsync(() async {
+      await pumpHost(tester, FileEditSheet(item: pdfItem, onDeleted: () {}));
+      await tester.pump(const Duration(milliseconds: 400));
+      expectNoLayoutErrors(tester);
+
+      await tester.tap(find.text('Save Pages as Images'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expectNoLayoutErrors(tester, 'pdf-images opened');
+
+      final title = find.text('Image Format');
+      expect(title, findsOneWidget, reason: 'options sheet did not open');
+      final scroller = find
+          .ancestor(of: title, matching: find.byType(SingleChildScrollView))
+          .first;
+      expect(scroller, findsOneWidget,
+          reason: 'the sheet must scroll instead of overflowing');
+
+      final screen = tester.getSize(find.byType(MaterialApp));
+      expect(tester.getRect(scroller).bottom, lessThanOrEqualTo(screen.height),
+          reason: 'pdf-images sheet extends below the screen');
+
+      // The From / To row only exists once a custom range is selected.
+      await tester.tap(find.text('Custom Range'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expectNoLayoutErrors(tester, 'pdf-images custom range');
+      expect(find.text('From: '), findsOneWidget);
+
+      await tester.drag(scroller, const Offset(0, -800));
+      await tester.pumpAndSettle();
+      final button = find.text('Convert & Save Images');
+      final box = tester.renderObject<RenderBox>(button);
+      final bottom = box.localToGlobal(Offset.zero).dy + box.size.height;
+      expect(bottom, lessThanOrEqualTo(screen.height),
+          reason: 'convert button is below the screen');
+
+      Navigator.of(tester.element(title)).pop();
+      await tester.pumpAndSettle();
+    });
+
+    expectNoLayoutErrors(tester);
+  });
+
+  /// The chunk and page-range rows are rendered only after a mode is picked,
+  /// and they used to run past the sheet on the right at large text scale.
+  testWidgets('split mode rows stay on screen', (tester) async {
+    setUpShortPhone(tester);
+
+    await tester.runAsync(() async {
+      await pumpHost(tester, FileEditSheet(item: pdfItem, onDeleted: () {}));
+      await tester.pump(const Duration(milliseconds: 400));
+      expectNoLayoutErrors(tester);
+
+      await tester.tap(find.text('Split'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expectNoLayoutErrors(tester, 'split opened');
+
+      await tester.tap(find.text('By Page Chunks'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expectNoLayoutErrors(tester, 'split by chunks');
+      expect(find.text('Pages per chunk: '), findsOneWidget);
+
+      await tester.tap(find.text('Custom Page Range'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expectNoLayoutErrors(tester, 'split page range');
+      expect(find.text('From: '), findsOneWidget);
+
+      Navigator.of(tester.element(find.text('Split PDF Options'))).pop();
+      await tester.pumpAndSettle();
+    });
+
+    expectNoLayoutErrors(tester);
+  });
+
 }
