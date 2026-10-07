@@ -58,7 +58,7 @@ class PdfsHubScreen extends ConsumerWidget {
         ? 1.9
         : width >= 700
             ? 1.55
-            : 0.82;
+            : 0.74;
     final topPadding = MediaQuery.of(context).padding.top + 72;
 
     final history = ref.watch(editHistoryProvider);
@@ -246,12 +246,12 @@ class _PdfToolCardState extends State<_PdfToolCard> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _PdfToolArtwork(data: data),
-                    const Spacer(),
+                    const SizedBox(height: 14),
                     Text(
                       data.title,
                       style: theme.textTheme.titleMedium?.copyWith(
@@ -261,13 +261,15 @@ class _PdfToolCardState extends State<_PdfToolCard> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      data.subtitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        height: 1.35,
+                    Flexible(
+                      child: Text(
+                        data.subtitle,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          height: 1.35,
+                        ),
                       ),
                     ),
                   ],

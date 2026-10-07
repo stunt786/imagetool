@@ -439,10 +439,34 @@ class _NavItem extends StatelessWidget {
             child: AnimatedScale(
               duration: const Duration(milliseconds: 200),
               scale: selected ? 1.08 : 1.0,
-              child: Icon(
-                selected ? selectedIcon : icon,
-                size: 26,
-                color: selected ? activeColor : inactiveColor,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    selected ? selectedIcon : icon,
+                    size: 26,
+                    color: selected ? activeColor : inactiveColor,
+                  ),
+                  const SizedBox(height: 3),
+                  // Label for screen readers / accessibility only: the parent
+                  // Semantics node already carries this label, so keep the
+                  // Text out of the semantics tree to avoid duplicates.
+                  ExcludeSemantics(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.1,
+                        letterSpacing: -0.1,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? activeColor : inactiveColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

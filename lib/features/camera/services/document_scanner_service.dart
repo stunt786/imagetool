@@ -51,8 +51,12 @@ class DocumentScannerService {
   /// Runs one ML Kit document scan.
   ///
   /// [capability] is injectable for tests; production callers use the default.
+  /// When [quick] is true the scanner runs in capture-only mode, which skips
+  /// the crop/filter steps (the scanner's "Next"/"Done" screens) so a scan can
+  /// be appended to an existing document in one gesture.
   static Future<DocumentScanOutcome> scanDocument({
     ScannerCapabilityService? capability,
+    bool quick = false,
   }) async {
     // Never open a scanner the device cannot run.
     if (!await (capability ?? MlKitScannerCapability())
@@ -64,7 +68,7 @@ class DocumentScannerService {
     try {
       scanner = DocumentScanner(
         options: DocumentScannerOptions(
-          mode: ScannerMode.full,
+          mode: quick ? ScannerMode.base : ScannerMode.full,
           isGalleryImport: false,
           pageLimit: 100,
         ),

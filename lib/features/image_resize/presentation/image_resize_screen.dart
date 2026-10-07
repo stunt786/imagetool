@@ -24,6 +24,7 @@ import '../services/image_processor_service.dart';
 import '../widgets/crop_overlay.dart';
 import '../../../core/utils/file_type_detector.dart';
 import '../../../core/utils/deferred_clear.dart';
+import '../../../shared/widgets/centered_scrollable.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -2324,7 +2325,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
 
   Widget _buildSelectPhotosScreen() {
     final theme = Theme.of(context);
-    return Center(
+    return CenteredScrollable(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

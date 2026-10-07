@@ -8,6 +8,7 @@ import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
+import '../../../shared/widgets/centered_scrollable.dart';
 import '../models/pdf_split_state.dart';
 import '../notifiers/pdf_split_notifier.dart';
 
@@ -134,7 +135,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
   Widget _buildEmptyState(BuildContext context, PdfSplitNotifier notifier) {
     final theme = Theme.of(context);
 
-    return Center(
+    return CenteredScrollable(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(

@@ -268,6 +268,37 @@ void main() {
     });
   });
 
+  group('OperationRecorder.open', () {
+    test('reopens a finished operation so more files can be appended',
+        () async {
+      final session = await OperationRecorder(store).start(OperationKind.scan);
+      await session.saveBytes(bytes(<int>[1]), 'scan_page_01.jpg');
+      await session.complete();
+
+      final reopened =
+          await OperationRecorder(store).open(session.operationId);
+      expect(reopened, isNotNull);
+
+      final outside = File(path.join(base.path, 'new_page.jpg'));
+      await outside.writeAsBytes(<int>[5, 6], flush: true);
+      final item = await reopened!.recordFile(
+        outside.path,
+        displayName: 'scan_page_02.jpg',
+      );
+
+      expect(item, isNotNull);
+      expect(item!.fileName, 'scan_page_02.jpg');
+      expect(path.dirname(item.path), session.directoryPath);
+      expect(File(item.path).readAsBytesSync(), <int>[5, 6]);
+      expect(store.filesFor(session.operationId), hasLength(2));
+      expect(store.operationById(session.operationId)!.itemCount, 2);
+    });
+
+    test('returns null when the operation no longer exists', () async {
+      expect(await OperationRecorder(store).open('missing-op'), isNull);
+    });
+  });
+
   group('OutputNames', () {
     test('indexed builds zero-padded names', () {
       expect(OutputNames.indexed('jpg', 0), 'image_001.jpg');

@@ -41,6 +41,17 @@ class OperationRecorder {
     );
     return OperationSession._(_store, operation);
   }
+
+  /// Reopens an existing operation so more outputs can be appended to it
+  /// (used by Files → "Add Pages" for scans).
+  ///
+  /// Returns `null` when the operation no longer exists.
+  Future<OperationSession?> open(String operationId) async {
+    await _store.load();
+    final operation = _store.operationById(operationId);
+    if (operation == null) return null;
+    return OperationSession._(_store, operation);
+  }
 }
 
 /// An in-progress operation. Its output directory is stable, and nothing is

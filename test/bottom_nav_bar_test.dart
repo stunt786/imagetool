@@ -14,7 +14,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('BottomNavBar matches reference: icon-only, no text, correct branch switches',
+  testWidgets('BottomNavBar matches reference: Home & Files labelled, Camera icon-only, correct branch switches',
       (tester) async {
     final router = GoRouter(
       initialLocation: '/tools',
@@ -71,9 +71,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Verify NO text in bottom navbar (only in screen body)
-    expect(find.text('Home'), findsNothing);
-    expect(find.text('Files'), findsNothing);
+    // 1. Home & Files show text labels, Camera stays icon-only
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Files'), findsOneWidget);
     expect(find.text('Camera'), findsNothing);
 
     // 2. Verify all 3 icons are present via Semantics labels and Icon widgets

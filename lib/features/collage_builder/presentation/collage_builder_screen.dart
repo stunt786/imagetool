@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
+import '../../../shared/widgets/centered_scrollable.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
 import '../widgets/collage_toolbar.dart';
@@ -73,7 +74,7 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
   }
 
   Widget _buildSelectPhotosScreen(BuildContext context) {
-    return Center(
+    return CenteredScrollable(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(

@@ -172,7 +172,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     // Verify tools can be tapped and navigated without freeze
-    final resizeFinder = find.text('Resize');
+    final resizeFinder = find.text('Resize Images');
     expect(resizeFinder, findsOneWidget);
     await tester.tap(resizeFinder);
     await tester.pump();

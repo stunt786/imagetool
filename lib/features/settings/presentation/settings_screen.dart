@@ -75,8 +75,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 24),
                   // ── Storage ──────────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'Storage',
                     children: [
                       FutureBuilder<String>(
@@ -104,8 +103,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── Appearance ───────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'Appearance',
                     children: [
                       Padding(
@@ -158,8 +156,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── General ──────────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'General',
                     children: [
                       StatefulBuilder(
@@ -169,8 +166,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           return SwitchListTile(
                             secondary: const Icon(Icons.touch_app_outlined),
                             title: const Text('One Click Open'),
-                            subtitle: const Text(
-                                'Open picker directly on tool launch'),
                             value: oneClick,
                             onChanged: (value) {
                               ref
@@ -189,9 +184,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             secondary:
                                 const Icon(Icons.no_photography_outlined),
                             title: const Text('Strip EXIF Data'),
-                            subtitle: const Text(
-                              'Remove camera metadata & location when saving images',
-                            ),
                             value: stripExif,
                             onChanged: (value) {
                               ref
@@ -205,16 +197,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── Watermark ────────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'Watermark',
                     children: [
                       SwitchListTile(
                         secondary: const Icon(Icons.subtitles_outlined),
                         title: const Text('Global Watermark'),
-                        subtitle: const Text(
-                          'Apply watermark automatically to all saved images & PDFs',
-                        ),
                         value: settings.enableGlobalWatermark,
                         onChanged: (value) {
                           ref
@@ -245,9 +233,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   ),
                                 ),
                                 title: const Text('Include App Logo'),
-                                subtitle: const Text(
-                                  'Add icon.png alongside watermark text',
-                                ),
                                 value: settings.useWatermarkLogo,
                                 onChanged: (val) {
                                   ref
@@ -262,9 +247,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     const Icon(Icons.view_sidebar_outlined),
                                 title: const Text(
                                     'Right Vertical Sidebar for Images'),
-                                subtitle: const Text(
-                                  'Apply vertical sidebar watermark with low opacity along the right side on exported images',
-                                ),
                                 value: settings.useImageVerticalSidebar,
                                 onChanged: (val) {
                                   ref
@@ -446,14 +428,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── Feedback & Support ───────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'Spread the Word',
                     children: [
                       ListTile(
                         leading: const Icon(Icons.star_rate_rounded, color: Colors.amber),
                         title: const Text('Rate the App'),
-                        subtitle: const Text('Review and rate on Google Play Store'),
                         trailing: const Icon(Icons.open_in_new_rounded, size: 18),
                         onTap: () => AppReviewService.instance.showRatingDialog(context),
                       ),
@@ -461,7 +441,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ListTile(
                         leading: const Icon(Icons.share_rounded),
                         title: const Text('Share the App'),
-                        subtitle: const Text('Share download link with friends & family'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => AppReviewService.instance.shareApp(),
                       ),
@@ -469,8 +448,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── Support ──────────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'Support',
                     children: [
                       ListTile(
@@ -486,14 +464,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   // ── App & Updates ────────────────────────────────────────
-                  _buildSection(
-                    context,
+                  _SettingsSection(
                     title: 'App & Updates',
                     children: [
                       ListTile(
                         leading: const Icon(Icons.system_update_rounded),
                         title: const Text('Check for Updates'),
-                        subtitle: const Text('Check and download available updates'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _checkForUpdates(context),
                       ),
@@ -501,7 +477,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ListTile(
                         leading: const Icon(Icons.privacy_tip_outlined),
                         title: const Text('Privacy Policy'),
-                        subtitle: const Text('100% offline & on-device processing'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/settings/privacy'),
                       ),
@@ -509,7 +484,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ListTile(
                         leading: const Icon(Icons.info_outline),
                         title: const Text('About & Developer Info'),
-                        subtitle: const Text('${AppStrings.appName} by bnbKio'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/settings/about'),
                       ),
@@ -528,33 +502,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSection(
-    BuildContext context, {
-    required String title,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            title,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        Card(
-          child: Column(children: children),
-        ),
-      ],
     );
   }
 
@@ -898,6 +845,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
 
     if (mounted) setState(() {});
+  }
+}
+
+/// A settings category with a tappable header that collapses its content.
+class _SettingsSection extends StatefulWidget {
+  const _SettingsSection({
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  State<_SettingsSection> createState() => _SettingsSectionState();
+}
+
+class _SettingsSectionState extends State<_SettingsSection> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: _expanded ? 0 : -0.25,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          clipBehavior: Clip.none,
+          child: _expanded
+              ? Card(child: Column(children: widget.children))
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
   }
 }
 

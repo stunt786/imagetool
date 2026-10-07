@@ -33,7 +33,7 @@ void main() {
 
     expect(find.text('PixelTools'), findsOneWidget);
     expect(find.text('Work Smarter'), findsOneWidget);
-    expect(find.text('Resize'), findsOneWidget);
+    expect(find.text('Resize Images'), findsOneWidget);
     expect(find.byIcon(Icons.home_rounded), findsOneWidget);
     expect(find.bySemanticsLabel('Home'), findsOneWidget);
     expect(find.bySemanticsLabel('Camera'), findsOneWidget);

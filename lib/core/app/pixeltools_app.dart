@@ -5,6 +5,7 @@ import '../constants/app_strings.dart';
 import '../router/app_router.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
+import 'system_ui.dart';
 
 class PixelToolsApp extends ConsumerWidget {
   const PixelToolsApp({super.key});
@@ -18,6 +19,7 @@ class PixelToolsApp extends ConsumerWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
+      builder: AppSystemUi.appBuilder(null),
       routerConfig: router,
     );
   }

@@ -8,6 +8,7 @@ import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
+import '../../../shared/widgets/centered_scrollable.dart';
 import '../models/pdf_convert_state.dart';
 import '../notifiers/pdf_convert_notifier.dart';
 import '../widgets/convert_settings_panel.dart';
@@ -117,7 +118,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
   Widget _buildEmptyState(BuildContext context, PdfConvertNotifier notifier) {
     final theme = Theme.of(context);
 
-    return Center(
+    return CenteredScrollable(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(

@@ -22,6 +22,8 @@ const Map<String, Size> _matrices = <String, Size>{
   '600x1024 (small tablet)': Size(600, 1024),
   '800x1280 (tablet)': Size(800, 1280),
   '640x360 (landscape)': Size(640, 360),
+  '812x375 (landscape phone)': Size(812, 375),
+  '960x540 (landscape)': Size(960, 540),
 };
 
 void main() {

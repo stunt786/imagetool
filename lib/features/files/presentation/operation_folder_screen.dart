@@ -7,10 +7,13 @@ import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/services/operation_recorder.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/utils/file_type_detector.dart';
+import '../../camera/services/document_scanner_service.dart';
+import '../../camera/services/scanner_capability_service.dart';
 import '../../collage_builder/notifiers/collage_notifier.dart';
 import '../notifiers/operation_library_notifier.dart';
 import '../services/file_actions.dart';
@@ -124,6 +127,89 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         ),
       );
     }
+  }
+
+  /// Files → "Add Pages": opens the scanner and appends the captured pages to
+  /// this existing scan. The scanner runs in capture-only mode, so there are
+  /// no extra review/done steps between the scan and the folder.
+  Future<void> _addPages(OperationFolder operation) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final outcome = await DocumentScannerService.scanDocument(
+        quick: true,
+        capability: ref.read(scannerCapabilityProvider),
+      );
+
+      if (outcome.isUnavailable) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('The document scanner is not available on this device.'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      // User backed out of the scanner: nothing to add.
+      if (!outcome.isSuccess) return;
+
+      final session =
+          await OperationRecorder(ref.read(operationStoreProvider))
+              .open(operation.id);
+      if (session == null) return;
+
+      var index = _nextPageNumber(operation.id);
+      for (final file in outcome.files) {
+        index += 1;
+        await session.recordFile(
+          file.path,
+          displayName:
+              'scan_page_${index.toString().padLeft(2, '0')}.jpg',
+        );
+      }
+      await session.complete();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            outcome.files.length == 1
+                ? '1 page added to this scan'
+                : '${outcome.files.length} pages added to this scan',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not add pages: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Highest `scan_page_NN` index already in the folder (0 when there is none).
+  int _nextPageNumber(String operationId) {
+    var max = 0;
+    final files = ref.read(operationLibraryProvider).files;
+    for (final file in files) {
+      if (file.operationId != operationId) continue;
+      final match = RegExp(r'scan_page_(\d+)').firstMatch(file.fileName);
+      if (match == null) continue;
+      final value = int.tryParse(match.group(1) ?? '') ?? 0;
+      if (value > max) max = value;
+    }
+    return max;
   }
 
   Future<void> _deleteOperation(OperationFolder operation) async {
@@ -485,6 +571,9 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           icon: const Icon(Icons.more_vert_rounded),
           onSelected: (value) {
             switch (value) {
+              case 'pages':
+                _addPages(operation);
+                break;
               case 'select':
                 setState(() {
                   if (files.isNotEmpty) _selected.add(files.first.id);
@@ -510,15 +599,28 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'select', child: Text('Select items')),
-            PopupMenuItem(value: 'share', child: Text('Share all')),
-            PopupMenuItem(value: 'save', child: Text('Save all to Gallery')),
-            PopupMenuItem(value: 'pdf', child: Text('Create PDF from all')),
-            PopupMenuItem(value: 'collage', child: Text('Make Collage')),
-            PopupMenuItem(value: 'rename', child: Text('Rename folder')),
-            PopupMenuItem(value: 'delete', child: Text('Delete folder')),
-          ],
+          itemBuilder: (context) {
+            final items = <PopupMenuEntry<String>>[
+              PopupMenuItem(value: 'select', child: Text('Select items')),
+              PopupMenuItem(value: 'share', child: Text('Share all')),
+              PopupMenuItem(value: 'save', child: Text('Save all to Gallery')),
+              PopupMenuItem(value: 'pdf', child: Text('Create PDF from all')),
+              PopupMenuItem(value: 'collage', child: Text('Make Collage')),
+              PopupMenuItem(value: 'rename', child: Text('Rename folder')),
+              PopupMenuItem(value: 'delete', child: Text('Delete folder')),
+            ];
+            // Scanned documents can absorb more pages straight from the folder.
+            if (operation.kind == OperationKind.scan) {
+              items.insert(
+                0,
+                const PopupMenuItem(
+                  value: 'pages',
+                  child: Text('Add Pages'),
+                ),
+              );
+            }
+            return items;
+          },
         ),
       ],
     );

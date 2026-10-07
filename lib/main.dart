@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app/pixeltools_app.dart';
+import 'core/app/system_ui.dart';
 import 'core/services/app_info_service.dart';
 import 'core/settings/app_settings.dart';
 import 'core/theme/app_theme.dart';
@@ -9,6 +10,9 @@ import 'splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Portrait-only orientation and edge-to-edge system bars.
+  AppSystemUi.configure();
 
   // Launch Flutter immediately so the animated splash screen and loading UI
   // render in the very first frame without any native black screen delay.
@@ -55,6 +59,7 @@ class _AppEntryState extends ConsumerState<AppEntry> {
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         themeMode: themeMode,
+        builder: AppSystemUi.appBuilder(null),
         home: SplashScreen(onSplashComplete: _onSplashComplete),
       );
     }

@@ -40,7 +40,7 @@ final _imageTools = <_ToolData>[
     },
   ),
   _ToolData(
-    title: 'Resize',
+    title: 'Resize Images',
     subtitle: 'Pixels, ratio, or presets',
     icon: Icons.aspect_ratio_rounded,
     route: '/images/resizer',
@@ -56,7 +56,7 @@ final _imageTools = <_ToolData>[
     gradient: const [Color(0xFFA855F7), Color(0xFF9333EA)],
   ),
   _ToolData(
-    title: 'Convert',
+    title: 'Convert Images',
     subtitle: 'JPG, PNG, WEBP & more',
     icon: Icons.sync_rounded,
     route: '/images/convert',
@@ -83,7 +83,7 @@ const _pdfTools = <_ToolData>[
     gradient: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
   ),
   _ToolData(
-    title: 'Merge',
+    title: 'Merge PDF',
     subtitle: 'Combine documents',
     icon: Icons.call_merge_rounded,
     route: '/pdfs/merge',
@@ -91,7 +91,7 @@ const _pdfTools = <_ToolData>[
     gradient: [Color(0xFF14B8A6), Color(0xFF0D9488)],
   ),
   _ToolData(
-    title: 'Split',
+    title: 'Split PDF',
     subtitle: 'Extract pages',
     icon: Icons.call_split_rounded,
     route: '/pdfs/split',
@@ -99,7 +99,7 @@ const _pdfTools = <_ToolData>[
     gradient: [Color(0xFFFB923C), Color(0xFFF97316)],
   ),
   _ToolData(
-    title: 'Extract',
+    title: 'Extract PDF',
     subtitle: 'PDF to images or text',
     icon: Icons.crop_rotate_rounded,
     route: '/pdfs/convert',
@@ -1056,40 +1056,28 @@ class _ToolCardState extends State<_ToolCard> {
     final isCompact = width < 370;
 
     final iconBoxSize = isVeryCompact
-        ? 32.0
+        ? 36.0
         : isCompact
-            ? 35.0
-            : 38.0;
+            ? 40.0
+            : 42.0;
     final iconSize = isVeryCompact
-        ? 17.0
+        ? 19.0
         : isCompact
-            ? 18.5
-            : 20.0;
-    final chevronSize = isVeryCompact
-        ? 14.0
-        : isCompact
-            ? 15.5
-            : 17.0;
+            ? 21.0
+            : 22.0;
     final horizontalPadding = isVeryCompact
-        ? 7.0
+        ? 6.0
         : isCompact
-            ? 8.5
-            : 10.0;
-    final verticalPadding = isVeryCompact
-        ? 7.0
-        : isCompact
-            ? 8.0
+            ? 7.5
             : 9.0;
+    final verticalPadding = isVeryCompact
+        ? 8.0
+        : 9.0;
     final titleFontSize = isVeryCompact
         ? 12.0
         : isCompact
             ? 12.5
             : 13.5;
-    final subtitleFontSize = isVeryCompact
-        ? 9.5
-        : isCompact
-            ? 10.0
-            : 11.0;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -1099,126 +1087,66 @@ class _ToolCardState extends State<_ToolCard> {
         scale: _pressed ? 0.95 : 1.0,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOutCubic,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color:
-                isDark ? const Color(0xFF0F172A) : scheme.surfaceContainerLow,
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : scheme.outlineVariant.withValues(alpha: 0.5),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isDark
-                    ? Colors.black.withValues(alpha: 0.25)
-                    : scheme.shadow.withValues(alpha: 0.05),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: () {
-                if (data.onTap != null) {
-                  data.onTap!(context);
-                } else {
-                  context.push(data.route);
-                }
-              },
-              child: MediaQuery.withClampedTextScaling(
-                maxScaleFactor: 1.15,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: horizontalPadding,
-                    vertical: verticalPadding,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Top row: rounded icon container on left, chevron on right
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: iconBoxSize,
-                            height: iconBoxSize,
-                            decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(isCompact ? 10 : 12),
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: gradient,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: gradient.first.withValues(alpha: 0.3),
-                                  blurRadius: 5,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              data.icon,
-                              size: iconSize,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: chevronSize,
-                            color: isDark
-                                ? const Color(0xFF64748B)
-                                : scheme.onSurfaceVariant
-                                    .withValues(alpha: 0.55),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (data.onTap != null) {
+                data.onTap!(context);
+              } else {
+                context.push(data.route);
+              }
+            },
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.15,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: verticalPadding,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: iconBoxSize,
+                      height: iconBoxSize,
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(isCompact ? 12 : 14),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: gradient,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: gradient.first.withValues(alpha: 0.3),
+                            blurRadius: 5,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                      // Bottom: title and subtitle, left-aligned
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              data.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? Colors.white : scheme.onSurface,
-                                fontSize: titleFontSize,
-                                letterSpacing: -0.2,
-                              ),
-                            ),
-                            const SizedBox(height: 1.5),
-                            Text(
-                              data.subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w400,
-                                color: isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : scheme.onSurfaceVariant,
-                                fontSize: subtitleFontSize,
-                              ),
-                            ),
-                          ],
-                        ),
+                      child: Icon(
+                        data.icon,
+                        size: iconSize,
+                        color: Colors.white,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      data.title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : scheme.onSurface,
+                        fontSize: titleFontSize,
+                        letterSpacing: -0.2,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
