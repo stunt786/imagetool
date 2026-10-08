@@ -1,6 +1,0 @@
-- Update settings->About & Developer info->Update hardcoded Version number with dynamic value. 
-- Update bottom navigation menu and Update UI and remove rounded corners for the menu. 
-- In settings->apps & update section-> add new Terms & conditions page similirly to privacy policy. 
-- Update homepage UI-> make cards margins as much as low just to fit text from each other cards according to device width for more compact view. Also fix scroll screen is seen behind the bottom menu bar as transparent when scrolling
-- In Files page->add pages for scanned pages section-> Also create button to add pages within preview window similir to collage section(button)
-- Fix Files page-> different operations-> saved/changed successful messages not auto dismissing on some operations 

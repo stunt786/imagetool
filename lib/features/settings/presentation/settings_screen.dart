@@ -482,6 +482,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const Divider(height: 1),
                       ListTile(
+                        leading: const Icon(Icons.description_outlined),
+                        title: const Text('Terms & Conditions'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/settings/terms'),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
                         leading: const Icon(Icons.info_outline),
                         title: const Text('About & Developer Info'),
                         trailing: const Icon(Icons.chevron_right),

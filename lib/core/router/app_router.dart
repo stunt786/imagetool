@@ -26,6 +26,7 @@ import '../../features/pdf_convert/presentation/pdf_convert_screen.dart';
 import '../../features/settings/presentation/about_screen.dart';
 import '../../features/settings/presentation/privacy_policy_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/terms_conditions_screen.dart';
 import '../../features/shell/presentation/app_shell.dart';
 import '../services/app_review_service.dart';
 import '../settings/app_settings.dart';
@@ -75,6 +76,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: '/settings/privacy',
                 pageBuilder: (context, state) =>
                     _MaterialPage(key: state.pageKey, child: const PrivacyPolicyScreen()),
+              ),
+              GoRoute(
+                path: '/settings/terms',
+                pageBuilder: (context, state) =>
+                    _MaterialPage(key: state.pageKey, child: const TermsConditionsScreen()),
               ),
               GoRoute(
                 path: '/settings/about',

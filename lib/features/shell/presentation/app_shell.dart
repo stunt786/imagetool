@@ -87,6 +87,10 @@ class AppShell extends StatelessWidget {
   }
 }
 
+/// Total content height of the bottom navigation bar (excludes the device's
+/// bottom safe-area inset, which is painted opaquely behind the bar).
+const double kBottomNavBarHeight = 72.0;
+
 class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.navigationShell,
@@ -100,14 +104,6 @@ class _BottomNavBar extends StatelessWidget {
   final Key? filesKey;
   final VoidCallback? onCameraTap;
 
-  static const double _barHeight = 96.0;
-  static const double _topOffset = 26.0;
-  static const double _circleCenterY = 28.0;
-  static const double _buttonRadius = 28.0; // 56dp diameter circle
-  static const double _gap = 7.0; // 35dp notch radius
-  static const double _shoulderRadius = 14.0;
-  static const double _cornerRadius = 24.0;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -116,112 +112,89 @@ class _BottomNavBar extends StatelessWidget {
     final currentIndex = navigationShell.currentIndex;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final width = math.max(0.0, screenWidth - 32.0);
-    final cx = width / 2;
+    // Fully opaque backdrop that matches the bottom of the bar gradient, so
+    // scrolling content is never visible behind the menu (including the
+    // safe-area strip below it).
+    final backdropColor =
+        isDark ? const Color(0xFFE6EDF5) : const Color(0xFFF5F8FC);
 
-    // Compute notch clearance boundary
-    final sy = _topOffset + _shoulderRadius;
-    final dy = sy - _circleCenterY;
-    final hyp = (_buttonRadius + _gap) + _shoulderRadius;
-    final bx = math.sqrt(math.max(0.0, hyp * hyp - dy * dy));
-
-    final leftWingWidth = cx - bx;
-    final rightWingWidth = width - (cx + bx);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        0,
-        16,
-        math.max(10.0, bottomPadding),
-      ),
-      child: SizedBox(
-        height: _barHeight,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 1. Notched scooped background bar
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _NotchedBarPainter(
-                  isDark: isDark,
-                  scheme: scheme,
-                  topOffset: _topOffset,
-                  circleCenterY: _circleCenterY,
-                  buttonRadius: _buttonRadius,
-                  gap: _gap,
-                  shoulderRadius: _shoulderRadius,
-                  cornerRadius: _cornerRadius,
+    return ColoredBox(
+      color: backdropColor,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: math.max(10.0, bottomPadding)),
+        child: SizedBox(
+          height: kBottomNavBarHeight,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 1. Flat, edge-to-edge bar background (no rounded corners)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _FlatBarPainter(isDark: isDark, scheme: scheme),
                 ),
               ),
-            ),
 
-            // 2. Home icon in left wing
-            Positioned(
-              left: 0,
-              top: _topOffset,
-              width: leftWingWidth,
-              height: _barHeight - _topOffset,
-              child: Center(
-                child: _NavItem(
-                  label: 'Home',
-                  icon: Icons.home_outlined,
-                  selectedIcon: Icons.home_rounded,
-                  selected: currentIndex == 0,
-                  onTap: () {
-                    navigationShell.goBranch(
-                      0,
-                      initialLocation: currentIndex == 0,
-                    );
-                  },
+              // 2. Home · Camera · Files
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: _NavItem(
+                          label: 'Home',
+                          icon: Icons.home_outlined,
+                          selectedIcon: Icons.home_rounded,
+                          selected: currentIndex == 0,
+                          onTap: () {
+                            navigationShell.goBranch(
+                              0,
+                              initialLocation: currentIndex == 0,
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: _CameraCenterButton(
+                          key: cameraKey,
+                          selected: currentIndex == 1,
+                          diameter: 56,
+                          onTap: () {
+                            if (onCameraTap != null) {
+                              onCameraTap!();
+                            } else {
+                              navigationShell
+                                  .goBranch(1, initialLocation: true);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: _NavItem(
+                          key: filesKey,
+                          label: 'Files',
+                          icon: Icons.folder_outlined,
+                          selectedIcon: Icons.folder_rounded,
+                          selected: currentIndex == 2,
+                          onTap: () {
+                            if (navigationShell.route.branches.length > 2) {
+                              navigationShell.goBranch(
+                                2,
+                                initialLocation: currentIndex == 2,
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-
-            // 3. Center Camera floating circular button
-            Positioned(
-              left: cx - _buttonRadius,
-              top: _circleCenterY - _buttonRadius,
-              child: _CameraCenterButton(
-                key: cameraKey,
-                selected: currentIndex == 1,
-                diameter: _buttonRadius * 2,
-                onTap: () {
-                  if (onCameraTap != null) {
-                    onCameraTap!();
-                  } else {
-                    navigationShell.goBranch(1, initialLocation: true);
-                  }
-                },
-              ),
-            ),
-
-            // 4. Files icon in right wing
-            Positioned(
-              left: cx + bx,
-              top: _topOffset,
-              width: rightWingWidth,
-              height: _barHeight - _topOffset,
-              child: Center(
-                child: _NavItem(
-                  key: filesKey,
-                  label: 'Files',
-                  icon: Icons.folder_outlined,
-                  selectedIcon: Icons.folder_rounded,
-                  selected: currentIndex == 2,
-                  onTap: () {
-                    if (navigationShell.route.branches.length > 2) {
-                      navigationShell.goBranch(
-                        2,
-                        initialLocation: currentIndex == 2,
-                      );
-                    }
-                  },
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -476,52 +449,26 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _NotchedBarPainter extends CustomPainter {
-  const _NotchedBarPainter({
+/// Flat, edge-to-edge background for the bottom menu: fully opaque so scrolled
+/// content never shows through, with square (non-rounded) corners and a
+/// hairline top separator.
+class _FlatBarPainter extends CustomPainter {
+  const _FlatBarPainter({
     required this.isDark,
     required this.scheme,
-    required this.topOffset,
-    required this.circleCenterY,
-    required this.buttonRadius,
-    required this.gap,
-    required this.shoulderRadius,
-    required this.cornerRadius,
   });
 
   final bool isDark;
   final ColorScheme scheme;
-  final double topOffset;
-  final double circleCenterY;
-  final double buttonRadius;
-  final double gap;
-  final double shoulderRadius;
-  final double cornerRadius;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final path = _buildNotchedBarPath(
-      width: size.width,
-      height: size.height,
-      topOffset: topOffset,
-      circleCenterY: circleCenterY,
-      buttonRadius: buttonRadius,
-      gap: gap,
-      shoulderRadius: shoulderRadius,
-      cornerRadius: cornerRadius,
-    );
+    final rect = Offset.zero & size;
 
-    // 1. Soft elevation shadow
-    canvas.drawShadow(
-      path,
-      isDark ? Colors.black.withValues(alpha: 0.35) : const Color(0x280F172A),
-      10.0,
-      false,
-    );
-
-    // 2. Bar background fill (clean light surface that matches both dark & light themes)
+    // 1. Opaque surface fill for the entire bar area
     final fillPaint = Paint()
       ..shader = ui.Gradient.linear(
-        Offset(0, topOffset),
+        Offset.zero,
         Offset(0, size.height),
         isDark
             ? const [
@@ -533,123 +480,31 @@ class _NotchedBarPainter extends CustomPainter {
                 Color(0xFFF5F8FC),
               ],
       );
-    canvas.drawPath(path, fillPaint);
+    canvas.drawRect(rect, fillPaint);
 
-    // 3. Crisp outline border
+    // 2. Subtle separation from the scrolling content above
+    final shadePaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset.zero,
+        Offset(0, 10),
+        [
+          Colors.black.withValues(alpha: isDark ? 0.18 : 0.06),
+          Colors.transparent,
+        ],
+      );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, 10), shadePaint);
+
+    // 3. Hairline top border
     final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
+      ..strokeWidth = 1.0
       ..color = isDark
           ? const Color(0xFFCBD5E1).withValues(alpha: 0.75)
           : scheme.outlineVariant.withValues(alpha: 0.70);
-    canvas.drawPath(path, borderPaint);
+    canvas.drawLine(Offset(0, 0.5), Offset(size.width, 0.5), borderPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _NotchedBarPainter oldDelegate) {
-    return oldDelegate.isDark != isDark ||
-        oldDelegate.scheme != scheme ||
-        oldDelegate.topOffset != topOffset ||
-        oldDelegate.circleCenterY != circleCenterY ||
-        oldDelegate.buttonRadius != buttonRadius ||
-        oldDelegate.gap != gap ||
-        oldDelegate.shoulderRadius != shoulderRadius ||
-        oldDelegate.cornerRadius != cornerRadius;
+  bool shouldRepaint(covariant _FlatBarPainter oldDelegate) {
+    return oldDelegate.isDark != isDark || oldDelegate.scheme != scheme;
   }
-}
-
-Path _buildNotchedBarPath({
-  required double width,
-  required double height,
-  required double topOffset,
-  required double circleCenterY,
-  required double buttonRadius,
-  required double gap,
-  required double shoulderRadius,
-  required double cornerRadius,
-}) {
-  final path = Path();
-  final cx = width / 2;
-  final cy = circleCenterY;
-  final rNotch = buttonRadius + gap;
-  final s = shoulderRadius;
-
-  final sy = topOffset + s;
-  final dy = sy - cy;
-  final hyp = rNotch + s;
-  final bx = math.sqrt(math.max(0.0, hyp * hyp - dy * dy));
-
-  final sxLeft = cx - bx;
-  final sxRight = cx + bx;
-
-  final angleTangentLeft = math.atan2(-dy, bx);
-  final angleTangentRight = math.atan2(-dy, -bx);
-
-  final angStart = math.atan2(dy * rNotch / hyp, -bx * rNotch / hyp);
-  final angEnd = math.atan2(dy * rNotch / hyp, bx * rNotch / hyp);
-
-  // 1. Top-left corner
-  path.moveTo(0, topOffset + cornerRadius);
-  path.arcToPoint(
-    Offset(cornerRadius, topOffset),
-    radius: Radius.circular(cornerRadius),
-    clockwise: true,
-  );
-
-  // 2. Line to left shoulder top
-  path.lineTo(sxLeft, topOffset);
-
-  // 3. Left shoulder arc: from -pi/2 to angleTangentLeft
-  const steps = 14;
-  for (int i = 1; i <= steps; i++) {
-    final ang =
-        -math.pi / 2 + (angleTangentLeft - (-math.pi / 2)) * (i / steps);
-    path.lineTo(sxLeft + s * math.cos(ang), sy + s * math.sin(ang));
-  }
-
-  // 4. Notch cradle arc: from angStart to angEnd
-  for (int i = 1; i <= steps * 2; i++) {
-    final ang = angStart + (angEnd - angStart) * (i / (steps * 2));
-    path.lineTo(cx + rNotch * math.cos(ang), cy + rNotch * math.sin(ang));
-  }
-
-  // 5. Right shoulder arc: from angleTangentRight to -pi/2
-  for (int i = 1; i <= steps; i++) {
-    final ang =
-        angleTangentRight + (-math.pi / 2 - angleTangentRight) * (i / steps);
-    path.lineTo(sxRight + s * math.cos(ang), sy + s * math.sin(ang));
-  }
-
-  // 6. Line to top-right corner
-  path.lineTo(width - cornerRadius, topOffset);
-
-  // 7. Top-right corner
-  path.arcToPoint(
-    Offset(width, topOffset + cornerRadius),
-    radius: Radius.circular(cornerRadius),
-    clockwise: true,
-  );
-
-  // 8. Line down right side
-  path.lineTo(width, height - cornerRadius);
-
-  // 9. Bottom-right corner
-  path.arcToPoint(
-    Offset(width - cornerRadius, height),
-    radius: Radius.circular(cornerRadius),
-    clockwise: true,
-  );
-
-  // 10. Line along bottom
-  path.lineTo(cornerRadius, height);
-
-  // 11. Bottom-left corner
-  path.arcToPoint(
-    Offset(0, height - cornerRadius),
-    radius: Radius.circular(cornerRadius),
-    clockwise: true,
-  );
-
-  path.close();
-  return path;
 }

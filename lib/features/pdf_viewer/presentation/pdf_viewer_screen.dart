@@ -404,6 +404,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           content: Text('Page $pageNum saved to Gallery'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+          persist: false,
           action: SnackBarAction(
             label: 'Share',
             onPressed: () {
@@ -484,6 +485,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           content: Text('$saved page image(s) saved to Gallery'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+          persist: false,
           action: savedFiles.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',

@@ -20,6 +20,7 @@ import '../../files/services/file_actions.dart';
 import '../../files/widgets/file_thumbnail.dart';
 import '../../files/widgets/selection_action_bar.dart';
 import '../../onboarding/presentation/feature_highlight_overlay.dart';
+import '../../shell/presentation/app_shell.dart';
 
 final _imageTools = <_ToolData>[
   _ToolData(
@@ -236,12 +237,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final operations = library.operations;
     final history = ref.watch(editHistoryProvider);
     final width = MediaQuery.sizeOf(context).width;
+    // Compact side margins scaled to the device width so cards sit closer
+    // together while keeping each card's text readable.
     final contentPadding = width >= 1200
-        ? 28.0
+        ? 24.0
         : width >= 700
-            ? 24.0
-            : 18.0;
+            ? 18.0
+            : 12.0;
     final topPadding = MediaQuery.of(context).padding.top + 12;
+    // Clearance for the opaque bottom menu so scrolled content never hides
+    // behind it (bar height + device safe-area inset + a small gap).
+    final bottomClearance = kBottomNavBarHeight +
+        MediaQuery.paddingOf(context).bottom +
+        16.0;
 
     final filteredTools = _filteredTools;
     final filteredHistory = _filteredHistory(history);
@@ -443,7 +451,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ? ListView(
                           physics: const BouncingScrollPhysics(),
                           padding: EdgeInsets.fromLTRB(
-                              contentPadding, 16, contentPadding, 110),
+                              contentPadding, 16, contentPadding, bottomClearance),
                           children: [
                             if (filteredTools.isNotEmpty) ...[
                               _SectionHeader(title: 'Tools'),
@@ -493,7 +501,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               sliver: SliverList(
                                 delegate: SliverChildListDelegate.fixed([
                                   const _HomeHeroBanner(),
-                                  const SizedBox(height: 18),
+                                  const SizedBox(height: 12),
                                   _ToolsGrid(
                                     key: (!ref.watch(appSettingsProvider.select(
                                                 (s) => s.hasCompletedOnboarding)) &&
@@ -504,7 +512,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         : null,
                                     tools: _allTools,
                                   ),
-                                  const SizedBox(height: 22),
+                                  const SizedBox(height: 14),
                                   _SectionHeader(
                                     title: 'Recent History',
                                     showClockIcon: true,
@@ -517,12 +525,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         ? () => context.push('/history')
                                         : null,
                                   ),
-                                  const SizedBox(height: 14),
+                                  const SizedBox(height: 10),
                                   if (operations.isNotEmpty)
                                     ...operations.take(10).map(
                                           (op) => Padding(
                                             padding: const EdgeInsets.only(
-                                                bottom: 12),
+                                                bottom: 8),
                                             child: _OperationHistoryRow(
                                               operation: op,
                                               thumbnailPath: _thumbnailFor(op),
@@ -561,7 +569,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         .map(
                                           (entry) => Padding(
                                             padding: const EdgeInsets.only(
-                                                bottom: 14),
+                                                bottom: 10),
                                             child: _HistoryRow(
                                               item: entry.value,
                                               onTap: () =>
@@ -580,7 +588,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         )
                                   else
                                     const _EmptyHistoryCard(),
-                                  const SizedBox(height: 110),
+                                  SizedBox(height: bottomClearance),
                                 ]),
                               ),
                             ),
@@ -1015,7 +1023,9 @@ class _ToolsGrid extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     final crossAxisCount = calculateCrossAxisCount(width);
     final mainAxisExtent = calculateMainAxisExtent(width);
-    final spacing = width < 360 ? 8.0 : 10.0;
+    // Minimal gap between cards, scaled to the device width so labels from
+    // neighbouring cards stay visually separated without wasting space.
+    final spacing = width < 360 ? 6.0 : width < 620 ? 8.0 : 10.0;
 
     return GridView.builder(
       shrinkWrap: true,
@@ -1066,13 +1076,13 @@ class _ToolCardState extends State<_ToolCard> {
             ? 21.0
             : 22.0;
     final horizontalPadding = isVeryCompact
-        ? 6.0
+        ? 4.0
         : isCompact
-            ? 7.5
-            : 9.0;
+            ? 5.0
+            : 6.5;
     final verticalPadding = isVeryCompact
-        ? 8.0
-        : 9.0;
+        ? 7.0
+        : 8.0;
     final titleFontSize = isVeryCompact
         ? 12.0
         : isCompact

@@ -39,15 +39,17 @@ void main() {
   group('AboutScreen widget tests', () {
     testWidgets('renders app information and developer information section', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: AboutScreen(),
+        const ProviderScope(
+          child: MaterialApp(
+            home: AboutScreen(),
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('About'), findsOneWidget);
       expect(find.text(AppStrings.appName), findsOneWidget);
-      expect(find.text('Image & PDF Editor • Version 1.0.0'), findsOneWidget);
+      expect(find.textContaining('Image & PDF Editor • Version'), findsOneWidget);
       expect(find.text('Developer Information'), findsOneWidget);
 
       // Verify the exact text from fix.md

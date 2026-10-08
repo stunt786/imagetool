@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/app_info_service.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/services/app_update_service.dart';
 
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
   static const String developerAboutUsText =
       'At bnbKio, we are passionate about leveraging technology to solve complex business challenges. Our team of skilled developers, designers, and strategists works collaboratively to deliver innovative solutions that drive growth and create lasting value. We believe in the power of technology to transform businesses and improve lives. Our client-centric approach ensures that we understand your unique needs and deliver tailored solutions that exceed expectations. Main Areas, Mobile App development, web development, cloud services, UI/UX design, AI & Machine Learning, etc...';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final appInfoAsync = ref.watch(appInfoProvider);
+    final versionText = appInfoAsync.maybeWhen(
+      data: (info) => info.version,
+      orElse: () => AppInfoService.instance.cachedInfo.version,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -64,7 +71,7 @@ class AboutScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Image & PDF Editor • Version 1.0.0',
+                    'Image & PDF Editor • Version $versionText',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w600,
@@ -198,6 +205,14 @@ class AboutScreen extends StatelessWidget {
                     subtitle: const Text('Read our full offline privacy commitment'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => context.push('/settings/privacy'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: const Text('Terms & Conditions'),
+                    subtitle: const Text('Rules for using the app'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/settings/terms'),
                   ),
                   const Divider(height: 1),
                   ListTile(

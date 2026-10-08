@@ -191,6 +191,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         SnackBar(
           content: Text('Could not add pages: $error'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          persist: false,
         ),
       );
     } finally {
@@ -298,6 +300,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
             content: const Text('PDF created successfully'),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
+            persist: false,
             action: saved.isNotEmpty
                 ? SnackBarAction(
                     label: 'Share',
@@ -467,7 +470,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
                   Expanded(
                     child: _isSelecting
                         ? _buildReorderableGrid(files)
-                        : _buildNormalGrid(files),
+                        : _buildNormalGrid(files, operation),
                   ),
                 ],
               ),
@@ -694,10 +697,12 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
     );
   }
 
-  Widget _buildNormalGrid(List<AppFileItem> files) {
+  Widget _buildNormalGrid(List<AppFileItem> files, OperationFolder operation) {
     // 2 columns grid matching `prev.jpg`
-    // Includes images + the promotional "Try making a collage" card
-    final totalCards = files.length + 1; // +1 for collage card
+    // Includes pages + (for scans) the "Add Pages" card + the promotional
+    // "Try making a collage" card
+    final showAddPages = operation.kind == OperationKind.scan;
+    final totalCards = files.length + 1 + (showAddPages ? 1 : 0);
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
@@ -720,12 +725,20 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
             onLongPress: () => _toggle(item),
             onCheckboxTap: () => _toggle(item),
           );
-        } else {
-          // "Try making a collage" Card (matching `prev.jpg`)
-          return _CollagePromoTile(
-            onTap: () => _makeCollageFromItems(files),
+        }
+
+        final promoIndex = index - files.length;
+        if (showAddPages && promoIndex == 0) {
+          // "Add pages" card for scanned documents (mirrors the collage card)
+          return _AddPagesTile(
+            onTap: () => _addPages(operation),
           );
         }
+
+        // "Try making a collage" Card (matching `prev.jpg`)
+        return _CollagePromoTile(
+          onTap: () => _makeCollageFromItems(files),
+        );
       },
     );
   }
@@ -897,6 +910,14 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
+            if (operation.kind == OperationKind.scan) ...[
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: () => _addPages(operation),
+                icon: const Icon(Icons.post_add_outlined, size: 18),
+                label: const Text('Scan new pages'),
+              ),
+            ],
           ],
         ),
       ),
@@ -1027,6 +1048,81 @@ class _DocumentPageTile extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Add pages" card for scanned documents: opens the scanner and appends the
+/// captured pages to this folder. Styled like the collage promo tile so both
+/// actions read as buttons inside the preview grid.
+class _AddPagesTile extends StatelessWidget {
+  const _AddPagesTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1B1D22),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white10),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A73E8).withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.post_add_outlined,
+                      size: 24,
+                      color: Color(0xFF4C9AFF),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Add pages to this scan',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Capture more pages with the scanner',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.3,
+                      color: Colors.white38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Center(
+            child: SizedBox(
+                height: 20), // Placeholder to match page number spacing
           ),
         ],
       ),

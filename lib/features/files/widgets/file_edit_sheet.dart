@@ -25,6 +25,7 @@ import '../../format_converter/notifiers/format_converter_notifier.dart'
     show ConvertFormat, convertFormatWorker;
 import '../../pdf_compress/models/pdf_compress_state.dart'
     show CompressionLevel;
+import '../../shell/presentation/app_shell.dart';
 import '../notifiers/operation_library_notifier.dart';
 import '../presentation/file_crop_screen.dart';
 import '../services/file_actions.dart';
@@ -632,6 +633,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           content: Text(msg),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+          persist: false,
           action: (newSize < _item.sizeBytes)
               ? SnackBarAction(
                   label: 'Share',
@@ -749,6 +751,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           content: Text('PDF split into ${saved.length} document(s)'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+          persist: false,
           action: saved.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
@@ -870,6 +873,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
           content: Text('$savedCount page image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
+          persist: false,
           action: savedFiles.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
@@ -1069,8 +1073,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    // Bottom menu bar height in AppShell: 96.0 + math.max(10.0, bottomPadding)
-    final bottomMenuHeight = 96.0 + math.max(10.0, bottomPadding);
+    // Bottom menu bar height in AppShell: kBottomNavBarHeight + math.max(10.0, bottomPadding)
+    final bottomMenuHeight = kBottomNavBarHeight + math.max(10.0, bottomPadding);
     final topPadding = MediaQuery.paddingOf(context).top;
     final screenHeight = MediaQuery.sizeOf(context).height;
     // Available height strictly above the bottom menu bar and below the top status bar:
