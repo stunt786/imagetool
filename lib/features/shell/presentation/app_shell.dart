@@ -100,7 +100,7 @@ class _BottomNavBar extends StatelessWidget {
   final Key? filesKey;
   final VoidCallback? onCameraTap;
 
-  static const double _barHeight = 84.0;
+  static const double _barHeight = 96.0;
   static const double _topOffset = 26.0;
   static const double _circleCenterY = 28.0;
   static const double _buttonRadius = 28.0; // 56dp diameter circle
@@ -429,7 +429,7 @@ class _NavItem extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               color: selected

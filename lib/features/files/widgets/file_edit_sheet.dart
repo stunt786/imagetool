@@ -1069,8 +1069,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
-    // Bottom menu bar height in AppShell: 84.0 + math.max(10.0, bottomPadding)
-    final bottomMenuHeight = 84.0 + math.max(10.0, bottomPadding);
+    // Bottom menu bar height in AppShell: 96.0 + math.max(10.0, bottomPadding)
+    final bottomMenuHeight = 96.0 + math.max(10.0, bottomPadding);
     final topPadding = MediaQuery.paddingOf(context).top;
     final screenHeight = MediaQuery.sizeOf(context).height;
     // Available height strictly above the bottom menu bar and below the top status bar:
