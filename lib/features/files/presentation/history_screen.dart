@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../camera/presentation/camera_screen.dart';
 import '../notifiers/operation_library_notifier.dart';
 import '../services/file_actions.dart';
 import '../widgets/file_thumbnail.dart';
@@ -147,6 +148,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         builder: (_) => OperationFolderScreen(operationId: operation.id),
       ),
     );
+  }
+
+  void _openScanner() {
+    try {
+      ProviderScope.containerOf(context, listen: false)
+          .read(cameraLaunchTriggerProvider.notifier)
+          .state++;
+    } catch (_) {}
+    final shell = StatefulNavigationShell.maybeOf(context);
+    if (shell != null) {
+      shell.goBranch(1, initialLocation: true);
+    } else if (GoRouter.maybeOf(context) != null) {
+      context.push('/camera');
+    }
   }
 
   List<OperationFolder> _filterOperations(List<OperationFolder> operations) {
@@ -532,7 +547,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               backgroundColor: const Color(0xFF00E676),
               foregroundColor: Colors.black,
               elevation: 4,
-              onPressed: () => context.push('/camera'),
+              onPressed: _openScanner,
               child: const Icon(Icons.document_scanner_rounded, size: 28),
             ),
       // Selection Action Bar at the bottom

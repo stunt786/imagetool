@@ -377,6 +377,7 @@ abstract final class FileActions {
     BuildContext context, {
     required String title,
     required String message,
+    String confirmLabel = 'Delete',
   }) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -394,7 +395,7 @@ abstract final class FileActions {
               foregroundColor: Theme.of(dialogContext).colorScheme.onError,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(confirmLabel),
           ),
         ],
       ),

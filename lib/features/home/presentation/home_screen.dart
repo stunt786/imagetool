@@ -213,6 +213,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .renameOperation(operation.id, name);
   }
 
+  Future<void> _clearHistory() async {
+    final confirmed = await FileActions.confirmDelete(
+      context,
+      title: 'Clear history?',
+      message: 'Recent history entries will be removed from this list. '
+          'Files stored in the Files tab are not affected.',
+      confirmLabel: 'Clear',
+    );
+    if (!confirmed || !mounted) return;
+    ref.read(editHistoryProvider.notifier).clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('History cleared'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   String? _thumbnailFor(OperationFolder op) {
     if (op.thumbnailPath != null) return op.thumbnailPath;
     final files = ref.read(operationStoreProvider).filesFor(op.id);
@@ -512,7 +531,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   _SectionHeader(
-                                    title: 'Recent History',
+                                    title: 'Recent Files',
                                     showClockIcon: true,
                                     actionLabel: (operations.isNotEmpty ||
                                             history.isNotEmpty)
@@ -521,6 +540,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     onActionTap: (operations.isNotEmpty ||
                                             history.isNotEmpty)
                                         ? () => context.push('/history')
+                                        : null,
+                                    clearLabel: (operations.isEmpty &&
+                                            history.isNotEmpty)
+                                        ? 'Clear'
+                                        : null,
+                                    onClearTap: (operations.isEmpty &&
+                                            history.isNotEmpty)
+                                        ? _clearHistory
                                         : null,
                                   ),
                                   const SizedBox(height: 10),
@@ -1192,12 +1219,16 @@ class _SectionHeader extends StatelessWidget {
     this.showClockIcon = false,
     this.actionLabel,
     this.onActionTap,
+    this.clearLabel,
+    this.onClearTap,
   });
 
   final String title;
   final bool showClockIcon;
   final String? actionLabel;
   final VoidCallback? onActionTap;
+  final String? clearLabel;
+  final VoidCallback? onClearTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1234,6 +1265,22 @@ class _SectionHeader extends StatelessWidget {
             ),
           ),
         ),
+        if (clearLabel != null && onClearTap != null)
+          InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onClearTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: Text(
+                clearLabel!,
+                style: TextStyle(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
         if (actionLabel != null && onActionTap != null)
           InkWell(
             borderRadius: BorderRadius.circular(999),
