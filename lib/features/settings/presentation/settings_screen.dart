@@ -77,6 +77,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── Storage ──────────────────────────────────────────────
                   _SettingsSection(
                     title: 'Storage',
+                    icon: Icons.folder_outlined,
+                    description:
+                        'Choose where edited images and PDFs are saved.',
                     children: [
                       FutureBuilder<String>(
                         future: _resolveSaveLocation(),
@@ -105,6 +108,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── Appearance ───────────────────────────────────────────
                   _SettingsSection(
                     title: 'Appearance',
+                    icon: Icons.palette_outlined,
+                    description: 'Switch between system, light and dark theme.',
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(
@@ -158,6 +163,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── General ──────────────────────────────────────────────
                   _SettingsSection(
                     title: 'General',
+                    icon: Icons.tune_rounded,
+                    description:
+                        'Open results instantly and strip EXIF metadata.',
                     children: [
                       StatefulBuilder(
                         builder: (context, setLocalState) {
@@ -199,6 +207,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── Watermark ────────────────────────────────────────────
                   _SettingsSection(
                     title: 'Watermark',
+                    icon: Icons.branding_watermark_outlined,
+                    description:
+                        'Add your text, logo and branding to exports.',
                     children: [
                       SwitchListTile(
                         secondary: const Icon(Icons.subtitles_outlined),
@@ -430,6 +441,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── Feedback & Support ───────────────────────────────────
                   _SettingsSection(
                     title: 'Spread the Word',
+                    icon: Icons.campaign_outlined,
+                    description: 'Rate the app or share it with friends.',
                     children: [
                       ListTile(
                         leading: const Icon(Icons.star_rate_rounded, color: Colors.amber),
@@ -450,6 +463,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── Support ──────────────────────────────────────────────
                   _SettingsSection(
                     title: 'Support',
+                    icon: Icons.support_agent_outlined,
+                    description: 'Questions, feedback or bug reports.',
                     children: [
                       ListTile(
                         leading: const Icon(Icons.mail_outline_rounded),
@@ -466,6 +481,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // ── App & Updates ────────────────────────────────────────
                   _SettingsSection(
                     title: 'App & Updates',
+                    icon: Icons.system_update_alt_outlined,
+                    description:
+                        'Updates, privacy, terms and app info.',
                     children: [
                       ListTile(
                         leading: const Icon(Icons.system_update_rounded),
@@ -856,13 +874,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 }
 
 /// A settings category with a tappable header that collapses its content.
+/// Shows an icon + title, and while collapsed a short description of what
+/// the section contains.
 class _SettingsSection extends StatefulWidget {
   const _SettingsSection({
     required this.title,
+    required this.icon,
+    required this.description,
     required this.children,
   });
 
   final String title;
+  final IconData icon;
+  final String description;
   final List<Widget> children;
 
   @override
@@ -875,6 +899,7 @@ class _SettingsSectionState extends State<_SettingsSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -886,27 +911,59 @@ class _SettingsSectionState extends State<_SettingsSection> {
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(widget.icon, size: 18, color: scheme.primary),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          widget.title,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      AnimatedRotation(
+                        turns: _expanded ? 0 : -0.25,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  AnimatedRotation(
-                    turns: _expanded ? 0 : -0.25,
+                  AnimatedSize(
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutCubic,
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 20,
-                      color: theme.colorScheme.primary,
-                    ),
+                    alignment: Alignment.topCenter,
+                    child: _expanded
+                        ? const SizedBox(width: double.infinity)
+                        : Padding(
+                            padding: const EdgeInsets.only(
+                                left: 34, top: 2, right: 28),
+                            child: Text(
+                              widget.description,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               ),
