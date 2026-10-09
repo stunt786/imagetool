@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/platform_image_encoder.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/file_type_detector.dart';
+import '../../../core/utils/tiff_encoder.dart';
 import '../../../shared/models/picked_file.dart';
 import '../../../shared/services/watermark_helper.dart';
 
@@ -419,8 +421,11 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
     await ImageIsolateService.mapConcurrent<ConvertibleImage, void>(
       imagesToLoad,
-      (image, index) => _loadSingleImage(image),
-      concurrency: ImageIsolateService.defaultConcurrency,
+      (image, index) async {
+        await _loadSingleImage(image);
+        await Future<void>.delayed(const Duration(milliseconds: 8));
+      },
+      concurrency: math.min(2, ImageIsolateService.defaultConcurrency),
       onProgress: (completed, total) {
         state = state.copyWith(
           loadedCount: completed,
@@ -569,8 +574,6 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
       clearError: true,
     );
 
-    var written = 0;
-
     // Same codec, different extension: copy the bytes, never re-encode.
     for (final image in renameOnly) {
       if (_cancelRequested) break;
@@ -594,14 +597,16 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
           note: 'Extension changed only',
         ),
       );
-      written++;
     }
 
     if (work.isNotEmpty) {
       await ImageIsolateService.mapConcurrent<ConvertibleImage, void>(
         work,
-        (image, index) => _convertSingleImage(image, format),
-        concurrency: ImageIsolateService.defaultConcurrency,
+        (image, index) async {
+          await _convertSingleImage(image, format);
+          await Future<void>.delayed(const Duration(milliseconds: 16));
+        },
+        concurrency: math.min(2, ImageIsolateService.defaultConcurrency),
         isCancelled: () => _cancelRequested,
         onProgress: (completed, total) {
           state = state.copyWith(
@@ -619,12 +624,17 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
     final cancelled = _cancelRequested;
     _cancelRequested = false;
 
+    final successCount = state.images
+        .where((i) => i.status == ConvertStatus.success)
+        .length;
+    final totalToCount = work.length + renameOnly.length;
+
     state = state.copyWith(
       isConverting: false,
       progress: cancelled ? state.progress : 100,
       convertingStatusText: cancelled
           ? 'Cancelled'
-          : 'Converted $written of ${work.length} images',
+          : 'Converted $successCount of $totalToCount images',
       infoMessage: cancelled ? 'Conversion cancelled.' : info,
     );
   }
@@ -670,14 +680,13 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
         var imageToEncode = source;
         final enableWatermark = settings.enableGlobalWatermark;
         if (enableWatermark) {
-          var decoded = img.decodeImage(source);
-          if (decoded != null) {
-            decoded = WatermarkHelper.applyToImage(
-              decoded,
-              settings,
-              iconBytes: WatermarkHelper.cachedIconBytes,
-            );
-            imageToEncode = Uint8List.fromList(img.encodePng(decoded));
+          final watermarked = await compute(_applyWebpWatermarkWorker, <String, Object?>{
+            'source': source,
+            'settings': settings,
+            'iconBytes': WatermarkHelper.cachedIconBytes,
+          });
+          if (watermarked != null) {
+            imageToEncode = watermarked;
           }
         }
         converted = await PlatformImageEncoder.encodeWebP(
@@ -805,6 +814,26 @@ class FormatConverterNotifier extends StateNotifier<FormatConverterState> {
 
 // ─── Isolate worker ─────────────────────────────────────────────────────────
 
+Uint8List? _applyWebpWatermarkWorker(Map<String, Object?> params) {
+  final source = params['source'] as Uint8List;
+  final settings = params['settings'] as AppSettingsState?;
+  final iconBytes = params['iconBytes'] as Uint8List?;
+  var decoded = img.decodeImage(source);
+  if (decoded == null) return null;
+  decoded = img.bakeOrientation(decoded);
+  if (settings != null && settings.enableGlobalWatermark) {
+    if (iconBytes != null && iconBytes.isNotEmpty) {
+      WatermarkHelper.setIconBytes(iconBytes);
+    }
+    decoded = WatermarkHelper.applyToImage(
+      decoded,
+      settings,
+      iconBytes: iconBytes,
+    );
+  }
+  return Uint8List.fromList(img.encodePng(decoded));
+}
+
 /// Decodes, optionally watermarks, and encodes one image. Runs off the UI
 /// isolate so multi-image conversion never freezes the app.
 Future<Uint8List?> convertFormatWorker(Map<String, Object?> params) async {
@@ -854,7 +883,7 @@ Future<Uint8List?> convertFormatWorker(Map<String, Object?> params) async {
       break;
     case 'tif':
     case 'tiff':
-      encoded = img.encodeTiff(decoded);
+      encoded = encodeStandardTiff(decoded);
       break;
     case 'webp':
       encoded = img.encodeWebP(

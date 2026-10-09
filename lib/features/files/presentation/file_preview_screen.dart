@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/services/pdf_service.dart';
+import '../../../core/services/thumbnail_service.dart';
 import '../../../core/utils/decode_size.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
@@ -525,11 +526,14 @@ class _PreviewContent extends StatefulWidget {
 class _PreviewContentState extends State<_PreviewContent> {
   String? _pdfImagePreview;
   bool _isLoadingPdf = false;
+  String? _tiffImagePreview;
+  bool _isLoadingTiff = false;
 
   @override
   void initState() {
     super.initState();
     _loadPdfPreviewIfNeeded();
+    _loadTiffPreviewIfNeeded();
   }
 
   @override
@@ -537,6 +541,7 @@ class _PreviewContentState extends State<_PreviewContent> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item != widget.item) {
       _loadPdfPreviewIfNeeded();
+      _loadTiffPreviewIfNeeded();
     }
   }
 
@@ -566,12 +571,114 @@ class _PreviewContentState extends State<_PreviewContent> {
     }
   }
 
+  Future<void> _loadTiffPreviewIfNeeded() async {
+    final lower = widget.item.fileName.toLowerCase();
+    final isTiff = lower.endsWith('.tiff') || lower.endsWith('.tif');
+    if (!isTiff) return;
+
+    final existingThumb = widget.item.thumbnailPath;
+    if (existingThumb != null &&
+        existingThumb.isNotEmpty &&
+        File(existingThumb).existsSync() &&
+        !existingThumb.toLowerCase().endsWith('.tiff') &&
+        !existingThumb.toLowerCase().endsWith('.tif')) {
+      if (mounted) setState(() => _tiffImagePreview = existingThumb);
+      return;
+    }
+
+    final tiffPath = widget.item.filePath;
+    if (tiffPath != null && File(tiffPath).existsSync()) {
+      setState(() => _isLoadingTiff = true);
+      final thumb = await ThumbnailService.instance.thumbnailFor(
+        tiffPath,
+        maxSide: 2048,
+      );
+      if (mounted) {
+        setState(() {
+          _tiffImagePreview = thumb;
+          _isLoadingTiff = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final isPdf = item.fileName.toLowerCase().endsWith('.pdf');
+    final lower = item.fileName.toLowerCase();
+    final isPdf = lower.endsWith('.pdf');
+    final isTiff = lower.endsWith('.tiff') || lower.endsWith('.tif');
     final thumb = item.thumbnailPath;
     final filePath = item.filePath;
+
+    if (isTiff) {
+      final displayImage = _tiffImagePreview ??
+          ((thumb != null &&
+                  thumb.isNotEmpty &&
+                  !thumb.toLowerCase().endsWith('.tiff') &&
+                  !thumb.toLowerCase().endsWith('.tif') &&
+                  File(thumb).existsSync())
+              ? thumb
+              : null);
+
+      if (displayImage != null && File(displayImage).existsSync()) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: InteractiveViewer(
+                    maxScale: 5,
+                    child: Image.file(
+                      File(displayImage),
+                      fit: BoxFit.contain,
+                      cacheWidth: zoomDecodeWidthFor(context),
+                      errorBuilder: (_, __, ___) =>
+                          _buildPlaceholder(item, true),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'TIFF',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      if (_isLoadingTiff) {
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        );
+      }
+
+      return SafeArea(
+        child: Center(
+          child: _buildPlaceholder(item, true),
+        ),
+      );
+    }
 
     if (!isPdf) {
       final imagePath =

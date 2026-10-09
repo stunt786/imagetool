@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/widgets/centered_scrollable.dart';
+import '../models/collage_state.dart';
 import '../notifiers/collage_notifier.dart';
 import '../widgets/collage_canvas.dart';
 import '../widgets/collage_toolbar.dart';
@@ -28,14 +29,21 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
     super.initState();
     _collageNotifier = ref.read(collageProvider.notifier);
     _isOneClickOpening = ref.read(appSettingsProvider).oneClickOpen;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (_isOneClickOpening && !_hasAutoTriggered) {
         _hasAutoTriggered = true;
-        setState(() => _isOneClickOpening = false);
         final state = ref.read(collageProvider);
         if (state.imageCount == 0) {
-          ref.read(collageProvider.notifier).pickImages(context);
+          try {
+            await ref.read(collageProvider.notifier).pickImages(context);
+          } finally {
+            if (mounted) {
+              setState(() => _isOneClickOpening = false);
+            }
+          }
+        } else {
+          setState(() => _isOneClickOpening = false);
         }
       }
     });
@@ -52,12 +60,14 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(collageProvider);
+    final showLoading =
+        state.isLoading || (_isOneClickOpening && state.imageCount == 0);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Collage Builder'),
         actions: [
-          if (state.imageCount > 0)
+          if (state.imageCount > 0 && !showLoading)
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () => ref.read(collageProvider.notifier).reset(),
@@ -65,11 +75,81 @@ class _CollageBuilderScreenState extends ConsumerState<CollageBuilderScreen> {
             ),
         ],
       ),
-      body: state.imageCount == 0
-          ? _isOneClickOpening
-              ? const Center(child: CircularProgressIndicator())
-              : _buildSelectPhotosScreen(context)
-          : _buildCollageEditor(context),
+      body: showLoading
+          ? _buildLoadingScreen(context, state)
+          : state.imageCount == 0
+              ? _buildSelectPhotosScreen(context)
+              : _buildCollageEditor(context),
+    );
+  }
+
+  Widget _buildLoadingScreen(BuildContext context, CollageState state) {
+    final theme = Theme.of(context);
+    final countText = state.totalCount > 0
+        ? '${state.loadedCount} of ${state.totalCount}'
+        : null;
+    final message = state.loadingMessage ?? 'Loading images...';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3.5,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Loading Photos',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (countText != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  countText,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

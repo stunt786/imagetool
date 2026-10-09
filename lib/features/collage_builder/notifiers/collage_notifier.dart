@@ -95,178 +95,222 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (picked.isEmpty) return;
 
-    final resolvedList = await Future.wait(picked.map((file) async {
-      var fileBytes = await file.resolveBytes();
-      if (fileBytes != null && fileBytes.length > 1500000) {
-        fileBytes = await _normalizeOversizedImage(fileBytes);
-      }
-      return (file: file, bytes: fileBytes);
-    }));
+    state = state.copyWith(
+      isLoading: true,
+      loadingMessage: 'Loading images...',
+      loadedCount: 0,
+      totalCount: picked.length,
+    );
+    await Future<void>.delayed(Duration.zero);
 
-    final bytesList = <Uint8List>[];
-    final names = <String>[];
-    int unsupportedCount = 0;
+    try {
+      final resolvedList = <({dynamic file, Uint8List? bytes})>[];
+      for (int i = 0; i < picked.length; i++) {
+        state = state.copyWith(
+          loadingMessage: 'Loading image ${i + 1} of ${picked.length}...',
+          loadedCount: i,
+          totalCount: picked.length,
+        );
+        await Future<void>.delayed(Duration.zero);
 
-    for (final item in resolvedList) {
-      final fileBytes = item.bytes;
-      if (fileBytes != null) {
-        if (!FileTypeDetector.isSupportedImage(fileBytes)) {
-          unsupportedCount++;
-          continue;
+        final file = picked[i];
+        var fileBytes = await file.resolveBytes();
+        if (fileBytes != null && fileBytes.length > 1500000) {
+          fileBytes = await _normalizeOversizedImage(fileBytes);
         }
-        bytesList.add(fileBytes);
-        names.add(item.file.name);
+        resolvedList.add((file: file, bytes: fileBytes));
       }
-    }
 
-    if (unsupportedCount > 0 && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '$unsupportedCount unsupported file(s) skipped. Only JPG, PNG, WebP, GIF, BMP are supported.',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
+      state = state.copyWith(
+        loadedCount: picked.length,
+        loadingMessage: 'Preparing collage layout...',
       );
-    }
+      await Future<void>.delayed(Duration.zero);
 
-    if (bytesList.isEmpty) return;
+      final bytesList = <Uint8List>[];
+      final names = <String>[];
+      int unsupportedCount = 0;
 
-    // Cap total images to maxCollageImages (9)
-    if (bytesList.length > maxNew) {
-      final overflow = bytesList.length - maxNew;
-      bytesList.removeRange(maxNew, bytesList.length);
-      names.removeRange(maxNew, names.length);
-      if (context.mounted) {
+      for (final item in resolvedList) {
+        final fileBytes = item.bytes;
+        if (fileBytes != null) {
+          if (!FileTypeDetector.isSupportedImage(fileBytes)) {
+            unsupportedCount++;
+            continue;
+          }
+          bytesList.add(fileBytes);
+          names.add(item.file.name);
+        }
+      }
+
+      if (unsupportedCount > 0 && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Only $maxNew image(s) added (9 max). $overflow photo(s) skipped.'),
+            content: Text(
+              '$unsupportedCount unsupported file(s) skipped. Only JPG, PNG, WebP, GIF, BMP are supported.',
+            ),
             duration: const Duration(seconds: 2),
           ),
         );
       }
-    }
 
-    final emptySlots = <int>[];
-    for (int i = 0; i < state.images.length; i++) {
-      if (!state.images[i].hasImage) {
-        emptySlots.add(i);
+      if (bytesList.isEmpty) return;
+
+      // Cap total images to maxCollageImages (9)
+      if (bytesList.length > maxNew) {
+        final overflow = bytesList.length - maxNew;
+        bytesList.removeRange(maxNew, bytesList.length);
+        names.removeRange(maxNew, names.length);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Only $maxNew image(s) added (9 max). $overflow photo(s) skipped.'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
-    }
 
-    final slotsNeeded = bytesList.length;
-    final slotsAvailable = emptySlots.length;
+      final emptySlots = <int>[];
+      for (int i = 0; i < state.images.length; i++) {
+        if (!state.images[i].hasImage) {
+          emptySlots.add(i);
+        }
+      }
 
-    if (slotsNeeded <= slotsAvailable) {
-      final newImages = List<CollageImageSlot>.from(state.images);
-      for (int i = 0; i < bytesList.length; i++) {
-        newImages[emptySlots[i]] = CollageImageSlot(
-          index: emptySlots[i],
-          imageBytes: bytesList[i],
-          imageName: names[i],
+      final slotsNeeded = bytesList.length;
+      final slotsAvailable = emptySlots.length;
+
+      if (slotsNeeded <= slotsAvailable) {
+        final newImages = List<CollageImageSlot>.from(state.images);
+        for (int i = 0; i < bytesList.length; i++) {
+          newImages[emptySlots[i]] = CollageImageSlot(
+            index: emptySlots[i],
+            imageBytes: bytesList[i],
+            imageName: names[i],
+          );
+        }
+        _syncCachedSlots(newImages);
+        state = state.copyWith(images: newImages);
+      } else {
+        final newLayout = CollageLayout.getLayoutForImageCount(
+          state.imageCount + bytesList.length,
+        );
+        final newImages = <CollageImageSlot>[];
+
+        for (int i = 0; i < state.images.length; i++) {
+          newImages.add(CollageImageSlot(
+            index: i,
+            imageBytes: state.images[i].imageBytes,
+            imageName: state.images[i].imageName,
+            scale: state.images[i].scale,
+            offsetX: state.images[i].offsetX,
+            offsetY: state.images[i].offsetY,
+            rotation: state.images[i].rotation,
+            fitMode: state.images[i].fitMode,
+          ));
+        }
+
+        for (int i = state.images.length; i < newLayout.slotCount; i++) {
+          newImages.add(CollageImageSlot(index: i));
+        }
+
+        int imageIndex = 0;
+        for (int i = 0; i < newImages.length && imageIndex < bytesList.length; i++) {
+          if (!newImages[i].hasImage) {
+            newImages[i] = CollageImageSlot(
+              index: i,
+              imageBytes: bytesList[imageIndex],
+              imageName: names[imageIndex],
+            );
+            imageIndex++;
+          }
+        }
+
+        if (imageIndex < bytesList.length) {
+          for (int i = newImages.length - 1; i >= 0 && imageIndex < bytesList.length; i--) {
+            newImages[i] = CollageImageSlot(
+              index: i,
+              imageBytes: bytesList[imageIndex],
+              imageName: names[imageIndex],
+            );
+            imageIndex++;
+          }
+        }
+
+        _syncCachedSlots(newImages);
+        state = state.copyWith(
+          images: newImages,
+          layout: newLayout,
         );
       }
-      _syncCachedSlots(newImages);
-      state = state.copyWith(images: newImages);
-    } else {
-      final newLayout = CollageLayout.getLayoutForImageCount(
-        state.imageCount + bytesList.length,
-      );
-      final newImages = <CollageImageSlot>[];
-
-      for (int i = 0; i < state.images.length; i++) {
-        newImages.add(CollageImageSlot(
-          index: i,
-          imageBytes: state.images[i].imageBytes,
-          imageName: state.images[i].imageName,
-          scale: state.images[i].scale,
-          offsetX: state.images[i].offsetX,
-          offsetY: state.images[i].offsetY,
-          rotation: state.images[i].rotation,
-          fitMode: state.images[i].fitMode,
-        ));
-      }
-
-      for (int i = state.images.length; i < newLayout.slotCount; i++) {
-        newImages.add(CollageImageSlot(index: i));
-      }
-
-      int imageIndex = 0;
-      for (int i = 0; i < newImages.length && imageIndex < bytesList.length; i++) {
-        if (!newImages[i].hasImage) {
-          newImages[i] = CollageImageSlot(
-            index: i,
-            imageBytes: bytesList[imageIndex],
-            imageName: names[imageIndex],
-          );
-          imageIndex++;
-        }
-      }
-
-      if (imageIndex < bytesList.length) {
-        for (int i = newImages.length - 1; i >= 0 && imageIndex < bytesList.length; i--) {
-          newImages[i] = CollageImageSlot(
-            index: i,
-            imageBytes: bytesList[imageIndex],
-            imageName: names[imageIndex],
-          );
-          imageIndex++;
-        }
-      }
-
-      _syncCachedSlots(newImages);
-      state = state.copyWith(
-        images: newImages,
-        layout: newLayout,
-      );
+    } finally {
+      state = state.copyWith(isLoading: false, clearLoadingMessage: true);
     }
   }
 
   /// Loads images directly from file paths into the collage.
   Future<void> loadFromPaths(List<String> paths) async {
-    final loaded = await Future.wait(paths.take(maxCollageImages).map((path) async {
-      try {
-        final file = File(path);
-        if (await file.exists()) {
-          var bytes = await file.readAsBytes();
-          if (bytes.length > 1500000) {
-            bytes = await _normalizeOversizedImage(bytes);
-          }
-          return (name: p.basename(path), bytes: bytes);
-        }
-      } catch (_) {}
-      return null;
-    }));
+    final targets = paths.take(maxCollageImages).toList();
+    if (targets.isEmpty) return;
 
-    final bytesList = <Uint8List>[];
-    final names = <String>[];
-    for (final item in loaded) {
-      if (item != null) {
-        bytesList.add(item.bytes);
-        names.add(item.name);
-      }
-    }
-    if (bytesList.isEmpty) return;
-
-    final count = bytesList.length;
-    final layout = CollageLayout.getLayoutForImageCount(count);
-    final slots = <CollageImageSlot>[];
-    for (int i = 0; i < layout.slotCount; i++) {
-      if (i < count) {
-        slots.add(CollageImageSlot(
-          index: i,
-          imageBytes: bytesList[i],
-          imageName: names[i],
-        ));
-      } else {
-        slots.add(CollageImageSlot(index: i));
-      }
-    }
-    _syncCachedSlots(slots);
     state = state.copyWith(
-      images: slots,
-      layout: layout,
+      isLoading: true,
+      loadingMessage: 'Loading images...',
+      loadedCount: 0,
+      totalCount: targets.length,
     );
+    await Future<void>.delayed(Duration.zero);
+
+    try {
+      final bytesList = <Uint8List>[];
+      final names = <String>[];
+      for (int i = 0; i < targets.length; i++) {
+        state = state.copyWith(
+          loadingMessage: 'Loading image ${i + 1} of ${targets.length}...',
+          loadedCount: i,
+          totalCount: targets.length,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final path = targets[i];
+        try {
+          final file = File(path);
+          if (await file.exists()) {
+            var bytes = await file.readAsBytes();
+            if (bytes.length > 1500000) {
+              bytes = await _normalizeOversizedImage(bytes);
+            }
+            bytesList.add(bytes);
+            names.add(p.basename(path));
+          }
+        } catch (_) {}
+      }
+
+      if (bytesList.isEmpty) return;
+
+      final count = bytesList.length;
+      final layout = CollageLayout.getLayoutForImageCount(count);
+      final slots = <CollageImageSlot>[];
+      for (int i = 0; i < layout.slotCount; i++) {
+        if (i < count) {
+          slots.add(CollageImageSlot(
+            index: i,
+            imageBytes: bytesList[i],
+            imageName: names[i],
+          ));
+        } else {
+          slots.add(CollageImageSlot(index: i));
+        }
+      }
+      _syncCachedSlots(slots);
+      state = state.copyWith(
+        images: slots,
+        layout: layout,
+      );
+    } finally {
+      state = state.copyWith(isLoading: false, clearLoadingMessage: true);
+    }
   }
 
   Future<void> addImageToSlot(BuildContext context, int slotIndex) async {
@@ -279,34 +323,46 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (picked.isEmpty) return;
 
-    var bytes = await picked.first.resolveBytes();
-    if (bytes == null) return;
-
-    if (!FileTypeDetector.isSupportedImage(bytes)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unsupported file format. Please select a valid image.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
-
-    if (bytes.length > 1500000) {
-      bytes = await _normalizeOversizedImage(bytes);
-    }
-
-    final newImages = List<CollageImageSlot>.from(state.images);
-    newImages[slotIndex] = CollageImageSlot(
-      index: slotIndex,
-      imageBytes: bytes,
-      imageName: picked.first.name,
+    state = state.copyWith(
+      isLoading: true,
+      loadingMessage: 'Loading image...',
+      loadedCount: 0,
+      totalCount: 1,
     );
+    await Future<void>.delayed(Duration.zero);
 
-    _syncCachedSlots(newImages);
-    state = state.copyWith(images: newImages);
+    try {
+      var bytes = await picked.first.resolveBytes();
+      if (bytes == null) return;
+
+      if (!FileTypeDetector.isSupportedImage(bytes)) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unsupported file format. Please select a valid image.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (bytes.length > 1500000) {
+        bytes = await _normalizeOversizedImage(bytes);
+      }
+
+      final newImages = List<CollageImageSlot>.from(state.images);
+      newImages[slotIndex] = CollageImageSlot(
+        index: slotIndex,
+        imageBytes: bytes,
+        imageName: picked.first.name,
+      );
+
+      _syncCachedSlots(newImages);
+      state = state.copyWith(images: newImages);
+    } finally {
+      state = state.copyWith(isLoading: false, clearLoadingMessage: true);
+    }
   }
 
   void setSlotImage(int slotIndex, Uint8List bytes, String name) {

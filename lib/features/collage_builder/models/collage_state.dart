@@ -307,6 +307,10 @@ class CollageState {
     this.captionFontFamily = 'Roboto',
     this.isExporting = false,
     this.exportProgress = 0.0,
+    this.isLoading = false,
+    this.loadingMessage,
+    this.loadedCount = 0,
+    this.totalCount = 0,
     this.previewWidth,
     this.previewHeight,
   });
@@ -328,6 +332,10 @@ class CollageState {
   final String captionFontFamily;
   final bool isExporting;
   final double exportProgress;
+  final bool isLoading;
+  final String? loadingMessage;
+  final int loadedCount;
+  final int totalCount;
   final double? previewWidth;
   final double? previewHeight;
 
@@ -352,6 +360,11 @@ class CollageState {
     String? captionFontFamily,
     bool? isExporting,
     double? exportProgress,
+    bool? isLoading,
+    String? loadingMessage,
+    bool clearLoadingMessage = false,
+    int? loadedCount,
+    int? totalCount,
     double? previewWidth,
     double? previewHeight,
   }) {
@@ -373,6 +386,10 @@ class CollageState {
       captionFontFamily: captionFontFamily ?? this.captionFontFamily,
       isExporting: isExporting ?? this.isExporting,
       exportProgress: exportProgress ?? this.exportProgress,
+      isLoading: isLoading ?? this.isLoading,
+      loadingMessage: clearLoadingMessage ? null : (loadingMessage ?? this.loadingMessage),
+      loadedCount: loadedCount ?? this.loadedCount,
+      totalCount: totalCount ?? this.totalCount,
       previewWidth: previewWidth ?? this.previewWidth,
       previewHeight: previewHeight ?? this.previewHeight,
     );

@@ -1079,6 +1079,22 @@ class _HistoryThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (item.thumbnailPath != null) {
+      final isTiff = item.thumbnailPath!.toLowerCase().endsWith('.tiff') ||
+          item.thumbnailPath!.toLowerCase().endsWith('.tif');
+      if (isTiff) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: FileThumbnail(
+              path: item.thumbnailPath!,
+              size: 48,
+              borderRadius: 12,
+            ),
+          ),
+        );
+      }
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.file(

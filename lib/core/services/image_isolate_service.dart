@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../utils/file_type_detector.dart';
+import '../utils/tiff_encoder.dart';
 
 /// Cheap metadata about an encoded image, obtained without a full decode.
 @immutable
@@ -418,7 +419,7 @@ List<int>? _encode(img.Image image, String target, int quality) {
       return img.encodeBmp(image);
     case 'tif':
     case 'tiff':
-      return img.encodeTiff(image);
+      return encodeStandardTiff(image);
     case 'webp':
       return img.encodeWebP(
         image,

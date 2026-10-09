@@ -6,6 +6,7 @@ import '../../../core/services/app_review_service.dart';
 import '../../../core/services/output_saver.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/services/operation_store_provider.dart';
+import '../../../core/services/thumbnail_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/models/edit_history_item.dart';
@@ -23,6 +24,7 @@ class FormatConverterScreen extends ConsumerStatefulWidget {
 
 class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   bool _isPicking = false;
+  bool _isSaving = false;
   bool _hasAutoTriggered = false;
   bool _isOneClickOpening = false;
 
@@ -97,9 +99,10 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             i.status == ConvertStatus.success && i.convertedBytes != null)
         .toList();
 
-    if (convertedImages.isEmpty) return;
+    if (convertedImages.isEmpty || _isSaving) return;
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    setState(() => _isSaving = true);
 
     try {
       final isPdf = state.selectedFormat.isPdf;
@@ -123,12 +126,20 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       );
 
       if (mounted) {
+        String? historyThumbPath = saved.isNotEmpty ? saved.first.localPath : null;
+        if (saved.isNotEmpty && isTiff) {
+          try {
+            historyThumbPath = await ThumbnailService.instance.thumbnailFor(saved.first.localPath);
+          } catch (_) {}
+          historyThumbPath ??= saved.first.localPath;
+        }
+
         if (saved.length > 1) {
           ref.read(editHistoryProvider.notifier).addGroup(
                 toolName: 'Format Converter',
                 toolIcon: Icons.swap_horiz_rounded,
                 count: saved.length,
-                thumbnailPath: saved.first.localPath,
+                thumbnailPath: historyThumbPath,
                 filePath: saved.first.localPath,
               );
         } else if (saved.length == 1) {
@@ -138,7 +149,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                   toolUsed: 'Format Converter',
                   editedAt: DateTime.now(),
                   toolIcon: Icons.swap_horiz_rounded,
-                  thumbnailPath: saved.first.localPath,
+                  thumbnailPath: historyThumbPath,
                   filePath: saved.first.localPath,
                 ),
               );
@@ -155,17 +166,23 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
           ),
         );
         ref.read(formatConverterProvider.notifier).resetStatusForReconversion();
-        AppReviewService.instance.notifyOperationCompleted(context);
+        if (mounted) {
+          AppReviewService.instance.notifyOperationCompleted(context);
+        }
       }
     } catch (e) {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Error saving files: $e'),
+            content: Text('Failed to save: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }
@@ -318,12 +335,17 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
             runSpacing: 8,
             children: ConvertFormat.values.map((format) {
               final isSelected = state.selectedFormat == format;
+              final isBusy = state.isConverting || _isSaving;
               return ChoiceChip(
                 label: Text(format.label),
                 selected: isSelected,
-                onSelected: (_) {
-                  ref.read(formatConverterProvider.notifier).setFormat(format);
-                },
+                onSelected: isBusy
+                    ? null
+                    : (_) {
+                        ref
+                            .read(formatConverterProvider.notifier)
+                            .setFormat(format);
+                      },
                 selectedColor: theme.colorScheme.primaryContainer,
                 labelStyle: TextStyle(
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -758,13 +780,14 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
   ) {
     final theme = Theme.of(context);
     final isConverting = state.isConverting;
+    final isBusy = isConverting || _isSaving;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       height: 52,
       decoration: BoxDecoration(
-        gradient: isConverting
+        gradient: isBusy
             ? null
             : LinearGradient(
                 begin: Alignment.topLeft,
@@ -779,7 +802,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                 ],
               ),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: isConverting
+        boxShadow: isBusy
             ? null
             : [
                 BoxShadow(
@@ -792,7 +815,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: isConverting || !hasValidImages
+          onTap: isBusy || !hasValidImages
               ? null
               : () async {
                   if (state.pendingCount > 0) {
@@ -828,7 +851,30 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
                       ),
                     ],
                   )
-                : Row(
+                : _isSaving
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            'Saving...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const Icon(Icons.swap_horiz_rounded, color: Colors.white),
