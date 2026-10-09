@@ -21,12 +21,21 @@ class CenteredScrollable extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final minHeight = constraints.hasBoundedHeight ? constraints.maxHeight : 0.0;
+        final minWidth = constraints.hasBoundedWidth ? constraints.maxWidth : 0.0;
         return SingleChildScrollView(
           physics: physics,
           padding: padding,
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minHeight),
-            child: IntrinsicHeight(child: child),
+            constraints: BoxConstraints(
+              minHeight: minHeight,
+              minWidth: minWidth,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: Center(
+                child: IntrinsicHeight(child: child),
+              ),
+            ),
           ),
         );
       },

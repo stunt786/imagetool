@@ -409,59 +409,58 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
   Future<void> _convertFormat() async {
     if (_isBusy) return;
-    final selectedFormat = await showModalBottomSheet<ConvertFormat>(
+    final selectedFormat = await showDialog<ConvertFormat>(
       context: context,
       useRootNavigator: true,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E2129),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(ctx).height -
-                MediaQuery.viewPaddingOf(ctx).top -
-                16,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Center(
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF1E2129),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            title: const Text(
+              'Convert to Format',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  const Text(
-                    'Convert to Format',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      for (final fmt in [
-                        ConvertFormat.jpg,
-                        ConvertFormat.png,
-                        ConvertFormat.bmp,
-                      ])
-                        ActionChip(
-                          backgroundColor: const Color(0xFF2B303C),
-                          label: Text(
-                            fmt.label,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onPressed: () => Navigator.pop(ctx, fmt),
+                  for (final fmt in [
+                    ConvertFormat.jpg,
+                    ConvertFormat.png,
+                    ConvertFormat.bmp,
+                  ])
+                    ActionChip(
+                      backgroundColor: const Color(0xFF2B303C),
+                      side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.12),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      label: Text(
+                        fmt.label,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
-                    ],
-                  ),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, fmt),
+                    ),
                 ],
               ),
             ),

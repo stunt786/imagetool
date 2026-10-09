@@ -88,7 +88,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
       ),
       body: Column(
         children: [
-          if (_showSettings)
+          if (_showSettings && state.images.isNotEmpty)
             // Bounded and scrollable: an unbounded settings panel overflows
             // the column in landscape.
             ConstrainedBox(
@@ -373,6 +373,9 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
     if (!context.mounted) return;
 
     if (pdfPath != null) {
+      setState(() {
+        _showSettings = false;
+      });
       final fileName = pdfPath.split('/').last;
       ref.read(editHistoryProvider.notifier).addEntry(
             EditHistoryItem(
@@ -514,6 +517,9 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
           ),
           FilledButton(
             onPressed: () {
+              setState(() {
+                _showSettings = false;
+              });
               notifier.clearAll();
               Navigator.of(context).pop();
             },

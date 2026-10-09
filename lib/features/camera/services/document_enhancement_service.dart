@@ -97,6 +97,16 @@ class DocumentEnhancementService {
     });
   }
 
+  /// Enhances document scan: removes shadows, flattens uneven lighting, and sharpens text clarity.
+  static Future<Uint8List?> enhanceDocument(Uint8List bytes) async {
+    return Isolate.run(() {
+      final image = img.decodeImage(bytes);
+      if (image == null) return null;
+      final enhanced = internalEnhanceDocument(image);
+      return Uint8List.fromList(img.encodeJpg(enhanced, quality: 95));
+    });
+  }
+
   /// Detects the 4 paper corners in normalized (0.0 - 1.0) coordinates.
   static Future<List<Offset>> detectDocumentCorners(Uint8List bytes) async {
     return Isolate.run(() {
@@ -248,20 +258,20 @@ class DocumentEnhancementService {
       stagesOut?.add('Dirt & objects cleaned');
     }
 
-    // 3. Clean background & remove harsh antilight shadows without warping
+    // 3. Adjust brightness if dark/underexposed
+    final brightened = internalAutoAdjustDarkImage(result);
+    if (!identical(brightened, result)) {
+      stagesOut?.add('Brightness');
+      result = brightened;
+    }
+
+    // 4. Clean background & remove harsh antilight shadows without warping
     if (internalHasUnevenIllumination(result)) {
       result = internalAutocorrectAntiLightShadows(result);
       stagesOut?.add('Shadows removed');
     } else {
       result = _levelPaperBackground(result);
       stagesOut?.add('Background cleaned');
-    }
-
-    // 4. Adjust brightness if dark/underexposed
-    final brightened = internalAutoAdjustDarkImage(result);
-    if (!identical(brightened, result)) {
-      stagesOut?.add('Brightness');
-      result = brightened;
     }
 
     return result;
@@ -981,6 +991,167 @@ class DocumentEnhancementService {
   /// Automatically dewarps and flattens bended/curled scan paper.
   static img.Image internalAutoFlattenPaper(img.Image src) {
     return internalAutoFlattenSmooth(src);
+  }
+
+  /// Enhances document photos with uneven lighting, sunlight, or shadows (like shadow.jpg).
+  /// Normalizes illumination, flattens background, sharpens text, and preserves natural paper colors.
+  static img.Image internalEnhanceDocument(img.Image src) {
+    if (src.width < 16 || src.height < 16) {
+      return img.adjustColor(src, contrast: 1.25, saturation: 1.15, brightness: 1.05);
+    }
+
+    // 1. Downsample for fast illumination background estimation
+    final scale = math.max(1, (math.max(src.width, src.height) / 320).round());
+    final sw = math.max(16, src.width ~/ scale);
+    final sh = math.max(16, src.height ~/ scale);
+    final small = img.copyResize(src, width: sw, height: sh);
+
+    // 2. Morphological max dilation (radius 2) to eliminate text & dark glyphs
+    final w = small.width, h = small.height;
+    final tempMax = img.Image(width: w, height: h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var mr = 0, mg = 0, mb = 0;
+        final x0 = math.max(0, x - 2);
+        final x1 = math.min(w - 1, x + 2);
+        for (var kx = x0; kx <= x1; kx++) {
+          final p = small.getPixel(kx, y);
+          if (p.r > mr) mr = p.r.toInt();
+          if (p.g > mg) mg = p.g.toInt();
+          if (p.b > mb) mb = p.b.toInt();
+        }
+        tempMax.setPixelRgb(x, y, mr, mg, mb);
+      }
+    }
+    final dilated = img.Image(width: w, height: h);
+    for (var y = 0; y < h; y++) {
+      final y0 = math.max(0, y - 2);
+      final y1 = math.min(h - 1, y + 2);
+      for (var x = 0; x < w; x++) {
+        var mr = 0, mg = 0, mb = 0;
+        for (var ky = y0; ky <= y1; ky++) {
+          final p = tempMax.getPixel(x, ky);
+          if (p.r > mr) mr = p.r.toInt();
+          if (p.g > mg) mg = p.g.toInt();
+          if (p.b > mb) mb = p.b.toInt();
+        }
+        dilated.setPixelRgb(x, y, mr, mg, mb);
+      }
+    }
+
+    // 3. Morphological min erosion (radius 1) to balance boundaries
+    final tempMin = img.Image(width: w, height: h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var mr = 255, mg = 255, mb = 255;
+        final x0 = math.max(0, x - 1);
+        final x1 = math.min(w - 1, x + 1);
+        for (var kx = x0; kx <= x1; kx++) {
+          final p = dilated.getPixel(kx, y);
+          if (p.r < mr) mr = p.r.toInt();
+          if (p.g < mg) mg = p.g.toInt();
+          if (p.b < mb) mb = p.b.toInt();
+        }
+        tempMin.setPixelRgb(x, y, mr, mg, mb);
+      }
+    }
+    final closed = img.Image(width: w, height: h);
+    for (var y = 0; y < h; y++) {
+      final y0 = math.max(0, y - 1);
+      final y1 = math.min(h - 1, y + 1);
+      for (var x = 0; x < w; x++) {
+        var mr = 255, mg = 255, mb = 255;
+        for (var ky = y0; ky <= y1; ky++) {
+          final p = tempMin.getPixel(x, ky);
+          if (p.r < mr) mr = p.r.toInt();
+          if (p.g < mg) mg = p.g.toInt();
+          if (p.b < mb) mb = p.b.toInt();
+        }
+        closed.setPixelRgb(x, y, mr, mg, mb);
+      }
+    }
+
+    // 4. Gaussian blur to create smooth illumination surface
+    final blurred = img.gaussianBlur(closed, radius: 8);
+
+    // 5. Target natural background sampling (68th percentile)
+    final rValues = <int>[];
+    final gValues = <int>[];
+    final bValues = <int>[];
+    for (final p in blurred) {
+      rValues.add(p.r.toInt());
+      gValues.add(p.g.toInt());
+      bValues.add(p.b.toInt());
+    }
+    rValues.sort();
+    gValues.sort();
+    bValues.sort();
+    final pIndex = (rValues.length * 0.68).toInt().clamp(0, rValues.length - 1);
+    final targetR = math.max(80.0, math.min(248.0, rValues[pIndex].toDouble()));
+    final targetG = math.max(80.0, math.min(248.0, gValues[pIndex].toDouble()));
+    final targetB = math.max(80.0, math.min(248.0, bValues[pIndex].toDouble()));
+    final targetLum = 0.299 * targetR + 0.587 * targetG + 0.114 * targetB;
+
+    final bgMap = img.copyResize(blurred, width: src.width, height: src.height);
+
+    // 6. Division normalization + adaptive text darkening
+    final norm = img.Image(width: src.width, height: src.height);
+    for (var y = 0; y < src.height; y++) {
+      for (var x = 0; x < src.width; x++) {
+        final sp = src.getPixel(x, y);
+        final bp = bgMap.getPixel(x, y);
+
+        final bgR = math.max(15.0, bp.r.toDouble());
+        final bgG = math.max(15.0, bp.g.toDouble());
+        final bgB = math.max(15.0, bp.b.toDouble());
+
+        var nr = ((sp.r / bgR) * targetR).clamp(0.0, 255.0);
+        var ng = ((sp.g / bgG) * targetG).clamp(0.0, 255.0);
+        var nb = ((sp.b / bgB) * targetB).clamp(0.0, 255.0);
+
+        final normLum = 0.299 * nr + 0.587 * ng + 0.114 * nb;
+        final diff = math.max(0.0, targetLum - normLum);
+        if (diff > 0.0) {
+          final textFactor = (diff / 50.0).clamp(0.0, 1.0);
+          final darken = 1.0 - 0.38 * math.pow(textFactor, 1.2);
+          nr = (nr * darken).clamp(0.0, 255.0);
+          ng = (ng * darken).clamp(0.0, 255.0);
+          nb = (nb * darken).clamp(0.0, 255.0);
+        }
+
+        norm.setPixelRgba(x, y, nr.round(), ng.round(), nb.round(), sp.a.toInt());
+      }
+    }
+
+    // 7. Unsharp mask for crisp text edges
+    final blurredNorm = img.gaussianBlur(norm, radius: 2);
+    final result = img.Image(width: norm.width, height: norm.height);
+    const amount = 1.35;
+    const threshold = 2;
+    for (var y = 0; y < norm.height; y++) {
+      for (var x = 0; x < norm.width; x++) {
+        final np = norm.getPixel(x, y);
+        final bp = blurredNorm.getPixel(x, y);
+
+        final diffR = np.r - bp.r;
+        final diffG = np.g - bp.g;
+        final diffB = np.b - bp.b;
+
+        final r = (diffR.abs() >= threshold ? np.r + amount * diffR : np.r.toDouble())
+            .round()
+            .clamp(0, 255);
+        final g = (diffG.abs() >= threshold ? np.g + amount * diffG : np.g.toDouble())
+            .round()
+            .clamp(0, 255);
+        final b = (diffB.abs() >= threshold ? np.b + amount * diffB : np.b.toDouble())
+            .round()
+            .clamp(0, 255);
+
+        result.setPixelRgba(x, y, r, g, b, np.a.toInt());
+      }
+    }
+
+    return result;
   }
 
   /// Adaptively adjusts brightness and contrast for dark/underexposed images.

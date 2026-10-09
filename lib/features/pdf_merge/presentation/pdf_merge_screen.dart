@@ -118,49 +118,54 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
     final theme = Theme.of(context);
 
     return CenteredScrollable(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                shape: BoxShape.circle,
+      child: SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.merge_type_rounded,
+                  size: 64,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
               ),
-              child: Icon(
-                Icons.merge_type_rounded,
-                size: 64,
-                color: theme.colorScheme.onPrimaryContainer,
+              const SizedBox(height: 24),
+              Text(
+                'No PDFs selected',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No PDFs selected',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 8),
+              Text(
+                'Select 2 or more PDF files to merge',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Select 2 or more PDF files to merge',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: () => notifier.pickFiles(context),
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Select PDFs'),
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: () => notifier.pickFiles(context),
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Select PDFs'),
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

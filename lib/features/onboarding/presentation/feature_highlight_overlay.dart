@@ -249,8 +249,14 @@ class _FeatureHighlightOverlayState
     required int currentStepIndex,
     required int totalSteps,
   }) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomNavTop =
+        screenSize.height - (72.0 + bottomInset); // kBottomNavBarHeight = 72
+    final maxBottom =
+        step.arrowAbove ? screenSize.height - bottomInset - 8.0 : bottomNavTop - 8.0;
+
     final showCardAbove = step.arrowAbove ||
-        (targetRect.bottom + 260 > screenSize.height && targetRect.top > 260);
+        (targetRect.bottom + 150 > maxBottom && targetRect.top > 150);
 
     final cardWidth = math.min(340.0, screenSize.width - 32);
     final targetCenterX = targetRect.center.dx;
@@ -262,10 +268,10 @@ class _FeatureHighlightOverlayState
         .clamp(24.0, cardWidth - arrowWidth - 24.0);
 
     final cardContent = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFF1E2230),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: const Color(0xFF38BDF8).withValues(alpha: 0.5),
           width: 1.5,
@@ -273,12 +279,12 @@ class _FeatureHighlightOverlayState
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
           BoxShadow(
             color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-            blurRadius: 18,
+            blurRadius: 14,
           ),
         ],
       ),
@@ -291,18 +297,18 @@ class _FeatureHighlightOverlayState
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                    horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   'STEP ${currentStepIndex + 1} OF $totalSteps',
                   style: const TextStyle(
                     color: Color(0xFF38BDF8),
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
@@ -318,43 +324,47 @@ class _FeatureHighlightOverlayState
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: const Color(0xFF6366F1).withValues(alpha: 0.25),
                 ),
                 child: Icon(step.icon,
-                    color: const Color(0xFF818CF8), size: 20),
+                    color: const Color(0xFF818CF8), size: 16),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   step.title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 14.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.2,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           Text(
             step.description,
             style: const TextStyle(
               color: Color(0xFFCBD5E1),
-              fontSize: 13,
-              height: 1.42,
+              fontSize: 12,
+              height: 1.3,
             ),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: ElevatedButton.icon(
@@ -363,23 +373,27 @@ class _FeatureHighlightOverlayState
                 backgroundColor: const Color(0xFF1A73E8),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 10),
+                    horizontal: 16, vertical: 6),
+                minimumSize: const Size(0, 32),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                elevation: 4,
+                elevation: 3,
               ),
               icon: Icon(
                 currentStepIndex == totalSteps - 1
                     ? Icons.check_rounded
                     : Icons.arrow_forward_rounded,
-                size: 16,
+                size: 14,
               ),
               label: Text(
                 currentStepIndex == totalSteps - 1
                     ? 'Got it!'
                     : 'Next',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -390,7 +404,7 @@ class _FeatureHighlightOverlayState
     if (showCardAbove) {
       return Positioned(
         left: cardLeft,
-        bottom: math.max(16.0, (screenSize.height - targetRect.top) + 12.0),
+        bottom: math.max(16.0, (screenSize.height - targetRect.top) + 8.0),
         width: cardWidth,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -408,21 +422,27 @@ class _FeatureHighlightOverlayState
         ),
       );
     } else {
+      final cardTop = math
+          .min(targetRect.bottom + 6.0, maxBottom - 145.0)
+          .clamp(16.0, maxBottom - 60.0);
+      final showArrow = cardTop >= targetRect.bottom + 2.0;
+
       return Positioned(
         left: cardLeft,
-        top: targetRect.bottom + 12.0,
+        top: cardTop,
         width: cardWidth,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Transform.translate(
-              offset: const Offset(0, 1),
-              child: Padding(
-                padding: EdgeInsets.only(left: arrowLeftInCard),
-                child: const _PointingArrow(pointingUp: true),
+            if (showArrow)
+              Transform.translate(
+                offset: const Offset(0, 1),
+                child: Padding(
+                  padding: EdgeInsets.only(left: arrowLeftInCard),
+                  child: const _PointingArrow(pointingUp: true),
+                ),
               ),
-            ),
             cardContent,
           ],
         ),

@@ -309,12 +309,7 @@ Uint8List? _isolateApplyFilter(Map<String, dynamic> params) {
     case 'lighten':
       processed = img.adjustColor(image, brightness: 1.2, contrast: 1.05);
     case 'enhance':
-      processed = img.adjustColor(
-        image,
-        contrast: 1.25,
-        saturation: 1.15,
-        brightness: 1.05,
-      );
+      processed = DocumentEnhancementService.internalEnhanceDocument(image);
     case 'eco':
       processed = img.adjustColor(
         img.grayscale(image),
@@ -476,6 +471,10 @@ class ImageFilterService {
       width: decoded.width,
       height: decoded.height,
     );
+  }
+
+  static Future<ImageFilterResult?> applyEnhance(Uint8List bytes) async {
+    return applyFilter(bytes, FilterType.enhance);
   }
 
   static Future<ImageFilterResult?> rotate90(Uint8List bytes) async {

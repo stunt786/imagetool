@@ -95,19 +95,27 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (picked.isEmpty) return;
 
+    final resolvedList = await Future.wait(picked.map((file) async {
+      var fileBytes = await file.resolveBytes();
+      if (fileBytes != null && fileBytes.length > 1500000) {
+        fileBytes = await _normalizeOversizedImage(fileBytes);
+      }
+      return (file: file, bytes: fileBytes);
+    }));
+
     final bytesList = <Uint8List>[];
     final names = <String>[];
     int unsupportedCount = 0;
 
-    for (final file in picked) {
-      final fileBytes = await file.resolveBytes();
+    for (final item in resolvedList) {
+      final fileBytes = item.bytes;
       if (fileBytes != null) {
         if (!FileTypeDetector.isSupportedImage(fileBytes)) {
           unsupportedCount++;
           continue;
         }
         bytesList.add(fileBytes);
-        names.add(file.name);
+        names.add(item.file.name);
       }
     }
 
@@ -216,16 +224,27 @@ class CollageNotifier extends Notifier<CollageState> {
 
   /// Loads images directly from file paths into the collage.
   Future<void> loadFromPaths(List<String> paths) async {
-    final bytesList = <Uint8List>[];
-    final names = <String>[];
-    for (final path in paths.take(maxCollageImages)) {
+    final loaded = await Future.wait(paths.take(maxCollageImages).map((path) async {
       try {
         final file = File(path);
         if (await file.exists()) {
-          bytesList.add(await file.readAsBytes());
-          names.add(p.basename(path));
+          var bytes = await file.readAsBytes();
+          if (bytes.length > 1500000) {
+            bytes = await _normalizeOversizedImage(bytes);
+          }
+          return (name: p.basename(path), bytes: bytes);
         }
       } catch (_) {}
+      return null;
+    }));
+
+    final bytesList = <Uint8List>[];
+    final names = <String>[];
+    for (final item in loaded) {
+      if (item != null) {
+        bytesList.add(item.bytes);
+        names.add(item.name);
+      }
     }
     if (bytesList.isEmpty) return;
 
@@ -260,7 +279,7 @@ class CollageNotifier extends Notifier<CollageState> {
 
     if (picked.isEmpty) return;
 
-    final bytes = await picked.first.resolveBytes();
+    var bytes = await picked.first.resolveBytes();
     if (bytes == null) return;
 
     if (!FileTypeDetector.isSupportedImage(bytes)) {
@@ -273,6 +292,10 @@ class CollageNotifier extends Notifier<CollageState> {
         );
       }
       return;
+    }
+
+    if (bytes.length > 1500000) {
+      bytes = await _normalizeOversizedImage(bytes);
     }
 
     final newImages = List<CollageImageSlot>.from(state.images);
@@ -817,6 +840,31 @@ class CollageNotifier extends Notifier<CollageState> {
   }
 }
 
+Future<Uint8List> _normalizeOversizedImage(Uint8List bytes) async {
+  if (bytes.length < 1500000) return bytes;
+  try {
+    return await compute((Uint8List raw) {
+      final decoded = img.decodeImage(raw);
+      if (decoded == null) return raw;
+      const maxDim = 1920;
+      final longest = math.max(decoded.width, decoded.height);
+      if (longest <= maxDim) return raw;
+      final resized = img.copyResize(
+        decoded,
+        width: decoded.width >= decoded.height ? maxDim : null,
+        height: decoded.height > decoded.width ? maxDim : null,
+      );
+      final hasAlpha = decoded.hasAlpha;
+      final encoded = hasAlpha
+          ? img.encodePng(resized)
+          : img.encodeJpg(resized, quality: 90);
+      return Uint8List.fromList(encoded);
+    }, bytes);
+  } catch (_) {
+    return bytes;
+  }
+}
+
 class _CollageSlotData {
   final Uint8List imageBytes;
   final double left;
@@ -877,6 +925,15 @@ void _applyRoundedCornersToSlot(img.Image image, int radius, int bgR, int bgG, i
   final r = radius.clamp(0, w ~/ 2).clamp(0, h ~/ 2);
   if (r <= 0) return;
 
+  final distTable = Float64List(r * r);
+  for (int dy = 0; dy < r; dy++) {
+    final dySq = dy * dy;
+    final row = dy * r;
+    for (int dx = 0; dx < r; dx++) {
+      distTable[row + dx] = math.sqrt(dx * dx + dySq) - r;
+    }
+  }
+
   void blendCornerPixel(int x, int y, double dist) {
     if (dist >= 0.5) {
       image.setPixel(x, y, img.ColorRgb8(bgR, bgG, bgB));
@@ -892,44 +949,36 @@ void _applyRoundedCornersToSlot(img.Image image, int radius, int bgR, int bgG, i
 
   // Top-Left corner
   for (int y = 0; y < r; y++) {
-    final dy = r - y - 1;
-    final dySq = dy * dy;
+    final row = (r - y - 1) * r;
     for (int x = 0; x < r; x++) {
-      final dx = r - x - 1;
-      final dist = math.sqrt(dx * dx + dySq) - r;
+      final dist = distTable[row + (r - x - 1)];
       blendCornerPixel(x, y, dist);
     }
   }
 
   // Top-Right corner
   for (int y = 0; y < r; y++) {
-    final dy = r - y - 1;
-    final dySq = dy * dy;
+    final row = (r - y - 1) * r;
     for (int x = w - r; x < w; x++) {
-      final dx = x - (w - r);
-      final dist = math.sqrt(dx * dx + dySq) - r;
+      final dist = distTable[row + (x - (w - r))];
       blendCornerPixel(x, y, dist);
     }
   }
 
   // Bottom-Left corner
   for (int y = h - r; y < h; y++) {
-    final dy = y - (h - r);
-    final dySq = dy * dy;
+    final row = (y - (h - r)) * r;
     for (int x = 0; x < r; x++) {
-      final dx = r - x - 1;
-      final dist = math.sqrt(dx * dx + dySq) - r;
+      final dist = distTable[row + (r - x - 1)];
       blendCornerPixel(x, y, dist);
     }
   }
 
   // Bottom-Right corner
   for (int y = h - r; y < h; y++) {
-    final dy = y - (h - r);
-    final dySq = dy * dy;
+    final row = (y - (h - r)) * r;
     for (int x = w - r; x < w; x++) {
-      final dx = x - (w - r);
-      final dist = math.sqrt(dx * dx + dySq) - r;
+      final dist = distTable[row + (x - (w - r))];
       blendCornerPixel(x, y, dist);
     }
   }
@@ -1036,9 +1085,12 @@ Uint8List? _renderCollageWorker(_CollageExportParams params) {
         break;
     }
 
-    final slotImage = img.Image(width: w, height: h);
-    img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
-    img.compositeImage(slotImage, resized);
+    img.Image slotImage = resized;
+    if (resized.hasAlpha) {
+      slotImage = img.Image(width: w, height: h);
+      img.fill(slotImage, color: img.ColorRgb8(bgR, bgG, bgB));
+      img.compositeImage(slotImage, resized);
+    }
 
     if (radiusPx > 0) {
       _applyRoundedCornersToSlot(slotImage, radiusPx, bgR, bgG, bgB);

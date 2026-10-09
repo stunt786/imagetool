@@ -93,7 +93,10 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
             onPressed: state.hasFile ||
                     state.outputPaths.isNotEmpty ||
                     state.publicExportPaths.isNotEmpty
-                ? notifier.clear
+                ? () {
+                    setState(() => _showSettings = false);
+                    notifier.clear();
+                  }
                 : null,
             icon: const Icon(Icons.delete_outline),
           ),
@@ -101,7 +104,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
       ),
       body: Column(
         children: [
-          if (_showSettings)
+          if (_showSettings && state.hasFile && state.outputPaths.isEmpty)
             ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.42,
@@ -136,49 +139,54 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
     final theme = Theme.of(context);
 
     return CenteredScrollable(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                shape: BoxShape.circle,
+      child: SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.call_split_rounded,
+                  size: 64,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
               ),
-              child: Icon(
-                Icons.call_split_rounded,
-                size: 64,
-                color: theme.colorScheme.onPrimaryContainer,
+              const SizedBox(height: 24),
+              Text(
+                'No PDF selected',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No PDF selected',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 8),
+              Text(
+                'Select a PDF file to split',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Select a PDF file to split',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: () => notifier.pickFile(context),
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Select PDF'),
+                style: FilledButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: () => notifier.pickFile(context),
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Select PDF'),
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -484,6 +492,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
+                        setState(() => _showSettings = false);
                         notifier.clear();
                       },
                       icon: const Icon(Icons.check_rounded),
@@ -551,6 +560,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
           child: FilledButton.icon(
             onPressed: state.canSplit
                 ? () async {
+                    setState(() => _showSettings = false);
                     final result = await notifier.split();
                     if (result != null && mounted) {
                       final firstPath = state.outputPaths.isNotEmpty
