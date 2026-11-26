@@ -18,6 +18,7 @@ import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/collage_palette.dart';
 import '../notifiers/collage_notifier.dart';
 import 'collage_text_dialog.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class CollageToolbar extends ConsumerStatefulWidget {
   const CollageToolbar({super.key});
@@ -511,7 +512,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
                 thumbnailPath: out.localPath,
               ),
             );
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(
             content: Text('Saved to the gallery and Files'),
             duration: Duration(seconds: 2),
@@ -525,7 +526,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(content: Text('Error: $e'), duration: const Duration(seconds: 2)),
         );
       }
@@ -543,7 +544,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       final bytes = await ref.read(collageProvider.notifier).exportCollage();
       if (bytes == null || bytes.isEmpty) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             const SnackBar(content: Text('Failed to generate collage image.'), duration: Duration(seconds: 2)),
           );
         }
@@ -593,7 +594,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
         if (!kIsWeb && Platform.isLinux) {
           await Process.run('xdg-open', [tempFile.path]);
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            ScaffoldMessenger.of(context).showTopSnackBar(
               SnackBar(content: Text('Opened collage: ${tempFile.path}'), duration: const Duration(seconds: 2)),
             );
           }
@@ -609,7 +610,7 @@ class _CollageToolbarState extends ConsumerState<CollageToolbar> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(content: Text('Error sharing: $e'), duration: const Duration(seconds: 2)),
         );
       }

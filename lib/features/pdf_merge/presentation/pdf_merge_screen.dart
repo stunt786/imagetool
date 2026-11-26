@@ -11,6 +11,7 @@ import '../../../shared/widgets/centered_scrollable.dart';
 import '../models/pdf_merge_state.dart';
 import '../notifiers/pdf_merge_notifier.dart';
 import '../widgets/pdf_file_list_tile.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class PdfMergeScreen extends ConsumerStatefulWidget {
   const PdfMergeScreen({super.key});
@@ -56,7 +57,7 @@ class _PdfMergeScreenState extends ConsumerState<PdfMergeScreen> {
     ref.listen<PdfMergeState>(pdfMergeProvider, (previous, next) {
       final msg = next.errorMessage;
       if (msg != null && msg.isNotEmpty && (previous?.errorMessage != msg)) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(msg),
             backgroundColor: Theme.of(context).colorScheme.error,

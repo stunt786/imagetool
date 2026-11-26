@@ -11,6 +11,7 @@ import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/widgets/centered_scrollable.dart';
 import '../models/pdf_split_state.dart';
 import '../notifiers/pdf_split_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class PdfSplitScreen extends ConsumerStatefulWidget {
   const PdfSplitScreen({super.key});
@@ -59,7 +60,7 @@ class _PdfSplitScreenState extends ConsumerState<PdfSplitScreen> {
     if (state.errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             SnackBar(
               content: Text(state.errorMessage!),
               backgroundColor: Theme.of(context).colorScheme.error,

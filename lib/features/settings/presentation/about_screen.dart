@@ -6,6 +6,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/services/app_info_service.dart';
 import '../../../core/services/app_review_service.dart';
 import '../../../core/services/app_update_service.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
@@ -49,7 +50,7 @@ class AboutScreen extends ConsumerWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: Image.asset(
-                      'assets/icons/icon.png',
+                      'assets/icons/logo_icon.png',
                       width: 72,
                       height: 72,
                       fit: BoxFit.cover,
@@ -244,7 +245,7 @@ class AboutScreen extends ConsumerWidget {
 
   Future<void> _handleCheckForUpdates(BuildContext context) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
-    scaffoldMessenger.showSnackBar(
+    scaffoldMessenger.showTopSnackBar(
       const SnackBar(
         content: Row(
           children: [

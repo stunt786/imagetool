@@ -13,6 +13,7 @@ import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../notifiers/format_converter_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class FormatConverterScreen extends ConsumerStatefulWidget {
   const FormatConverterScreen({super.key});
@@ -60,7 +61,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
     if (_isPicking) return;
     final currentCount = ref.read(formatConverterProvider).images.length;
     if (currentCount >= 25) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         const SnackBar(
           content: Text('Maximum limit of 25 images reached for conversion.'),
           duration: Duration(seconds: 2),
@@ -157,7 +158,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
 
         final destLabel =
             isPdf ? 'Downloads and Files' : 'the gallery and Files';
-        scaffoldMessenger.showSnackBar(
+        scaffoldMessenger.showTopSnackBar(
           SnackBar(
             content: Text(
                 'Saved ${saved.length} file${saved.length > 1 ? 's' : ''} to $destLabel'),
@@ -172,7 +173,7 @@ class _FormatConverterScreenState extends ConsumerState<FormatConverterScreen> {
       }
     } catch (e) {
       if (mounted) {
-        scaffoldMessenger.showSnackBar(
+        scaffoldMessenger.showTopSnackBar(
           SnackBar(
             content: Text('Failed to save: $e'),
             backgroundColor: Colors.red,

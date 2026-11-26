@@ -15,6 +15,7 @@ import '../models/image_to_pdf_state.dart';
 import '../notifiers/image_to_pdf_notifier.dart';
 import '../widgets/image_thumbnail_card.dart';
 import '../widgets/pdf_settings_panel.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class ImageToPdfScreen extends ConsumerStatefulWidget {
   const ImageToPdfScreen({super.key});
@@ -397,7 +398,7 @@ class _ImageToPdfScreenState extends ConsumerState<ImageToPdfScreen> {
       final state = ref.read(imageToPdfProvider);
       if (!context.mounted) return;
       if (state.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(state.errorMessage!),
             backgroundColor: Theme.of(context).colorScheme.error,

@@ -9,6 +9,7 @@ import '../../../core/services/image_isolate_service.dart';
 import '../../image_resize/models/crop_geometry.dart';
 import '../../image_resize/widgets/crop_overlay.dart';
 import '../notifiers/operation_library_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Full-screen crop editor used by the Files module.
 ///
@@ -132,7 +133,7 @@ class _FileCropScreenState extends ConsumerState<FileCropScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _isApplying = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Could not crop image: $error'),
           behavior: SnackBarBehavior.floating,

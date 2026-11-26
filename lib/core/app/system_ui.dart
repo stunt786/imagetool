@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ui/app_snackbars.dart';
 import 'orientation_hint.dart';
 
 /// App level system UI configuration: allowed orientations, edge-to-edge
@@ -44,10 +45,14 @@ abstract final class AppSystemUi {
   static TransitionBuilder appBuilder(TransitionBuilder? baseBuilder) {
     return (BuildContext context, Widget? child) {
       final Widget? content = baseBuilder?.call(context, child) ?? child;
-      return OrientationHint(
-        child: AnnotatedRegion<SystemUiOverlayStyle>(
-          value: overlayStyle(Theme.of(context).brightness),
-          child: content ?? const SizedBox.shrink(),
+      // AppSnackbars owns the overlay every success/failure message is drawn
+      // in, anchored to the top-right corner of the screen.
+      return AppSnackbars(
+        child: OrientationHint(
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: overlayStyle(Theme.of(context).brightness),
+            child: content ?? const SizedBox.shrink(),
+          ),
         ),
       );
     };

@@ -226,7 +226,7 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                               // Zoomed, 100% uncropped crisp app logo
                               Image.asset(
-                                'assets/icons/icon.png',
+                                'assets/icons/logo_icon.png',
                                 width: 136,
                                 height: 136,
                                 fit: BoxFit.contain,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/image_isolate_service.dart';
 import '../../../../core/utils/decode_size.dart';
 import '../../services/magic_remove_service.dart';
+import '../../../../core/ui/app_snackbars.dart';
 
 /// Represents a single brush stroke drawn on the canvas.
 class Stroke {
@@ -121,7 +122,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
       );
       if (!mounted) return;
       if (clusters.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: const Text('No border intrusions detected'),
             behavior: SnackBarBehavior.floating,
@@ -137,7 +138,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
           _strokes.add(Stroke(points: points, radius: _brushRadius));
         }
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text(
               '${clusters.length} area(s) detected – adjust, then Erase'),
@@ -149,7 +150,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(content: Text('Auto-detect failed: $error'), duration: const Duration(seconds: 2)),
         );
       }
@@ -198,7 +199,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
           _strokes.clear();
           _decodeDimensions();
         });
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: const Text('Object erased'),
             behavior: SnackBarBehavior.floating,
@@ -209,7 +210,7 @@ class _MagicRemoveScreenState extends State<MagicRemoveScreen>
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text('Error: $error'),
             backgroundColor: Theme.of(context).colorScheme.error,

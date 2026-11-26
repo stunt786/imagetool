@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../notifiers/operation_library_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Dialog allowing user to Move or Copy selected files to another operation folder.
 class MoveCopyDialog extends ConsumerStatefulWidget {
@@ -172,7 +173,7 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
       final count =
           await notifier.copyFiles(widget.fileIds, _selectedTargetId!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text('$count file(s) copied.'),
             behavior: SnackBarBehavior.floating,
@@ -185,7 +186,7 @@ class _MoveCopyDialogState extends ConsumerState<MoveCopyDialog> {
       final count =
           await notifier.moveFiles(widget.fileIds, _selectedTargetId!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text('$count file(s) moved.'),
             behavior: SnackBarBehavior.floating,

@@ -13,6 +13,7 @@ import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/services/file_picker_service.dart';
 import '../../../shared/services/watermark_helper.dart';
 import '../models/collage_state.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 final collageProvider = NotifierProvider<CollageNotifier, CollageState>(
   CollageNotifier.new,
@@ -76,7 +77,7 @@ class CollageNotifier extends Notifier<CollageState> {
     // Guard: enforce 9-image maximum for 3x3 support
     final maxNew = maxCollageImages - state.imageCount;
     if (maxNew <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         const SnackBar(
           content: Text('Maximum 9 photos allowed in a collage.'),
           duration: Duration(seconds: 2),
@@ -144,7 +145,7 @@ class CollageNotifier extends Notifier<CollageState> {
       }
 
       if (unsupportedCount > 0 && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(
               '$unsupportedCount unsupported file(s) skipped. Only JPG, PNG, WebP, GIF, BMP are supported.',
@@ -162,7 +163,7 @@ class CollageNotifier extends Notifier<CollageState> {
         bytesList.removeRange(maxNew, bytesList.length);
         names.removeRange(maxNew, names.length);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             SnackBar(
               content: Text('Only $maxNew image(s) added (9 max). $overflow photo(s) skipped.'),
               duration: const Duration(seconds: 2),
@@ -337,7 +338,7 @@ class CollageNotifier extends Notifier<CollageState> {
 
       if (!FileTypeDetector.isSupportedImage(bytes)) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             const SnackBar(
               content: Text('Unsupported file format. Please select a valid image.'),
               duration: Duration(seconds: 2),

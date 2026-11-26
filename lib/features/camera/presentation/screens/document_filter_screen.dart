@@ -6,6 +6,7 @@ import '../../../../core/utils/decode_size.dart';
 import '../../models/scanned_page.dart';
 import '../../notifiers/document_batch_notifier.dart';
 import '../../services/image_filter_service.dart';
+import '../../../../core/ui/app_snackbars.dart';
 
 class DocumentFilterScreen extends ConsumerStatefulWidget {
   const DocumentFilterScreen({super.key});
@@ -224,8 +225,8 @@ class _DocumentFilterScreenState extends ConsumerState<DocumentFilterScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).hideTopSnackBar();
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(
             content: Text('Filter applied successfully'),
             behavior: SnackBarBehavior.floating,

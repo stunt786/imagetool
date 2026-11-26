@@ -9,6 +9,7 @@ import '../../../core/services/image_isolate_service.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/private_to_public_pdf_manager.dart';
 import '../../../core/services/public_storage.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Shared file actions used by Files and the folder-content screen, so the
 /// behaviour (and the error messages) stay identical everywhere.
@@ -26,7 +27,7 @@ abstract final class FileActions {
     // share sheet closes.
     final messenger = ScaffoldMessenger.of(context);
     if (existing.isEmpty) {
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         const SnackBar(
           content: Text('Those files are no longer available.'),
           behavior: SnackBarBehavior.floating,
@@ -41,7 +42,7 @@ abstract final class FileActions {
         subject: items.length == 1 ? items.first.fileName : null,
       );
     } catch (_) {
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         const SnackBar(
           content: Text('Could not share those files.'),
           behavior: SnackBarBehavior.floating,
@@ -197,7 +198,7 @@ abstract final class FileActions {
     }
 
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
+    messenger.showTopSnackBar(
       const SnackBar(
         content: Row(
           children: [
@@ -228,7 +229,7 @@ abstract final class FileActions {
         outputBaseName: cleanDefault,
       );
 
-      messenger.clearSnackBars();
+      messenger.clearTopSnackBars();
       final result = await PrivateToPublicPdfManager().exportSingleFile(
         sandboxPath: outPath,
         suggestedName: '$cleanDefault.pdf',
@@ -241,7 +242,7 @@ abstract final class FileActions {
         _message(context, 'Export cancelled.');
       }
     } catch (e) {
-      messenger.clearSnackBars();
+      messenger.clearTopSnackBars();
       if (context.mounted) {
         _message(context, 'Could not create PDF: $e');
       }
@@ -427,8 +428,8 @@ abstract final class FileActions {
   }) {
     if (!context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    final controller = messenger.showSnackBar(
+    messenger.clearTopSnackBars();
+    final controller = messenger.showTopSnackBar(
       SnackBar(
         content: Text(text),
         behavior: SnackBarBehavior.floating,

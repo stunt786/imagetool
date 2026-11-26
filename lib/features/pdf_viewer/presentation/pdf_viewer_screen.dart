@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/utils/file_type_detector.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Full in-app PDF viewer: continuous vertical pages, pinch-to-zoom, page
 /// indicator, loading and error states.
@@ -281,7 +282,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         const SnackBar(content: Text('Could not share this PDF.'), duration: Duration(seconds: 2)),
       );
     }
@@ -353,7 +354,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<void> _saveSinglePageAsImage(int pageNum) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
+    messenger.showTopSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -397,9 +398,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         kind: PublicFileKind.image,
       );
 
-      messenger.hideCurrentSnackBar();
+      messenger.hideTopSnackBar();
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         SnackBar(
           content: Text('Page $pageNum saved to Gallery'),
           behavior: SnackBarBehavior.floating,
@@ -416,9 +417,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         ),
       );
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      messenger.hideTopSnackBar();
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         SnackBar(
           content: Text('Could not save page image: $e'),
           behavior: SnackBarBehavior.floating,
@@ -430,7 +431,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   Future<void> _saveAllPagesAsImages() async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
+    messenger.showTopSnackBar(
       const SnackBar(
         content: Row(
           children: [
@@ -478,9 +479,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         } catch (_) {}
       }
 
-      messenger.hideCurrentSnackBar();
+      messenger.hideTopSnackBar();
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         SnackBar(
           content: Text('$saved page image(s) saved to Gallery'),
           behavior: SnackBarBehavior.floating,
@@ -495,9 +496,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         ),
       );
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      messenger.hideTopSnackBar();
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         SnackBar(
           content: Text('Could not save pages: $e'),
           behavior: SnackBarBehavior.floating,

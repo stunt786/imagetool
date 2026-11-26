@@ -6,6 +6,7 @@ import '../../../core/utils/file_type_detector.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../pdf_viewer/presentation/pdf_viewer_screen.dart';
 import '../presentation/file_preview_screen.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Single place that decides how a file is opened.
 ///
@@ -84,7 +85,7 @@ abstract final class FileOpenService {
 
   static void _showMessage(BuildContext context, String message) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,

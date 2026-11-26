@@ -10,6 +10,7 @@ import '../../shell/presentation/shell_index_scope.dart';
 import '../notifiers/document_batch_notifier.dart';
 import '../services/document_scanner_service.dart';
 import '../services/scanner_capability_service.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 final cameraLaunchTriggerProvider = StateProvider<int>((ref) => 0);
 
@@ -90,7 +91,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
     );
   }

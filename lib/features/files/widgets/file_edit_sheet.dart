@@ -31,6 +31,7 @@ import '../presentation/file_crop_screen.dart';
 import '../services/file_actions.dart';
 import '../services/file_open_service.dart';
 import 'file_filter_sheet.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Modal bottom sheet / dialog displaying full interactive image preview
 /// and quick-action tools to modify or export the image.
@@ -115,8 +116,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     });
 
     final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    messenger.hideTopSnackBar();
+    messenger.showTopSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
@@ -163,7 +164,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     );
     if (cleaned == null || !mounted) return;
     if (_sameBytes(cleaned, bytes)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         const SnackBar(
           content: Text('Nothing was cleaned in this image'),
           behavior: SnackBarBehavior.floating,
@@ -202,7 +203,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Magic clean failed: $e'),
           behavior: SnackBarBehavior.floating,
@@ -390,7 +391,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Resize failed: $e'),
           behavior: SnackBarBehavior.floating,
@@ -527,8 +528,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).hideTopSnackBar();
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text(
               'Converted to ${selectedFormat.label} and saved to this folder'),
@@ -538,7 +539,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Conversion failed: $e'),
           behavior: SnackBarBehavior.floating,
@@ -573,8 +574,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
     if (_item.sizeBytes > FileTypeDetector.maxPdfSizeBytes) {
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
+        ..hideTopSnackBar()
+        ..showTopSnackBar(
           SnackBar(
             content: Text(
               'This PDF exceeds the ${FileTypeDetector.maxPdfSizeLabel} size limit.',
@@ -621,13 +622,13 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       if (!mounted) return;
 
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).clearTopSnackBars();
 
       final msg = (newSize >= _item.sizeBytes)
           ? 'Already compressed at highest level'
           : 'PDF compressed (${_formatSize(_item.sizeBytes)} → ${_formatSize(newSize)})';
 
-      final controller = ScaffoldMessenger.of(context).showSnackBar(
+      final controller = ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text(msg),
           behavior: SnackBarBehavior.floating,
@@ -649,7 +650,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Could not compress PDF: $e'),
           behavior: SnackBarBehavior.floating,
@@ -743,9 +744,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
 
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).hideTopSnackBar();
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('PDF split into ${saved.length} document(s)'),
           behavior: SnackBarBehavior.floating,
@@ -762,7 +763,7 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Could not split PDF: $e'),
           behavior: SnackBarBehavior.floating,
@@ -808,8 +809,8 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
     if (result == null || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    messenger.hideTopSnackBar();
+    messenger.showTopSnackBar(
       const SnackBar(
         content: Row(
           children: [
@@ -863,11 +864,11 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         } catch (_) {}
       }
 
-      messenger.clearSnackBars();
+      messenger.clearTopSnackBars();
       if (!mounted) return;
       Navigator.pop(context);
 
-      final controller = messenger.showSnackBar(
+      final controller = messenger.showTopSnackBar(
         SnackBar(
           content: Text('$savedCount page image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
@@ -887,9 +888,9 @@ class _FileEditSheetState extends ConsumerState<FileEditSheet> {
         } catch (_) {}
       });
     } catch (e) {
-      messenger.hideCurrentSnackBar();
+      messenger.hideTopSnackBar();
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         SnackBar(
           content: Text('Could not save pages as images: $e'),
           behavior: SnackBarBehavior.floating,

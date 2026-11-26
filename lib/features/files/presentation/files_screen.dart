@@ -11,6 +11,7 @@ import '../services/file_actions.dart';
 import '../widgets/file_thumbnail.dart';
 import '../widgets/selection_action_bar.dart';
 import 'operation_folder_screen.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Files: a metadata-backed file manager over the operation folders.
 ///
@@ -142,7 +143,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
         .read(operationLibraryProvider.notifier)
         .renameOperation(operation.id, name);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       SnackBar(
         content:
             Text(ok ? 'Renamed to "$name"' : 'Could not rename that item.'),

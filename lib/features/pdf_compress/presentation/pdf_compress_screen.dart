@@ -12,6 +12,7 @@ import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../models/pdf_compress_state.dart';
 import '../notifiers/pdf_compress_notifier.dart';
 import '../widgets/compression_settings_panel.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class PdfCompressScreen extends ConsumerStatefulWidget {
   const PdfCompressScreen({super.key});
@@ -59,7 +60,7 @@ class _PdfCompressScreenState extends ConsumerState<PdfCompressScreen> {
 
     ref.listen(pdfCompressProvider, (previous, next) {
       if (next.errorMessage != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(next.errorMessage!),
             backgroundColor: Theme.of(context).colorScheme.error,

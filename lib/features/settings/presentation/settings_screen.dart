@@ -13,6 +13,7 @@ import '../../../core/services/app_review_service.dart';
 import '../../../core/services/app_update_service.dart';
 import '../../../core/services/public_storage.dart';
 import '../../../core/settings/app_settings.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -235,7 +236,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 secondary: ClipRRect(
                                   borderRadius: BorderRadius.circular(6),
                                   child: Image.asset(
-                                    'assets/icons/icon.png',
+                                    'assets/icons/logo_icon.png',
                                     width: 28,
                                     height: 28,
                                     fit: BoxFit.cover,
@@ -532,7 +533,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _checkForUpdates(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
+    messenger.showTopSnackBar(
       const SnackBar(
         content: Row(
           children: [
@@ -600,7 +601,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (!launched) throw Exception('launch failed');
       } catch (_) {
         await Clipboard.setData(const ClipboardData(text: AppStrings.contactEmail));
-        messenger.showSnackBar(
+        messenger.showTopSnackBar(
           const SnackBar(
             content: Text(
               'No email app found — address copied instead. '
@@ -620,7 +621,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         Future<void> copyEmail(StateSetter setState) async {
           await Clipboard.setData(const ClipboardData(text: AppStrings.contactEmail));
           setState(() => copied = true);
-          messenger.showSnackBar(
+          messenger.showTopSnackBar(
             const SnackBar(
               content: Row(
                 children: [
@@ -805,7 +806,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
       await ref.read(appSettingsProvider.notifier).setSavePath(result);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(content: Text('Save location updated'), duration: Duration(seconds: 2)),
         );
       }
@@ -855,7 +856,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (picked != null) {
         await PublicStorage.setSaveTree(uri: picked.uri, label: picked.label);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             const SnackBar(content: Text('Save location updated'), duration: Duration(seconds: 2)),
           );
         }
@@ -863,7 +864,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } else if (action == 'default') {
       await PublicStorage.clearSaveTree();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(content: Text('Save location reset to default'), duration: Duration(seconds: 2)),
         );
       }
@@ -1282,7 +1283,7 @@ class _WatermarkLivePreviewState extends State<_WatermarkLivePreview> {
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(2),
                                   child: Image.asset(
-                                    'assets/icons/icon.png',
+                                    'assets/icons/logo_icon.png',
                                     width: 12,
                                     height: 12,
                                     fit: BoxFit.contain,
@@ -1324,7 +1325,7 @@ class _WatermarkLivePreviewState extends State<_WatermarkLivePreview> {
                           ClipRRect(
                             borderRadius: BorderRadius.circular(2),
                             child: Image.asset(
-                              'assets/icons/icon.png',
+                              'assets/icons/logo_icon.png',
                               width: 14,
                               height: 14,
                               fit: BoxFit.contain,

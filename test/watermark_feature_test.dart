@@ -21,8 +21,8 @@ void main() {
   late Uint8List iconBytes;
 
   setUpAll(() {
-    final iconFile = File('assets/icons/icon.png');
-    expect(iconFile.existsSync(), isTrue, reason: 'assets/icons/icon.png must exist');
+    final iconFile = File('assets/icons/logo_icon.png');
+    expect(iconFile.existsSync(), isTrue, reason: 'assets/icons/logo_icon.png must exist');
     iconBytes = iconFile.readAsBytesSync();
     WatermarkHelper.setIconBytes(iconBytes);
   });

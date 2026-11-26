@@ -21,6 +21,7 @@ import '../../files/widgets/file_thumbnail.dart';
 import '../../files/widgets/selection_action_bar.dart';
 import '../../onboarding/presentation/feature_highlight_overlay.dart';
 import '../../shell/presentation/app_shell.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 final _imageTools = <_ToolData>[
   _ToolData(
@@ -223,7 +224,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
     if (!confirmed || !mounted) return;
     ref.read(editHistoryProvider.notifier).clear();
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       const SnackBar(
         content: Text('History cleared'),
         behavior: SnackBarBehavior.floating,
@@ -699,7 +700,7 @@ class _HomeTopBar extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.asset(
-              'assets/icons/icon.png',
+              'assets/icons/logo_icon.png',
               width: 42,
               height: 42,
               fit: BoxFit.cover,

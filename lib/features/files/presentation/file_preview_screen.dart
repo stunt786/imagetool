@@ -14,6 +14,7 @@ import '../../../features/image_to_pdf/notifiers/image_to_pdf_notifier.dart';
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
 import '../../../shared/utils/image_saver.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class FilePreviewScreen extends ConsumerStatefulWidget {
   const FilePreviewScreen({
@@ -406,8 +407,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
 
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
-        messenger.clearSnackBars();
-        final controller = messenger.showSnackBar(
+        messenger.clearTopSnackBars();
+        final controller = messenger.showTopSnackBar(
           SnackBar(
             content: Text('$saved page image(s) saved to Gallery'),
             behavior: SnackBarBehavior.floating,
@@ -497,8 +498,8 @@ class _FilePreviewScreenState extends ConsumerState<FilePreviewScreen> {
 
   void _showSnack(String message) {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    final controller = messenger.showSnackBar(
+    messenger.clearTopSnackBars();
+    final controller = messenger.showTopSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,

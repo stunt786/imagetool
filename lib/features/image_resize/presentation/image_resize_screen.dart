@@ -25,6 +25,7 @@ import '../widgets/crop_overlay.dart';
 import '../../../core/utils/file_type_detector.dart';
 import '../../../core/utils/deferred_clear.dart';
 import '../../../shared/widgets/centered_scrollable.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class ImageResizeScreen extends ConsumerStatefulWidget {
   const ImageResizeScreen({super.key});
@@ -2053,7 +2054,7 @@ class _ImageResizeScreenState extends ConsumerState<ImageResizeScreen> {
   void _showSnack(String message) {
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
+    ).showTopSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   Future<bool?> _showSaveDialog({required bool canReplace}) {

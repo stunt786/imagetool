@@ -20,19 +20,19 @@ class WatermarkHelper {
 
   static Uint8List? get cachedIconBytes => _cachedIconBytes;
 
-  /// Loads `assets/icons/icon.png` into memory and decodes it once.
+  /// Loads `assets/icons/logo_icon.png` into memory and decodes it once.
   static Future<Uint8List> loadIconBytes() async {
     if (_cachedIconBytes != null && _cachedIconBytes!.isNotEmpty) {
       return _cachedIconBytes!;
     }
     try {
-      final data = await rootBundle.load('assets/icons/icon.png');
+      final data = await rootBundle.load('assets/icons/logo_icon.png');
       _cachedIconBytes = data.buffer.asUint8List();
       _cachedIconImage = img.decodePng(_cachedIconBytes!);
       return _cachedIconBytes!;
     } catch (_) {
       try {
-        final file = File('assets/icons/icon.png');
+        final file = File('assets/icons/logo_icon.png');
         if (file.existsSync()) {
           _cachedIconBytes = file.readAsBytesSync();
           _cachedIconImage = img.decodePng(_cachedIconBytes!);
@@ -62,7 +62,7 @@ class WatermarkHelper {
       } catch (_) {}
     }
     try {
-      final file = File('assets/icons/icon.png');
+      final file = File('assets/icons/logo_icon.png');
       if (file.existsSync()) {
         _cachedIconBytes = file.readAsBytesSync();
         _cachedIconImage = img.decodePng(_cachedIconBytes!);

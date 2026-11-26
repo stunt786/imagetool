@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../ui/app_snackbars.dart';
+
 /// Gentle nudge back to portrait when the app is rotated into landscape.
 ///
 /// Nothing is forced: every orientation stays supported. Portrait is the
@@ -41,7 +43,7 @@ class _OrientationHintState extends State<OrientationHint> {
 
   void _showHint() {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showTopSnackBar(
       const SnackBar(
         content: Text(OrientationHint.message),
         behavior: SnackBarBehavior.floating,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/ui/app_snackbars.dart';
+
 class PremiumScreen extends StatelessWidget {
   const PremiumScreen({super.key});
 
@@ -117,7 +119,7 @@ class _PremiumHero extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: Image.asset(
-              'assets/icons/icon.png',
+              'assets/icons/logo_icon.png',
               width: 56,
               height: 56,
               fit: BoxFit.cover,
@@ -289,7 +291,7 @@ class _PricingButton extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(content: Text('$label plan selected. Coming soon.'), duration: const Duration(seconds: 2)),
         );
       },

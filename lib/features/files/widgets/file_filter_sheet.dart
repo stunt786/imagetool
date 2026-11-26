@@ -9,6 +9,7 @@ import '../../../core/services/image_isolate_service.dart';
 import '../../camera/models/scanned_page.dart';
 import '../../camera/services/image_filter_service.dart';
 import '../notifiers/operation_library_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Filter picker for the Files module.
 ///
@@ -132,7 +133,7 @@ class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
     final bytes = _bytes;
     if (bytes == null || _isApplying) return;
     if (_selected == FilterType.none) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         const SnackBar(
           content: Text('Pick a filter first'),
           behavior: SnackBarBehavior.floating,
@@ -174,7 +175,7 @@ class _FileFilterSheetState extends ConsumerState<FileFilterSheet> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _isApplying = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Could not apply filter: $error'),
           behavior: SnackBarBehavior.floating,

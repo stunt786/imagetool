@@ -25,6 +25,7 @@ import '../../services/batch_storage_service.dart';
 import '../../services/document_enhancement_service.dart';
 import '../../services/document_scanner_service.dart';
 import '../widgets/enhance_filters_sheet.dart';
+import '../../../../core/ui/app_snackbars.dart';
 
 /// Single-page editor shown after ML Kit returns a scanned batch.
 ///
@@ -215,7 +216,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               ),
             );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(result.stages.isEmpty
                 ? 'Page already looks clean – nothing to fix.'
@@ -257,7 +258,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
               ),
             );
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(
             content: Text('Page straightened & smoothed (raised/down curves flattened).'),
             behavior: SnackBarBehavior.floating,
@@ -367,7 +368,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
     if (!mounted) return;
     _isNavigating = true;
     final shell = StatefulNavigationShell.maybeOf(context);
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       const SnackBar(
         content: Text('Scan saved in Files for later export.'),
         duration: Duration(seconds: 2),
@@ -474,7 +475,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
       await ref.read(documentBatchProvider.notifier).clearBatch();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: const Text('PDF saved to Documents & Files'),
           behavior: SnackBarBehavior.floating,
@@ -524,7 +525,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
       await ref.read(documentBatchProvider.notifier).clearBatch();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('${results.length} scan image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
@@ -553,7 +554,7 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,

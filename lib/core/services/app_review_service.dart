@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/app_strings.dart';
+import '../ui/app_snackbars.dart';
 
 /// Manages app rating, Play Store redirection, sharing, and recurring prompts.
 class AppReviewService {
@@ -280,7 +281,7 @@ class AppReviewService {
                       await markAsRated();
                       final launched = await openPlayStore();
                       if (!launched && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.of(context).showTopSnackBar(
                           const SnackBar(
                             content: Text('Thank you for your rating and feedback!'),
                             behavior: SnackBarBehavior.floating,

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/models/edit_history_item.dart';
 import '../../../shared/notifiers/edit_history_notifier.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 const _pdfTools = <_PdfToolData>[
   _PdfToolData(
@@ -405,7 +406,7 @@ class _PdfHistoryRow extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
+              ScaffoldMessenger.of(context).showTopSnackBar(
                 SnackBar(content: Text('Opening ${item.fileName} soon.'), duration: const Duration(seconds: 2)),
               );
             },

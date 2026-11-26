@@ -12,6 +12,7 @@ import '../../../shared/widgets/centered_scrollable.dart';
 import '../models/pdf_convert_state.dart';
 import '../notifiers/pdf_convert_notifier.dart';
 import '../widgets/convert_settings_panel.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 class PdfConvertScreen extends ConsumerStatefulWidget {
   const PdfConvertScreen({super.key});
@@ -58,7 +59,7 @@ class _PdfConvertScreenState extends ConsumerState<PdfConvertScreen> {
     ref.listen<PdfConvertState>(pdfConvertProvider, (previous, next) {
       final msg = next.errorMessage;
       if (msg != null && msg.isNotEmpty && (previous?.errorMessage != msg)) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text(msg),
             backgroundColor: Theme.of(context).colorScheme.error,

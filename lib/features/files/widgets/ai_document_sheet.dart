@@ -6,6 +6,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/models/operation_folder.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Interactive AI Assistant sheet shown when tapping `✦ Ask AI` in an
 /// operation folder (matching the `prev.jpg` reference).
@@ -133,7 +134,7 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
   void _copyAll() {
     if (_fullText.isEmpty) return;
     Clipboard.setData(ClipboardData(text: _fullText));
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showTopSnackBar(
       const SnackBar(
         content: Text('Extracted text copied to clipboard!'),
         behavior: SnackBarBehavior.floating,
@@ -447,7 +448,7 @@ class _AiDocumentAssistantSheetState extends State<AiDocumentAssistantSheet> {
                     tooltip: 'Copy page text',
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: text));
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(context).showTopSnackBar(
                         SnackBar(
                           content: Text('Page ${index + 1} copied!'),
                           behavior: SnackBarBehavior.floating,

@@ -21,6 +21,7 @@ import '../widgets/file_edit_sheet.dart';
 import '../widgets/file_thumbnail.dart';
 import '../widgets/move_copy_dialog.dart';
 import '../widgets/operation_tags_dialog.dart';
+import '../../../core/ui/app_snackbars.dart';
 
 /// Contents of one operation folder: every file a single tool run produced.
 ///
@@ -119,7 +120,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         .renameOperation(operation.id, name);
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Renamed to "$name"'),
           behavior: SnackBarBehavior.floating,
@@ -143,7 +144,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
       if (outcome.isUnavailable) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(
             content:
                 Text('The document scanner is not available on this device.'),
@@ -174,7 +175,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       await session.complete();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text(
             outcome.files.length == 1
@@ -187,7 +188,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showTopSnackBar(
         SnackBar(
           content: Text('Could not add pages: $error'),
           behavior: SnackBarBehavior.floating,
@@ -234,7 +235,7 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      messenger.showSnackBar(
+      messenger.showTopSnackBar(
         const SnackBar(
           content: Row(
             children: [
@@ -261,9 +262,9 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
           .toList();
 
       if (validPaths.isEmpty) {
-        messenger.hideCurrentSnackBar();
+        messenger.hideTopSnackBar();
         if (mounted) {
-          messenger.showSnackBar(
+          messenger.showTopSnackBar(
             const SnackBar(
               content: Text('No readable files selected.'),
               behavior: SnackBarBehavior.floating,
@@ -292,10 +293,10 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
       );
 
       await ref.read(operationLibraryProvider.notifier).reload();
-      messenger.clearSnackBars();
+      messenger.clearTopSnackBars();
 
       if (mounted) {
-        final controller = messenger.showSnackBar(
+        final controller = messenger.showTopSnackBar(
           SnackBar(
             content: const Text('PDF created successfully'),
             behavior: SnackBarBehavior.floating,
@@ -319,9 +320,9 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
         _clearSelection();
       }
     } catch (e) {
-      messenger.clearSnackBars();
+      messenger.clearTopSnackBars();
       if (mounted) {
-        final errController = messenger.showSnackBar(
+        final errController = messenger.showTopSnackBar(
           SnackBar(
             content: Text('Could not create PDF: $e'),
             behavior: SnackBarBehavior.floating,
@@ -349,8 +350,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
     if (imageItems.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).hideTopSnackBar();
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: const Text(
               'Collage only supports image files (JPG, PNG, WEBP). Non-image files cannot be included.',
@@ -366,8 +367,8 @@ class _OperationFolderScreenState extends ConsumerState<OperationFolderScreen> {
 
     if (imageItems.length < items.length) {
       if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).hideTopSnackBar();
+        ScaffoldMessenger.of(context).showTopSnackBar(
           const SnackBar(
             content: Text(
               'Collage only supports image files. Non-image files were excluded.',

@@ -11,6 +11,7 @@ import '../../notifiers/document_batch_notifier.dart';
 import '../../services/document_enhancement_service.dart';
 import '../../services/perspective_correction_service.dart';
 import '../widgets/document_corners_painter.dart';
+import '../../../../core/ui/app_snackbars.dart';
 
 class PerspectiveCorrectionScreen extends ConsumerStatefulWidget {
   const PerspectiveCorrectionScreen({super.key});
@@ -285,8 +286,8 @@ class _PerspectiveCorrectionScreenState
             );
 
         if (mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).hideTopSnackBar();
+          ScaffoldMessenger.of(context).showTopSnackBar(
             const SnackBar(
               content: Text('Crop & perspective applied'),
               behavior: SnackBarBehavior.floating,
@@ -298,7 +299,7 @@ class _PerspectiveCorrectionScreenState
       } else {
         if (mounted) {
           setState(() => _isProcessing = false);
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(context).showTopSnackBar(
             const SnackBar(
               content: Text('Correction failed'),
               behavior: SnackBarBehavior.floating,
@@ -310,7 +311,7 @@ class _PerspectiveCorrectionScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _isProcessing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showTopSnackBar(
           SnackBar(
             content: Text('Error: $e'),
             behavior: SnackBarBehavior.floating,
