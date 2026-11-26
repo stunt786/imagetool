@@ -103,7 +103,8 @@ class WatermarkHelper {
     return Uint8List.fromList(img.encodeJpg(watermarked, quality: 95));
   }
 
-  /// Stretches watermark onto an [image] using either `icon.png` from assets
+  /// Stretches watermark onto an [image] using either `logo_icon.png` from
+  /// assets
   /// or diamond fallback, plus [settings.watermarkText].
   /// If [asRightVerticalSidebar] is true (or null and [settings.useImageVerticalSidebar] is true),
   /// applies a subtle vertical sidebar along the right edge with low opacity.
@@ -200,6 +201,11 @@ class WatermarkHelper {
 
     int curX = x;
     if (scaledIcon != null) {
+      // Blend the logo with the watermark opacity: the shipped logo is fully
+      // opaque, so stamping it as-is would leave a solid block on the photo.
+      for (final p in scaledIcon) {
+        p.a = (p.a * opacity).round().clamp(0, 255);
+      }
       img.compositeImage(
         image,
         scaledIcon,
@@ -261,7 +267,8 @@ class WatermarkHelper {
   }
 
   /// Applies a subtle, vertical sidebar watermark along the right edge of an image.
-  /// Uses low opacity, icon.png (or logo fallback), and watermark text flowing vertically.
+  /// Uses low opacity, logo_icon.png (or logo fallback), and watermark text
+  /// flowing vertically.
   static img.Image applyRightVerticalSidebar(
     img.Image image,
     AppSettingsState settings, {
