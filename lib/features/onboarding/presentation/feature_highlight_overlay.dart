@@ -249,7 +249,9 @@ class _FeatureHighlightOverlayState
     required int currentStepIndex,
     required int totalSteps,
   }) {
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final bottomInset = viewPadding.bottom;
+    final topSafeInset = viewPadding.top + 8.0;
     final bottomNavTop =
         screenSize.height - (72.0 + bottomInset); // kBottomNavBarHeight = 72
     final maxBottom =
@@ -404,7 +406,10 @@ class _FeatureHighlightOverlayState
     if (showCardAbove) {
       return Positioned(
         left: cardLeft,
-        bottom: math.max(16.0, (screenSize.height - targetRect.top) + 8.0),
+        // Anchor from the top with a safe-area margin. Bottom anchoring can
+        // place the card's top outside short screens when there isn't enough
+        // room between the target and the top edge.
+        top: math.max(topSafeInset, targetRect.top - 220.0),
         width: cardWidth,
         child: Column(
           mainAxisSize: MainAxisSize.min,
