@@ -479,7 +479,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         SnackBar(
           content: const Text('PDF saved to Documents & Files'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
+          persist: false,
           action: localPath != null
               ? SnackBarAction(
                   label: 'Share',
@@ -529,7 +530,8 @@ class _DocumentReviewScreenState extends ConsumerState<DocumentReviewScreen> {
         SnackBar(
           content: Text('${results.length} scan image(s) saved to Gallery & Files'),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
+          persist: false,
           action: results.isNotEmpty
               ? SnackBarAction(
                   label: 'Share',
